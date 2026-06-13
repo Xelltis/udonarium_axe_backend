@@ -39,7 +39,7 @@ jobs:
       - name: PHPUnit with coverage
         run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml --display-deprecations
 
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
         if: matrix.php == '8.5'
         with:
           files: coverage.xml
