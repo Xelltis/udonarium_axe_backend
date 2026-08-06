@@ -18,6 +18,9 @@ require_once __DIR__ . '/Middleware/CorsMiddleware.php';
  */
 final class App
 {
+    /** channelName / peerId の最大バイト長 */
+    private const int MAX_SCOPE_NAME_LENGTH = 200;
+
     private Router $router;
 
     private AppConfig $config;
@@ -88,8 +91,9 @@ final class App
 
         if (
             $formatVersion !== 1
-            || !is_string($channelName) || strlen($channelName) > 200
-            || !is_string($peerId)      || strlen($peerId) > 200
+            || !self::isValidScopeName($channelName)
+            || !self::isValidScopeName($peerId)
+            || str_starts_with($channelName, SkywayAuth::LOBBY_CHANNEL_PREFIX)
         ) {
             return Response::json(400, ['error' => 'Bad Request.']);
         }
@@ -103,5 +107,25 @@ final class App
                 peerId: $peerId,
             ),
         ]);
+    }
+
+    /**
+     * SkyWay スコープ名として安全な文字列か検証する。
+     *
+     * SkyWay はスコープ内の name に対してワイルドカードを解釈するため
+     * （"*" は 0 文字以上の任意文字列にマッチ、"\" はそのエスケープ文字）、
+     * クライアント入力にこれらが含まれるとトークンの権限が意図した
+     * チャンネル・メンバーを越えて拡大する。リテラルとして扱えないため拒否する。
+     *
+     * @param mixed $value 検証対象の値
+     *
+     * @phpstan-assert-if-true string $value
+     */
+    private static function isValidScopeName(mixed $value): bool
+    {
+        return is_string($value)
+            && $value !== ''
+            && strlen($value) <= self::MAX_SCOPE_NAME_LENGTH
+            && strpbrk($value, "*\\") === false;
     }
 }
