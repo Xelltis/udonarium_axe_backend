@@ -6,6 +6,13 @@ Require all denied
 
 RewriteEngine On
 
+# ドット始まりのディレクトリ・ファイルへのアクセスを遮断
+# （.git/.github/.vscode/.env 等。上の FilesMatch はファイル名しか見ないため
+#  .git/config のようなドットディレクトリ配下のファイルはここで遮断する）
+# ACME 等で使う .well-known/ のみ例外的に許可する
+
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
 # vendor/ 等のディレクトリへのアクセスを遮断（実在ファイルチェックより前に処理）
 
 RewriteRule ^(vendor|tests|bin|docs|coverage-report|node_modules)(/|$) - [F,L]
