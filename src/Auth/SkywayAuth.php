@@ -17,6 +17,15 @@ final class SkywayAuth
     private const int EXPIRY_SECONDS = 86400;
 
     /**
+     * ロビーチャンネル名の予約プレフィックス。
+     *
+     * ロビースコープは publication / subscription を意図的に許可していないため、
+     * クライアントがこのプレフィックスのチャンネル名を要求してルームスコープ
+     * （publication / subscription = write）を得ることを防ぐ必要がある。
+     */
+    public const string LOBBY_CHANNEL_PREFIX = 'udonarium-lobby-';
+
+    /**
      * SkyWay 2023 用の JWT トークンを生成する。
      *
      * ロビーチャンネルとルームチャンネルの両方に対するスコープを含む
@@ -57,7 +66,7 @@ final class SkywayAuth
                     'turn'     => true,
                     'actions'  => ['read'],
                     'channels' => [
-                        self::buildChannelScope("udonarium-lobby-*-of-{$lobbySize}", $peerId, lobby: true),
+                        self::buildChannelScope(self::LOBBY_CHANNEL_PREFIX . "*-of-{$lobbySize}", $peerId, lobby: true),
                         self::buildChannelScope($channelName, $peerId, lobby: false),
                     ],
                 ],
