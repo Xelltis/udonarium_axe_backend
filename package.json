@@ -8,5 +8,8 @@
     "@semantic-release/git": "^10.0.1",
     "lefthook": "^2.1.9",
     "semantic-release": "^25.0.0"
+  },
+  "overrides": {
+    "npm": "file:./stubs/npm-cli-stub"
   }
 }

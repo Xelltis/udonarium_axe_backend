@@ -1,0 +1,7 @@
+{
+  "name": "npm-cli-stub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Empty stand-in for the bundled npm CLI pulled in by @semantic-release/npm. See README.md.",
+  "license": "MIT"
+}
