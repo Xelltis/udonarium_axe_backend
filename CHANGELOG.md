@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/SavageChieftain/udonarium_axe_backend/compare/v1.0.1...v1.0.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* **security:** block web access to stubs/ and correct stub docs ([4124961](https://github.com/SavageChieftain/udonarium_axe_backend/commit/4124961ee7afa2fded416cf689dcfc336cb10099))
+
 ## [1.0.1](https://github.com/SavageChieftain/udonarium_axe_backend/compare/v1.0.0...v1.0.1) (2026-08-06)
 
 
