@@ -8,5 +8,11 @@
     "@semantic-release/git": "^11.0.1",
     "lefthook": "^2.1.10",
     "semantic-release": "^25.0.9"
+  },
+  "overrides": {
+    "npm": "file:./stubs/npm-cli-stub"
+  },
+  "allowScripts": {
+    "lefthook@2.1.10": true
   }
 }
