@@ -1,4 +1,4 @@
-FROM php:8.5.6-apache
+FROM php:8.5.9-apache
 
 # mod_rewrite を有効化
 RUN a2enmod rewrite
