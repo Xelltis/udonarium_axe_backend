@@ -37,13 +37,31 @@ no-op な `bin` を置くと「publish が成功したように見えて実際�
 
 ## 注意
 
-`overrides` の追加・変更は既存の `package-lock.json` には反映されない
-（`npm ls` が `invalid` を報告する状態になる）。
-このスタブを触るときは `package-lock.json` を削除してから `npm install` し直すこと。
-`npm ci` は生成済みの lock をそのまま使うので影響を受けない。
+`overrides` に対する npm の挙動は**追加と削除で非対称**なので注意すること。
+
+| 操作 | 既存 lock を残したまま `npm install` した場合 |
+| --- | --- |
+| `overrides` を追加・変更 | **反映されない。** `npm ls` が `invalid` を報告し、`npm audit` も元のままになる |
+| `overrides` を削除 | 正しく lock に反映される。lock の削除は不要 |
+
+したがって `overrides` を**追加・変更**するときに限り、
+`package-lock.json` を削除してから `npm install` し直す必要がある。
+
+また `npm ci` は package.json と lock の整合性を検証するため、
+`overrides` だけを編集して lock を更新しないと
+
+```
+npm error code EUSAGE
+npm error Missing: npm@11.19.0 from lock file
+```
+
+でハードエラーになる。CI の release ジョブ（`.github/workflows/ci.yml`）が
+これで落ちるので、package.json を触ったら必ず lock も併せてコミットすること。
 
 ## 解除するとき
 
 上流の `npm` が bundled dependencies を更新したら、ルート `package.json` の
-`overrides` とこのディレクトリを削除して `npm install` し直すこと。
+`overrides` とこのディレクトリを削除して `npm install` し直す。
+**この方向では lock の削除は不要**（消すと全パッケージが再解決され、
+固定済みバージョンと integrity ハッシュを失うので消さないこと）。
 `npm audit` が 0 件のままなら不要になった証拠。

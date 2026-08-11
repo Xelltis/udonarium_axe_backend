@@ -4,6 +4,7 @@ vendor
 tests
 .vscode
 bin
+stubs
 phpunit.xml
 phpstan.neon
 .php-cs-fixer.php

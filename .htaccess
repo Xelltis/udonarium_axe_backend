@@ -8,7 +8,7 @@ RewriteEngine On
 
 # vendor/ 等のディレクトリへのアクセスを遮断（実在ファイルチェックより前に処理）
 
-RewriteRule ^(vendor|tests|bin|docs|coverage-report|node_modules)(/|$) - [F,L]
+RewriteRule ^(vendor|tests|bin|docs|coverage-report|node_modules|stubs)(/|$) - [F,L]
 
 # 実在するファイルへのリクエストはそのまま通す（静的ファイル等）
 
