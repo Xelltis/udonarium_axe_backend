@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -320,5 +321,52 @@ class AppTest extends TestCase
         );
 
         $this->assertSame(400, $response->statusCode);
+    }
+
+    /**
+     * スコープ名にワイルドカード等が含まれる場合に 400 を返すことを確認する。
+     *
+     * SkyWay はスコープ内の name で "*" をワイルドカードとして解釈するため、
+     * これを許すとトークンの権限が全チャンネル・全メンバーに拡大する。
+     *
+     * @param string $channelName リクエストの channelName
+     * @param string $peerId      リクエストの peerId
+     */
+    #[DataProvider('unsafeScopeNameProvider')]
+    public function testTokenEndpointRejectsUnsafeScopeNames(string $channelName, string $peerId): void
+    {
+        $response = (new App($this->envDir))->handle(
+            Request::create(
+                'POST',
+                '/v1/skyway2023/token',
+                origin: 'https://example.com',
+                contentType: 'application/json',
+                body: json_encode([
+                    'formatVersion' => 1,
+                    'channelName'   => $channelName,
+                    'peerId'        => $peerId,
+                ], JSON_THROW_ON_ERROR),
+            ),
+        );
+
+        $this->assertSame(400, $response->statusCode);
+    }
+
+    /**
+     * @return array<string, array{string, string}> ケース名 => [channelName, peerId]
+     */
+    public static function unsafeScopeNameProvider(): array
+    {
+        return [
+            'channelName がワイルドカードそのもの' => ['*', 'p'],
+            'channelName が前方一致ワイルドカード' => ['room-*', 'p'],
+            'channelName がエスケープ文字を含む'   => ['room-\\*', 'p'],
+            'channelName が空文字列'               => ['', 'p'],
+            'peerId がワイルドカードそのもの'      => ['ch', '*'],
+            'peerId が前方一致ワイルドカード'      => ['ch', 'peer-*'],
+            'peerId が空文字列'                    => ['ch', ''],
+            'channelName がロビーの予約名'         => ['udonarium-lobby-1-of-3', 'p'],
+            'channelName がロビーの予約プレフィックス' => ['udonarium-lobby-anything', 'p'],
+        ];
     }
 }

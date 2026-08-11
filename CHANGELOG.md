@@ -1,3 +1,11 @@
+## [1.0.1](https://github.com/SavageChieftain/udonarium_axe_backend/compare/v1.0.0...v1.0.1) (2026-08-06)
+
+
+### Bug Fixes
+
+* **security:** block web access to dot-directories such as .git ([1235bfc](https://github.com/SavageChieftain/udonarium_axe_backend/commit/1235bfca5cd6d3e64163c28ce08d5c6f05adc42b))
+* **security:** reject SkyWay scope wildcards in channelName/peerId ([b5c27b2](https://github.com/SavageChieftain/udonarium_axe_backend/commit/b5c27b23a53b42247e2bfb029fc97e8c380746f8))
+
 # [1.0.0](https://github.com/SavageChieftain/udonarium_axe_backend/compare/v0.3.0...v1.0.0) (2026-04-19)
 
 
