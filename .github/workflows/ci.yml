@@ -37,12 +37,27 @@ jobs:
       - uses: mheap/phpunit-matcher-action@v1
 
       - name: PHPUnit with coverage
-        run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml --display-deprecations
+        run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml --log-junit=junit.xml --display-deprecations
 
-      - uses: codecov/codecov-action@v7
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
         if: matrix.php == '8.5'
         with:
           files: coverage.xml
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      # テストが落ちたときこそ結果を送りたいので、失敗後も実行する。
+      # 先行ステップの失敗で junit.xml が無い場合はエラー扱いにしない。
+      - name: Upload test results to Codecov
+        uses: codecov/codecov-action@v7
+        if: ${{ !cancelled() }}
+        with:
+          report_type: test_results
+          files: junit.xml
+          disable_search: true
+          handle_no_reports_found: true
+          flags: php${{ matrix.php }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 

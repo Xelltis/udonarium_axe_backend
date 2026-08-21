@@ -5,3 +5,5 @@ node_modules/
 .php-cs-fixer.cache
 *.log
 coverage-report/
+coverage.xml
+junit.xml
