@@ -26,7 +26,10 @@ coverage:
 comment:
   layout: "header, diff, files"
   behavior: default
-  require_changes: true
+  # テスト結果はカバレッジコメントに同梱されるため、カバレッジ不変の PR で
+  # コメントを抑制するとテスト失敗も表に出ない。require_changes にテスト失敗の
+  # 条件は無いので false にする。
+  require_changes: false
 
 # 計測対象は phpunit.xml の <source> で src/ に限定済み。
 # 将来 <source> を広げたときの保険として除外を明示する。
