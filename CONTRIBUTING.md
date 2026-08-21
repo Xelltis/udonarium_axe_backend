@@ -8,7 +8,7 @@ Docker で開発環境を構築できます。
 
 ```sh
 # リポジトリをクローン
-git clone https://github.com/SavageChieftain/udonarium_axe_backend.git
+git clone https://github.com/Xelltis/udonarium_axe_backend.git
 cd udonarium_axe_backend
 
 # Docker で起動
@@ -74,7 +74,7 @@ chore: その他の変更
 
 ## バグ報告・機能提案
 
-[Issues](https://github.com/SavageChieftain/udonarium_axe_backend/issues) から報告してください。
+[Issues](https://github.com/Xelltis/udonarium_axe_backend/issues) から報告してください。
 
 ## セキュリティ
 
