@@ -85,4 +85,7 @@ jobs:
       - name: Release
         run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # main の ruleset で PR 必須・必須ステータスチェックを課しているため、
+          # GITHUB_TOKEN では @semantic-release/git のリリースコミットが弾かれる。
+          # bypass 対象である Organization 管理者の PAT を使う。
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
