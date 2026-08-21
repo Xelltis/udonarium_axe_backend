@@ -1,0 +1,39 @@
+# https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    # coverage.xml をアップロードするのは CI の PHP 8.5 ジョブ 1 つだけ
+    after_n_builds: 1
+
+coverage:
+  precision: 2
+  round: down
+  # src/ は現状 100%。低下が色で分かるよう下限を高めに置く
+  range: "90...100"
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0%
+        if_ci_failed: error
+    patch:
+      default:
+        target: 100%
+        threshold: 0%
+        only_pulls: true
+
+comment:
+  layout: "header, diff, files"
+  behavior: default
+  require_changes: true
+
+# 計測対象は phpunit.xml の <source> で src/ に限定済み。
+# 将来 <source> を広げたときの保険として除外を明示する。
+ignore:
+  - "tests/**"
+  - "bin/**"
+  - "stubs/**"
+  - "docs/**"
+  - "vendor/**"
+  - "index.php"
