@@ -1,7 +1,7 @@
 # udonarium-axe-backend
 
-[![CI](https://github.com/SavageChieftain/udonarium_axe_backend/actions/workflows/ci.yml/badge.svg)](https://github.com/SavageChieftain/udonarium_axe_backend/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/SavageChieftain/udonarium_axe_backend/graph/badge.svg)](https://codecov.io/gh/SavageChieftain/udonarium_axe_backend)
+[![CI](https://github.com/Xelltis/udonarium_axe_backend/actions/workflows/ci.yml/badge.svg)](https://github.com/Xelltis/udonarium_axe_backend/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Xelltis/udonarium_axe_backend/graph/badge.svg)](https://codecov.io/gh/Xelltis/udonarium_axe_backend)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [ユドナリウム](https://github.com/TK11235/udonarium) 向け SkyWay 2023 JWT 認証バックエンドです。
