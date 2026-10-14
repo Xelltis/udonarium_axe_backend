@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 
 import { AppError } from '../../../src/http/errors/app-error.js';
 import { onError } from '../../../src/http/errors/handler.js';
@@ -20,6 +21,27 @@ describe('onError', () => {
     expect(await res.json()).toEqual({
       error: { code: 'VALIDATION_FAILED', message: 'nope' },
     });
+  });
+
+  it('returns 400 VALIDATION_FAILED for a 400 HTTPException, as a malformed JSON body throws', async () => {
+    const app = buildApp(new HTTPException(400, { message: 'Malformed JSON in request body' }));
+    const res = await app.fetch(new Request('http://localhost/'));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: 'VALIDATION_FAILED', message: 'Invalid request body.' },
+    });
+  });
+
+  it('treats an HTTPException of another status as an unknown error', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const app = buildApp(new HTTPException(401));
+      const res = await app.fetch(new Request('http://localhost/'));
+      expect(res.status).toBe(500);
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('logs and returns 500 INTERNAL_ERROR for unknown errors', async () => {

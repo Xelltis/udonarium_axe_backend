@@ -1,10 +1,15 @@
 import type { Context } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 
 import { AppError } from './app-error.js';
 
 export const onError = (err: Error, c: Context) => {
   if (err instanceof AppError) {
     return c.json({ error: { code: err.code, message: err.message } }, err.status);
+  }
+  // Hono の JSON バリデーターは、本文が壊れた JSON だと 400 の HTTPException を投げる
+  if (err instanceof HTTPException && err.status === 400) {
+    return c.json({ error: { code: 'VALIDATION_FAILED', message: 'Invalid request body.' } }, 400);
   }
   console.error('Unhandled error:', err);
   return c.json({ error: { code: 'INTERNAL_ERROR', message: 'Internal Server Error.' } }, 500);

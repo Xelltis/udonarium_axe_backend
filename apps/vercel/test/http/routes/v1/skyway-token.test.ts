@@ -65,6 +65,14 @@ describe('skywayTokenRoute', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 with VALIDATION_FAILED on a body that is not JSON', async () => {
+    const res = await buildApp().fetch(post('/skyway/tokens', '{"formatVersion": 1,'));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: 'VALIDATION_FAILED', message: 'Invalid request body.' },
+    });
+  });
+
   // SkyWay reads "*" in a scope name as a wildcard and "\\" as its escape, so either would widen
   // the token past the room and member it was asked for.
   it.each([
