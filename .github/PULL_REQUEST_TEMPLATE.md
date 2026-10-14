@@ -10,8 +10,9 @@
 
 ## テスト
 
-<!-- どのようにテストしましたか？ -->
+<!-- どのようにテストしましたか？触ったアプリの項目だけ残してください -->
 
-- [ ] `bin/phpunit` が通ること
-- [ ] `bin/phpstan analyse` が通ること
-- [ ] `bin/php-cs-fixer check` が通ること
+- [ ] `apps/php/bin/phpunit` が通ること
+- [ ] `apps/php/bin/phpstan analyse` が通ること
+- [ ] `apps/php/bin/php-cs-fixer check` が通ること
+- [ ] `apps/vercel` で `npm run lint`・`npm run typecheck`・`npm test` が通ること
