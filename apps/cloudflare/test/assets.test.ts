@@ -156,6 +156,34 @@ describe('PUT /v1/assets/:id', () => {
   });
 
   it.each([
+    ['sweeps out what has run out now and then', 0, 1],
+    ['leaves the sweeping to other uploads mostly', 0.99, 0],
+  ])('%s', async (_name, random, sweeps) => {
+    vi.spyOn(Math, 'random').mockReturnValue(random);
+    const list = vi.spyOn(env.ASSETS, 'list');
+    const { file, id } = await freshFile();
+    const ctx = createExecutionContext();
+
+    const res = await app.fetch(
+      new Request(`${BASE}/${id}`, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          Origin: ORIGIN,
+          'Content-Length': String(file.byteLength),
+          'CF-Connecting-IP': freshIp(),
+        },
+      }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    expect(res.status).toBe(201);
+    expect(list).toHaveBeenCalledTimes(sweeps);
+  });
+
+  it.each([
     ['ends before', '100'],
     ['runs past', '40'],
   ])('fails without storing when the body %s its declared length', async (_name, length) => {

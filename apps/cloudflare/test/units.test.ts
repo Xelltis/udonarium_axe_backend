@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { setContentRange } from '../src/assets/response';
+import { randomStart, sweepExpired } from '../src/assets/sweep';
 import { ConfigError, parseConfig } from '../src/config';
 import { networkOf } from '../src/http/network';
 import { isAllowedOrigin } from '../src/http/origin';
@@ -51,6 +52,40 @@ describe('setContentRange', () => {
     setContentRange(headers, range, 100);
     expect(headers.get('Content-Range')).toBe(contentRange);
     expect(headers.get('Content-Length')).toBe(contentLength);
+  });
+});
+
+describe('sweepExpired', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const bucketHolding = (...objects: { key: string; uploaded: Date }[]) => {
+    const bucket = { list: vi.fn(async () => ({ objects })), delete: vi.fn(async () => undefined) };
+    return bucket as typeof bucket & R2Bucket;
+  };
+
+  it('deletes the objects past their retention in one page after the start', async () => {
+    const bucket = bucketHolding(
+      { key: 'old', uploaded: new Date(Date.now() - 31 * DAY_MS) },
+      { key: 'fresh', uploaded: new Date(Date.now() - DAY_MS) },
+      { key: 'older', uploaded: new Date(Date.now() - 90 * DAY_MS) },
+    );
+
+    expect(await sweepExpired(bucket, 30 * 24 * 60 * 60, 'start')).toBe(2);
+
+    expect(bucket.list).toHaveBeenCalledWith({ startAfter: 'start', limit: 1000 });
+    expect(bucket.delete).toHaveBeenCalledWith(['old', 'older']);
+  });
+
+  it('deletes nothing when nothing has run out', async () => {
+    const bucket = bucketHolding({ key: 'fresh', uploaded: new Date() });
+
+    expect(await sweepExpired(bucket, 30 * 24 * 60 * 60, 'start')).toBe(0);
+
+    expect(bucket.delete).not.toHaveBeenCalled();
+  });
+
+  it('starts from a random place shaped like a name', () => {
+    expect(randomStart()).toMatch(/^[0-9a-f]{64}$/);
+    expect(randomStart()).not.toBe(randomStart());
   });
 });
 

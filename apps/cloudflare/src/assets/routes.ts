@@ -7,6 +7,7 @@ import { networkOf } from '../http/network';
 import { objectHeaders, remainingSeconds, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
+import { randomStart, sweepExpired } from './sweep';
 
 /** アセットの名前。中身の SHA-256 を小文字の16進で書いたもの */
 const ASSET_ID = /^[0-9a-f]{64}$/;
@@ -23,6 +24,12 @@ const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));
 
 /** R2 が sha256 の照合に失敗したときのエラー番号 */
 const R2_BAD_DIGEST = '(10037)';
+
+/**
+ * 置いたあとに、期限切れのものを掃除する割合。バケットはアップロードでしか増えないので、
+ * アップロードに比例して掃除すれば、ライフサイクル規則を作らなくても増え続けない
+ */
+const SWEEP_CHANCE = 1 / 20;
 
 const networkOfRequest = (c: Context<AppEnv>): string =>
   networkOf(c.req.header('CF-Connecting-IP') ?? 'unknown');
@@ -172,6 +179,11 @@ assetRoutes.put('/:id', async (c) => {
       return fail(c, 400, 'hash-mismatch');
     }
     throw err;
+  }
+  if (Math.random() < SWEEP_CHANCE) {
+    c.executionCtx.waitUntil(
+      sweepExpired(c.env.ASSETS, c.var.config.retentionSeconds, randomStart()),
+    );
   }
   return c.json({ id, status: 'stored' }, 201);
 });

@@ -35,8 +35,9 @@ GETの応答は`Cache-Control: public, max-age=…, immutable`で返します。
 `max-age`は7日か、保持期間の残りの短いほうです。
 キャッシュに残った版が、バケットから消えたあとまで「ある」と答えないようにするためです。
 
-保持期間（`ASSET_RETENTION_DAYS`）を過ぎたものは、バケットから消える前でも`404`を返します。
+保持期間（`ASSET_RETENTION_DAYS`）を過ぎたものは`404`を返します。
 アップロードした人が次に部屋を読み込んだとき、HEADが`404`になるので上げ直され、保持期間もそこから数え直します。
+過ぎたものは、新しく置くついでに少しずつバケットから消すので、ライフサイクル規則は要りません。
 
 同じデータセンターからの2回目以降のGETは、[Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/)から返し、R2を読みません。
 Cache APIは`*.workers.dev`では効かないので、本番はカスタムドメインに置いてください。
@@ -80,14 +81,6 @@ R2のバケットは最初のデプロイで「<Workerの名前>-assets」が作
    ```
 
    キャッシュを効かせるため、Workerにはカスタムドメインを付けてください。
-
-3. 保持期間を決めます。次の例では、置いてから30日で消します。
-
-   ```sh
-   npx wrangler r2 bucket lifecycle add my-udonarium-assets-assets expire-30d --expire-days 30
-   ```
-
-   `wrangler.jsonc`の`ASSET_RETENTION_DAYS`も同じ日数にします。
 
 アプリ側の`config.json`には、このWorkerのURLを`assets.url`として書きます。
 
