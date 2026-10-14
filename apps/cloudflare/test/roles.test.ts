@@ -1,7 +1,12 @@
 import { createExecutionContext, env, runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../contracts/protocol';
+import {
+  ACCOUNT_USER_ID_PREFIX,
+  AUTHORITY_PEER_ID,
+  AuthorityEvent,
+  SyncEvent,
+} from '../contracts/protocol';
 import { signToken } from '../src/auth/tokens';
 import app from '../src/index';
 import type { RoomDurableObject } from '../src/rooms/room';
@@ -105,6 +110,16 @@ describe('roles', () => {
     for (const client of [forged, borrowed]) {
       expect((await client.next('error')).code).toBe('unauthorized');
     }
+  });
+
+  it('turns away a guest who claims the user id of someone logged in', async () => {
+    // ログインした人のユーザー ID はカーソルに見える。名乗れば、その人の手札や秘話が見えてしまう
+    const roomKey = await createRoom();
+    const impostor = await connect(roomKey);
+
+    impostor.hello('mallory', { userId: `${ACCOUNT_USER_ID_PREFIX}victim`, accessToken: null });
+
+    expect((await impostor.next('error')).code).toBe('unauthorized');
   });
 
   it('keeps a role for the next time the same user comes in', async () => {

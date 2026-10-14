@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 
+import { ACCOUNT_USER_ID_PREFIX } from '../../contracts/protocol';
 import type { Account } from '../../contracts/protocol';
 import { base64url } from './tokens';
 
@@ -101,7 +102,7 @@ export class AccountDurableObject extends DurableObject<Env> {
        ON CONFLICT (id) DO UPDATE SET name = excluded.name, avatar_url = excluded.avatar_url,
          updated_at = excluded.updated_at`,
       profile.accountKey,
-      crypto.randomUUID(),
+      `${ACCOUNT_USER_ID_PREFIX}${crypto.randomUUID()}`,
       profile.name,
       profile.avatarUrl,
       now,

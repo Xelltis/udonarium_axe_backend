@@ -1,6 +1,7 @@
 import { createExecutionContext, env, runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ACCOUNT_USER_ID_PREFIX } from '../contracts/protocol';
 import type { TokenResponse } from '../contracts/protocol';
 import { unpackSecret } from '../src/auth/session';
 import { base64url, readToken } from '../src/auth/tokens';
@@ -194,7 +195,11 @@ describe('POST /v1/auth/token', () => {
     const first = await logIn({ id: '7', username: 'rin', global_name: null, avatar: null });
     const second = await logIn({ id: '7', username: 'rin', global_name: 'Rin', avatar: 'a1' });
 
-    expect(first.account).toEqual({ userId: expect.any(String), name: 'rin', avatarUrl: null });
+    expect(first.account).toEqual({
+      userId: expect.stringMatching(new RegExp(`^${ACCOUNT_USER_ID_PREFIX}[0-9a-f-]{36}$`)),
+      name: 'rin',
+      avatarUrl: null,
+    });
     expect(second.account).toEqual({
       userId: first.account.userId,
       name: 'Rin',

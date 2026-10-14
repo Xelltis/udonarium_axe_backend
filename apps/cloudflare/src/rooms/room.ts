@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { safeParse } from 'valibot';
 
 import {
+  ACCOUNT_USER_ID_PREFIX,
   AUTHORITY_PEER_ID,
   AuthorityEvent,
   CATALOG_BATCH,
@@ -292,6 +293,10 @@ export class RoomDurableObject extends DurableObject<Env> {
       account: false,
       joinedAt: Date.now(),
     };
+    if (!hello.accessToken && hello.userId.startsWith(ACCOUNT_USER_ID_PREFIX)) {
+      // ログインした人のユーザー ID は、トークン無しには名乗らせない（その人に見えるものが見えてしまう）
+      return this.refuse(ws, 'unauthorized');
+    }
     if (hello.accessToken) {
       const secret = this.sessionSecret();
       const claims = readToken(hello.accessToken, 'access', secret);

@@ -47,6 +47,14 @@ export interface EventContext {
 export const PEER_ROLES = ['gm', 'pl', 'guest'] as const;
 export type PeerRole = (typeof PEER_ROLES)[number];
 
+/**
+ * ログインした人のユーザー ID の頭。サーバーが `acct_` に続けて UUID を付けて決める。
+ * 見学者（トークンの無い hello）は、これで始まる userId を名乗れない（unauthorized で断る）。
+ * 見え方はユーザー ID で決まるので、カーソルに見えるほかの人のユーザー ID を名乗れば、
+ * その人の手札や秘話が見えてしまうため
+ */
+export const ACCOUNT_USER_ID_PREFIX = 'acct_';
+
 /** 部屋にいる人 */
 export interface Member {
   peerId: string;
@@ -67,7 +75,8 @@ export interface HelloMessage {
   password?: string;
   /**
    * ログインしているときのアクセストークン（POST /v1/auth/token で得たもの）。
-   * 付けなければ見学（guest）として入る。付けるなら userId はトークンの userId と同じにする
+   * 付けなければ見学（guest）として入る。付けるなら userId はトークンの userId と同じにする。
+   * 付けないなら userId は ACCOUNT_USER_ID_PREFIX で始まってはいけない
    */
   accessToken?: string;
   /** 招待リンクに付いてきた招待。ログインして初めて入るときの役割になる */
@@ -164,7 +173,8 @@ export interface InviteMessage {
  * - bad-message：読めないメッセージを送った
  * - too-many-messages：短いあいだに送りすぎた
  * - replaced：同じピア ID で新しく接続した人がいるので、こちらを閉じる。つなぎ直さないこと
- * - unauthorized：アクセストークンが無効か期限切れ、または userId がトークンと違う。トークンを更新してつなぎ直す
+ * - unauthorized：アクセストークンが無効か期限切れ、または userId がトークンと違う。トークンを更新してつなぎ直す。
+ *   トークンを付けずに、ログインした人のユーザー ID（ACCOUNT_USER_ID_PREFIX で始まるもの）を名乗ったときも
  */
 export const ERROR_CODES = [
   'protocol-mismatch',
@@ -248,7 +258,7 @@ export type TokenRequest =
 
 /** ログインしている人 */
 export interface Account {
-  /** ずっと同じユーザー ID。hello の userId にこれを使う */
+  /** ずっと同じユーザー ID（ACCOUNT_USER_ID_PREFIX で始まる）。hello の userId にこれを使う */
   userId: string;
   name: string;
   /** アバターの画像の URL。無ければ null */

@@ -83,7 +83,7 @@
     },
     {
       "code": "unauthorized",
-      "when": "hello の accessToken が無効か期限切れ、または userId がトークンの userId と違う。リフレッシュトークンで組を替えてから、つなぎ直す",
+      "when": "hello の accessToken が無効か期限切れ、または userId がトークンの userId と違う。リフレッシュトークンで組を替えてから、つなぎ直す。accessToken を付けずに acct_ で始まる userId（ログインした人のユーザー ID）を名乗ったときも",
       "retry": true,
       "message": {
         "type": "error",
