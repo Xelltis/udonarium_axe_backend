@@ -16,6 +16,15 @@ updates:
       - dependencies
     open-pull-requests-limit: 10
 
+  # apps/vercel は lockfile を持つ独立した npm プロジェクト
+  - package-ecosystem: npm
+    directory: /apps/vercel
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    open-pull-requests-limit: 10
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
