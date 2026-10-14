@@ -1,4 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
+import { exports } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MAX_BYTES } from '../src/assets/routes';
@@ -102,6 +103,23 @@ describe('PUT /v1/assets/:id', () => {
     expect(await res.json()).toEqual({ error: 'unsupported-type' });
   });
 
+  it.each([
+    ['an empty body', (req: Request) => exports.default.fetch(req)],
+    ['no body at all', (req: Request) => app.fetch(req, env, createExecutionContext())],
+  ])('turns away an upload with %s', async (_name, send) => {
+    const req = new Request(`${BASE}/${'0'.repeat(64)}`, {
+      method: 'PUT',
+      headers: {
+        Origin: ORIGIN,
+        'Content-Length': '0',
+        'CF-Connecting-IP': freshIp(),
+      },
+    });
+    const res = await send(req);
+    expect(res.status).toBe(415);
+    expect(await res.json()).toEqual({ error: 'unsupported-type' });
+  });
+
   it('holds a picture to the picture limit and a sound to the sound limit', async () => {
     const bigPicture = fileOf(PNG_HEAD, MAX_BYTES.image + 1);
     const bigSound = fileOf(OGG_HEAD, MAX_BYTES.image + 1);
@@ -135,6 +153,21 @@ describe('PUT /v1/assets/:id', () => {
     });
     expect(res.status).toBe(411);
     expect(await res.json()).toEqual({ error: 'length-required' });
+  });
+
+  it.each([
+    ['ends before', '100'],
+    ['runs past', '40'],
+  ])('fails without storing when the body %s its declared length', async (_name, length) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { file, id } = await freshFile(PNG_HEAD, 64);
+
+    const res = await put(id, file, { 'Content-Length': length });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal-error' });
+    expect(error).toHaveBeenCalledWith('Unhandled error:', expect.any(Error));
+    expect(await env.ASSETS.head(id)).toBeNull();
   });
 
   it.each([

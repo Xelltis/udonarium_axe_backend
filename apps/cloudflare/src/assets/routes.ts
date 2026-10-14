@@ -21,6 +21,9 @@ export const MAX_BYTES: Readonly<Record<AssetKind, number>> = {
 
 const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));
 
+/** R2 が sha256 の照合に失敗したときのエラー番号 */
+const R2_BAD_DIGEST = '(10037)';
+
 const networkOfRequest = (c: Context<AppEnv>): string =>
   networkOf(c.req.header('CF-Connecting-IP') ?? 'unknown');
 
@@ -30,8 +33,44 @@ const withinLimits = async (limiter: RateLimit, keys: string[]): Promise<boolean
   return outcomes.every(({ success }) => success);
 };
 
-const toHex = (buffer: ArrayBuffer): string =>
-  Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+/** Content-Length の値。無いか、0 以上の整数でなければ null */
+const declaredLengthOf = (c: Context<AppEnv>): number | null => {
+  const header = c.req.header('Content-Length');
+  const length = Number(header);
+  return header && Number.isInteger(length) && length >= 0 ? length : null;
+};
+
+/** ストリームの先頭を、size バイト以上（足りなければ最後まで）読む */
+const readHead = async (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  size: number,
+): Promise<Uint8Array[]> => {
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (length < size) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    length += value.byteLength;
+  }
+  return chunks;
+};
+
+/** 先に読んだ chunks と、reader の残りを1本のストリームに戻す */
+const rejoin = (
+  chunks: Uint8Array[],
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): ReadableStream<Uint8Array> =>
+  new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+    },
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+  });
 
 export const assetRoutes = new Hono<AppEnv>();
 
@@ -89,11 +128,9 @@ assetRoutes.put('/:id', async (c) => {
   const id = c.req.param('id');
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
 
-  const declared = Number(c.req.header('Content-Length'));
-  if (!c.req.header('Content-Length') || !Number.isInteger(declared) || declared < 0) {
-    return fail(c, 411, 'length-required');
-  }
-  if (declared > MAX_ANY_BYTES) return fail(c, 413, 'too-large');
+  const length = declaredLengthOf(c);
+  if (length === null) return fail(c, 411, 'length-required');
+  if (length > MAX_ANY_BYTES) return fail(c, 413, 'too-large');
 
   // 置いてあるものは数えずに答える。部屋を読み込むと、上がっている画像もまとめて送られてくるため
   const existing = await c.env.ASSETS.head(id);
@@ -106,15 +143,25 @@ assetRoutes.put('/:id', async (c) => {
     return fail(c, 429, 'rate-limited');
   }
 
-  const body = await c.req.arrayBuffer();
-  const sniffed = sniff(new Uint8Array(body, 0, Math.min(SNIFF_BYTES, body.byteLength)));
+  // 種類は先頭だけ読んで決め、残りは読み溜めずにそのまま R2 へ流す
+  const reader = c.req.raw.body?.getReader();
+  if (!reader) return fail(c, 415, 'unsupported-type');
+  const head = await readHead(reader, SNIFF_BYTES);
+  const sniffed = sniff(
+    new Uint8Array(await new Blob(head).arrayBuffer()).subarray(0, SNIFF_BYTES),
+  );
   if (!sniffed) return fail(c, 415, 'unsupported-type');
-  if (body.byteLength > MAX_BYTES[sniffed.kind]) return fail(c, 413, 'too-large');
+  if (length > MAX_BYTES[sniffed.kind]) return fail(c, 413, 'too-large');
 
-  // 名前と中身が合わないものは置かない。R2 にもハッシュを渡し、書き込み側でも照合させる
-  if (toHex(await crypto.subtle.digest('SHA-256', body)) !== id) {
-    return fail(c, 400, 'hash-mismatch');
+  // 名前と中身が合わないものは置かない。照合は R2 が書き込みながら行う
+  const body = rejoin(head, reader).pipeThrough(new FixedLengthStream(length));
+  try {
+    await c.env.ASSETS.put(id, body, { sha256: id, httpMetadata: { contentType: sniffed.type } });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) {
+      return fail(c, 400, 'hash-mismatch');
+    }
+    throw err;
   }
-  await c.env.ASSETS.put(id, body, { sha256: id, httpMetadata: { contentType: sniffed.type } });
   return c.json({ id, status: 'stored' }, 201);
 });
