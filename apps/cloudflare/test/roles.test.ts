@@ -15,11 +15,18 @@ afterEach(() => {
 const cursorOf = (peerId: string, role: string, majorVersion = 1) =>
   contextOf(`cursor-${peerId}`, majorVersion, 0.5, { peerId, name: peerId, role }, 'PeerCursor');
 
+// タブも発言も ObjectNode なので、SyncVar は attributes に入る
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
-  contextOf(identifier, 1, 0.5, { name: identifier, guestCanSpeak }, 'chat-tab');
+  contextOf(identifier, 1, 0.5, { attributes: { name: identifier, guestCanSpeak } }, 'chat-tab');
 
 const messageOf = (identifier: string, tab: string, from: string, majorVersion = 1) =>
-  contextOf(identifier, majorVersion, 0.5, { parentIdentifier: tab, from, text: 'hi' }, 'chat');
+  contextOf(
+    identifier,
+    majorVersion,
+    0.5,
+    { parentIdentifier: tab, value: 'hi', attributes: { from } },
+    'chat',
+  );
 
 /** GM（gm）と PL（pl）と見学者（guest）のいる部屋 */
 const table = async () => {
@@ -254,7 +261,7 @@ describe('what a guest may write', () => {
       'quoted',
       1,
       0.5,
-      { parentIdentifier: 'open', from: 'System', originFrom: 'user-guest' },
+      { parentIdentifier: 'open', attributes: { from: 'System', originFrom: 'user-guest' } },
       'chat',
     );
     gm.emit([

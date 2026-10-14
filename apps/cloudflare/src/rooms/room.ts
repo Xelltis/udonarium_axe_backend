@@ -42,6 +42,7 @@ import {
   roleRequestSchema,
   rollRequestSchema,
 } from './messages';
+import { attributesOf, withAttributes } from './objects';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
 
@@ -120,8 +121,8 @@ const fromAuthority = (eventName: string, data: unknown): EventContext => ({
 
 type Reply = (eventName: string, data: unknown) => void;
 
-/** サーバーが振った結果の発言で、書き換えさせない項目 */
-const ROLLED_FIELDS = ['value', 'dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
+/** サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value も） */
+const ROLLED_ATTRIBUTES = ['dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
 
 /**
  * 1つの部屋。部屋にいる人の WebSocket を受け、イベントを中継しながら、部屋の状態を持つ。
@@ -548,13 +549,11 @@ export class RoomDurableObject extends DurableObject<Env> {
   private guestMayWrite(context: ObjectContext, seat: Seat): boolean {
     if (context.aliasName !== CHAT_MESSAGE_ALIAS) return false;
     const tab = this.store.get(String(context.syncData.parentIdentifier));
-    if (tab?.aliasName !== CHAT_TAB_ALIAS || tab.syncData.guestCanSpeak !== true) return false;
+    if (tab?.aliasName !== CHAT_TAB_ALIAS || attributesOf(tab).guestCanSpeak !== true) return false;
     const stored = this.store.get(context.identifier);
-    return (
-      stored === null ||
-      stored.syncData.from === seat.userId ||
-      stored.syncData.originFrom === seat.userId
-    );
+    if (stored === null) return true;
+    const { from, originFrom } = attributesOf(stored);
+    return from === seat.userId || originFrom === seat.userId;
   }
 
   /**
@@ -563,19 +562,28 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   private keepRolledFields(context: ObjectContext): ObjectContext {
     const stored = this.store.get(context.identifier);
-    const rolled = stored?.syncData[SERVER_ROLL_FIELD] === true;
-    if (!rolled && context.syncData[SERVER_ROLL_FIELD] === undefined) return context;
-    const syncData = rolled
-      ? { ...context.syncData }
-      : Object.fromEntries(
-          Object.entries(context.syncData).filter(([field]) => field !== SERVER_ROLL_FIELD),
-        );
-    if (rolled) {
-      for (const field of ROLLED_FIELDS)
-        syncData[field] = (stored as ObjectContext).syncData[field];
+    const attributes = attributesOf(context);
+    if (stored === null || attributesOf(stored)[SERVER_ROLL_FIELD] !== true) {
+      if (attributes[SERVER_ROLL_FIELD] === undefined) return context;
+      return {
+        ...context,
+        syncData: {
+          ...context.syncData,
+          attributes: Object.fromEntries(
+            Object.entries(attributes).filter(([field]) => field !== SERVER_ROLL_FIELD),
+          ),
+        },
+      };
     }
-    const changed = ROLLED_FIELDS.some((field) => syncData[field] !== context.syncData[field]);
-    return changed ? { ...context, syncData } : context;
+    const kept = attributesOf(stored);
+    const changed =
+      context.syncData.value !== stored.syncData.value ||
+      ROLLED_ATTRIBUTES.some((field) => attributes[field] !== kept[field]);
+    if (!changed) return context;
+    return withAttributes(
+      { ...context, syncData: { ...context.syncData, value: stored.syncData.value } },
+      Object.fromEntries(ROLLED_ATTRIBUTES.map((field) => [field, kept[field]])),
+    );
   }
 
   /**
@@ -599,11 +607,13 @@ export class RoomDurableObject extends DurableObject<Env> {
         const taken =
           this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
         if (!rolled || taken) return;
-        const result: ObjectContext = {
-          ...message,
-          syncData: {
-            ...message.syncData,
-            value: `${rolled.text}${request.suffix ?? ''}`,
+        // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる
+        const result = withAttributes(
+          {
+            ...message,
+            syncData: { ...message.syncData, value: `${rolled.text}${request.suffix ?? ''}` },
+          },
+          {
             dicebot: rolled.dicebot,
             tag: rolled.secret ? 'system secret' : 'system',
             name: rolled.secret
@@ -613,7 +623,7 @@ export class RoomDurableObject extends DurableObject<Env> {
             originFrom: seat.userId,
             [SERVER_ROLL_FIELD]: true,
           },
-        };
+        );
         this.store.put(result, null);
         this.scheduleFlush();
         this.broadcast(undefined, {

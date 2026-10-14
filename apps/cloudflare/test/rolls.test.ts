@@ -9,15 +9,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Axe が自分で振るときと同じ形で用意した、結果の発言 */
+/**
+ * Axe が自分で振るときと同じ形で用意した、結果の発言。発言は ObjectNode なので、
+ * 文面は syncData.value、SyncVar は syncData.attributes に入る
+ */
 const prepared = (identifier: string, tab = 'main') =>
   contextOf(
     identifier,
     1,
     0.5,
-    { parentIdentifier: tab, to: '', messColor: '#000000', attributes: { timestamp: 1 } },
+    {
+      parentIdentifier: tab,
+      value: '',
+      attributes: { to: '', messColor: '#000000', timestamp: 1 },
+    },
     'chat',
   );
+
+type Message = ReturnType<typeof prepared>;
+const attributes = (message: unknown) =>
+  (message as Message).syncData.attributes as Record<string, unknown>;
 
 const rollRequest = (
   identifier: string,
@@ -36,7 +47,7 @@ const rollRequest = (
 });
 
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
-  contextOf(identifier, 1, 0.5, { name: identifier, guestCanSpeak }, 'chat-tab');
+  contextOf(identifier, 1, 0.5, { attributes: { name: identifier, guestCanSpeak } }, 'chat-tab');
 
 /** PL の alice と bob、見学者の carol がいる部屋。タブ main は見学者も話せる */
 const room = async () => {
@@ -69,16 +80,19 @@ describe('rolling on the server', () => {
         syncData: {
           ...prepared('roll-1').syncData,
           value: 'DiceBot : (1D1) → 1 [Goblin]',
-          dicebot: JSON.stringify({
-            system: 'DiceBot',
-            faces: [{ sides: 1, value: 1, kind: 'normal' }],
-            outcome: '',
-          }),
-          tag: 'system',
-          name: '<BCDice：Alice>',
-          from: 'System-BCDice',
-          originFrom: 'user-alice',
-          serverRoll: true,
+          attributes: {
+            ...attributes(prepared('roll-1')),
+            dicebot: JSON.stringify({
+              system: 'DiceBot',
+              faces: [{ sides: 1, value: 1, kind: 'normal' }],
+              outcome: '',
+            }),
+            tag: 'system',
+            name: '<BCDice：Alice>',
+            from: 'System-BCDice',
+            originFrom: 'user-alice',
+            serverRoll: true,
+          },
         },
       },
       sendFrom: AUTHORITY_PEER_ID,
@@ -92,8 +106,9 @@ describe('rolling on the server', () => {
     alice.emit([rollRequest('secret-1', 's1d1')]);
 
     const [event] = await alice.events();
-    expect(event.data).toMatchObject({
-      syncData: { tag: 'system secret', name: '<Secret-BCDice：Alice>' },
+    expect(attributes(event.data)).toMatchObject({
+      tag: 'system secret',
+      name: '<Secret-BCDice：Alice>',
     });
   });
 
@@ -105,9 +120,7 @@ describe('rolling on the server', () => {
 
     const [event] = await alice.events();
     expect((event.data as { identifier: string }).identifier).toBe('in-main');
-    expect((event.data as { syncData: { originFrom: string } }).syncData.originFrom).toBe(
-      'user-carol',
-    );
+    expect(attributes(event.data).originFrom).toBe('user-carol');
   });
 
   it('rolls nothing for a line that is not a command, a message that is not chat, or one already there', async () => {
@@ -169,51 +182,60 @@ describe('rolling on the server', () => {
 });
 
 describe('a rolled result', () => {
-  it('cannot be rewritten, though the rest of the message can', async () => {
-    const { alice, bob } = await room();
-    alice.emit([rollRequest('rolled', '1d1')]);
-    const [{ data: rolled }] = await alice.events();
-    await bob.events();
-    const original = rolled as ReturnType<typeof prepared>;
+  /** alice が振り、全員に届いた結果 */
+  const rolledIn = async (clients: Awaited<ReturnType<typeof room>>) => {
+    clients.alice.emit([rollRequest('rolled', '1d1')]);
+    const [{ data }] = await clients.alice.events();
+    await clients.bob.events();
+    return data as Message;
+  };
 
-    bob.emit([
-      {
-        eventName: SyncEvent.UPDATE,
-        data: {
-          ...original,
-          majorVersion: 2,
-          syncData: { ...original.syncData, value: 'DiceBot : (1D1) → 6', bookmarkedAt: 5 },
-        },
-      },
-    ]);
-
-    const kept = {
-      ...original,
-      majorVersion: 2,
-      syncData: { ...original.syncData, bookmarkedAt: 5 },
-    };
-    expect(await bob.events()).toEqual([
-      { eventName: AuthorityEvent.AUTHORITATIVE, data: kept, sendFrom: AUTHORITY_PEER_ID },
-    ]);
-    expect((await alice.events())[0].data).toEqual(kept);
+  /** 結果を書き換えて送る（版を上げ、value と attributes を替える） */
+  const edited = (original: Message, value: unknown, changes: Record<string, unknown>) => ({
+    ...original,
+    majorVersion: 2,
+    syncData: {
+      ...original.syncData,
+      value,
+      attributes: { ...attributes(original), ...changes },
+    },
   });
 
-  it('can be edited as before when the client sends it back unchanged', async () => {
-    const { alice, bob } = await room();
-    alice.emit([rollRequest('rolled', '1d1')]);
-    const [{ data: rolled }] = await alice.events();
-    await bob.events();
-    const original = rolled as ReturnType<typeof prepared>;
+  it('cannot be rewritten, though the rest of the message can', async () => {
+    const clients = await room();
+    const original = await rolledIn(clients);
 
-    bob.emit([
+    clients.bob.emit([
       {
         eventName: SyncEvent.UPDATE,
-        data: { ...original, majorVersion: 2, syncData: { ...original.syncData, bookmarkedAt: 7 } },
+        data: edited(original, 'DiceBot : (1D1) → 6', {
+          tag: 'system',
+          name: 'x',
+          bookmarkedAt: 5,
+        }),
       },
     ]);
 
-    expect((await alice.events())[0].data).toMatchObject({ syncData: { bookmarkedAt: 7 } });
-    await bob.expectQuiet();
+    const kept = edited(original, original.syncData.value, { bookmarkedAt: 5 });
+    expect(await clients.bob.events()).toEqual([
+      { eventName: AuthorityEvent.AUTHORITATIVE, data: kept, sendFrom: AUTHORITY_PEER_ID },
+    ]);
+    expect((await clients.alice.events())[0].data).toEqual(kept);
+  });
+
+  it('can be edited as before when the client sends the result back unchanged', async () => {
+    const clients = await room();
+    const original = await rolledIn(clients);
+
+    clients.bob.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: edited(original, original.syncData.value, { bookmarkedAt: 7 }),
+      },
+    ]);
+
+    expect(attributes((await clients.alice.events())[0].data).bookmarkedAt).toBe(7);
+    await clients.bob.expectQuiet();
   });
 
   it('is never claimed by a message the server did not roll', async () => {
@@ -222,17 +244,33 @@ describe('a rolled result', () => {
       'forged',
       1,
       0.5,
-      { parentIdentifier: 'main', from: 'System-BCDice', value: 'DiceBot : 6', serverRoll: true },
+      {
+        parentIdentifier: 'main',
+        value: 'DiceBot : 6',
+        attributes: { from: 'System-BCDice', serverRoll: true },
+      },
       'chat',
     );
 
     alice.emit([{ eventName: SyncEvent.UPDATE, data: forged }]);
 
-    const stripped = { ...forged, syncData: { ...forged.syncData } };
-    delete (stripped.syncData as Record<string, unknown>).serverRoll;
+    const stripped = {
+      ...forged,
+      syncData: { ...forged.syncData, attributes: { from: 'System-BCDice' } },
+    };
     expect((await bob.events())[0].data).toEqual(stripped);
     expect(await alice.events()).toEqual([
       { eventName: AuthorityEvent.AUTHORITATIVE, data: stripped, sendFrom: AUTHORITY_PEER_ID },
     ]);
+  });
+
+  it('leaves alone a message whose attributes are not an object', async () => {
+    const { alice, bob } = await room();
+    const odd = contextOf('odd', 1, 0.5, { parentIdentifier: 'main', attributes: [1] }, 'chat');
+
+    alice.emit([{ eventName: SyncEvent.UPDATE, data: odd }]);
+
+    expect((await bob.events())[0].data).toEqual(odd);
+    await alice.expectQuiet();
   });
 });

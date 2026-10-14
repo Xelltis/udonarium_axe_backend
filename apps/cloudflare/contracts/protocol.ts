@@ -301,8 +301,9 @@ export const AuthorityEvent = {
 
 /**
  * ダイスを振ってもらう。Axe は、自分で振るときと同じ形で結果の発言（alias 'chat'）を用意して送る。
- * サーバーは振った結果で value（文面）・dicebot・tag・name を埋め、from を `System-BCDice`、
- * originFrom を頼んだ人の userId に、serverRoll を true にして、新しい発言として配る。
+ * サーバーは振った結果で syncData.value（文面）と、attributes の dicebot・tag・name を埋め、
+ * attributes の from を `System-BCDice`、originFrom を頼んだ人の userId に、serverRoll を true にして、
+ * 新しい発言として配る。
  * 頼んだ人の手元には、まだ置かないこと（サーバーから届く）
  */
 export interface RollRequest {
@@ -321,7 +322,7 @@ export interface RollRequest {
 export const DICE_BOT_SENDER = 'System-BCDice';
 
 /**
- * サーバーが振った結果の発言にだけ true が入る syncData の項目。クライアントが送ってきた発言からは消す。
+ * サーバーが振った結果の発言にだけ true が入る attributes の項目。クライアントが送ってきた発言からは消す。
  * Axe はこれを見て、サーバーで振った結果だとわかるように見せられる
  */
 export const SERVER_ROLL_FIELD = 'serverRoll';
@@ -347,7 +348,11 @@ export const CHAT_TAB_ALIAS = 'chat-tab';
  */
 export const PEER_CURSOR_ALIAS = 'PeerCursor';
 
-/** UPDATE_GAME_OBJECT の data。サーバーは syncData を読まずに、そのまま置いて返す */
+/**
+ * UPDATE_GAME_OBJECT の data。サーバーは、決まった項目のほかは syncData を読まずに、そのまま置いて返す。
+ * ObjectNode（カード、チャットの発言、タブ、データ要素など）の SyncVar は syncData.attributes に、
+ * それ以外（PeerCursor など）の SyncVar は syncData の直下に入る
+ */
 export interface ObjectContext {
   aliasName: string;
   identifier: string;

@@ -55,15 +55,15 @@ Content-Type: application/json
 
 ```json
 {
-  "rooms": [
-    {
-      "roomKey": "511c18c8…",
-      "roomId": "O46",
-      "name": "金曜の卓",
-      "hasPassword": true,
-      "members": 2
-    }
-  ]
+    "rooms": [
+        {
+            "roomKey": "511c18c8…",
+            "roomId": "O46",
+            "name": "金曜の卓",
+            "hasPassword": true,
+            "members": 2
+        }
+    ]
 }
 ```
 
@@ -102,13 +102,13 @@ WebSocketにつなぎ替えます（`101`）。
 
 ```json
 {
-  "type": "hello",
-  "protocolVersion": 2,
-  "peerId": "a1B2c3XyZq9W8e7r6-",
-  "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
-  "password": "secret",
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+    "type": "hello",
+    "protocolVersion": 2,
+    "peerId": "a1B2c3XyZq9W8e7r6-",
+    "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
+    "password": "secret",
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+    "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
 }
 ```
 
@@ -124,11 +124,15 @@ WebSocketにつなぎ替えます（`101`）。
 
 ```json
 {
-  "type": "send",
-  "to": "Zz9Yy8XyZq9W8e7r6-",
-  "events": [
-    { "eventName": "WRITING_A_MESSAGE_DETAIL", "data": "…", "sendFrom": "a1B2c3XyZq9W8e7r6-" }
-  ]
+    "type": "send",
+    "to": "Zz9Yy8XyZq9W8e7r6-",
+    "events": [
+        {
+            "eventName": "WRITING_A_MESSAGE_DETAIL",
+            "data": "…",
+            "sendFrom": "a1B2c3XyZq9W8e7r6-"
+        }
+    ]
 }
 ```
 
@@ -202,20 +206,20 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 
 ```json
 {
-  "eventName": "ROLL_REQUEST",
-  "data": {
-    "message": {
-      "aliasName": "chat",
-      "identifier": "…",
-      "majorVersion": 1,
-      "minorVersion": 0.5,
-      "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
-    },
-    "command": "2d6+3",
-    "gameSystem": "SwordWorld2.5",
-    "speaker": "Kai",
-    "suffix": " [ゴブリン]"
-  }
+    "eventName": "ROLL_REQUEST",
+    "data": {
+        "message": {
+            "aliasName": "chat",
+            "identifier": "…",
+            "majorVersion": 1,
+            "minorVersion": 0.5,
+            "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
+        },
+        "command": "2d6+3",
+        "gameSystem": "SwordWorld2.5",
+        "speaker": "Kai",
+        "suffix": " [ゴブリン]"
+    }
 }
 ```
 
@@ -228,6 +232,7 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 | `suffix`     | 結果の文面の後ろに付けるもの（対象のキャラの名前など）。省いてよい        |
 
 サーバーは振った結果で、発言の次の項目を埋め、新しい発言として全員に配ります（振った人にも届きます）。
+`value`は`syncData`の直下、ほかはChatMessageのSyncVarなので`syncData.attributes`に入ります。
 
 | 項目         | 入れるもの                                                           |
 | ------------ | -------------------------------------------------------------------- |
@@ -241,7 +246,7 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 
 - コマンドでなければ、何も配りません。
 - 見学者は、見学者も話せるタブでだけ振れます。
-- サーバーが振った発言は、あとから`value`・`dicebot`・`tag`・`name`・`from`・`originFrom`を書き換えられません（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
+- サーバーが振った発言は、あとから`value`と、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`を書き換えられません（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
 - `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。
 - ダイス表やリソースの操作は、これまでどおりAxeが手元で処理します。
 - BCDiceの版は、Axeと揃えます（いまは4.10.0）。
@@ -251,8 +256,8 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 見学（`guest`）の人が書けるのは、次のものだけです。
 
 - 自分の`PeerCursor`（書き換えと、消すこと）
-- 見学者も話せるタブ（`chat-tab`の`guestCanSpeak`が`true`）への新しい発言（`chat`）。ダイスの結果のように`from`が本人でないものも書ける
-- 自分の発言（`from`か`originFrom`が自分の`userId`）の書き直し
+- 見学者も話せるタブ（`chat-tab`の`attributes.guestCanSpeak`が`true`）への新しい発言（`chat`）。ダイスの結果のように`from`が本人でないものも書ける
+- 自分の発言（`attributes`の`from`か`originFrom`が自分の`userId`）の書き直し
 
 それ以外の`UPDATE_GAME_OBJECT`と`DELETE_GAME_OBJECT`は配らず、見学者の画面で戻させます。
 
