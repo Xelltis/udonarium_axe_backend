@@ -3,13 +3,13 @@
 codecov:
   require_ci_to_pass: true
   notify:
-    # coverage.xml をアップロードするのは CI の PHP 8.5 ジョブ 1 つだけ
-    after_n_builds: 1
+    # カバレッジを上げるのは PHP 8.5 ジョブと Vercel ジョブの 2 つ
+    after_n_builds: 2
 
 coverage:
   precision: 2
   round: down
-  # apps/php/src/ は現状 100%。低下が色で分かるよう下限を高めに置く
+  # apps/php/src/ と apps/vercel の src/・api/ は現状 100%。低下が色で分かるよう下限を高めに置く
   range: "90...100"
   status:
     project:
@@ -23,20 +23,36 @@ coverage:
         threshold: 0%
         only_pulls: true
 
+# アプリごとにフラグを分け、片方だけ変えた PR でももう片方の値を引き継ぐ
+flags:
+  php:
+    paths:
+      - apps/php/
+    carryforward: true
+  vercel:
+    paths:
+      - apps/vercel/
+    carryforward: true
+
 comment:
-  layout: "header, diff, files"
+  layout: "header, diff, flags, files"
   behavior: default
   # テスト結果はカバレッジコメントに同梱されるため、カバレッジ不変の PR で
   # コメントを抑制するとテスト失敗も表に出ない。require_changes にテスト失敗の
   # 条件は無いので false にする。
   require_changes: false
 
-# 計測対象は apps/php/phpunit.xml の <source> で src/ に限定済み。
-# 将来 <source> を広げたときの保険として除外を明示する。
+# PHP の計測対象は apps/php/phpunit.xml の <source> で src/ に限定済み。
+# Vercel の除外は apps/vercel/vitest.config.ts の coverage.exclude と対応させる。
+# どちらも、レポーターや <source> の設定が変わっても意図が崩れないよう明示する。
 ignore:
   - "apps/php/tests/**"
   - "apps/php/bin/**"
   - "apps/php/docs/**"
   - "apps/php/vendor/**"
   - "apps/php/index.php"
+  - "apps/vercel/test/**"
+  - "apps/vercel/scripts/**"
+  - "apps/vercel/src/**/types.ts"
+  - "apps/vercel/src/http/context.ts"
   - "stubs/**"

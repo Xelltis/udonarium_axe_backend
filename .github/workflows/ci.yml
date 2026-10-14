@@ -47,6 +47,7 @@ jobs:
         if: matrix.php == '8.5'
         with:
           files: apps/php/coverage.xml
+          flags: php
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -64,9 +65,49 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  vercel:
+    name: Vercel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/vercel
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/vercel/package.json
+          cache: npm
+          cache-dependency-path: apps/vercel/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # 相対 import の拡張子漏れはここでしか検出できない。
+      # Vercel は型チェックせずトランスパイルするため、抜けると本番で
+      # ERR_MODULE_NOT_FOUND になる (b0995cc 参照)。
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # カバレッジ閾値割れで npm test が落ちた場合も、どの行が落ちたかを
+      # Codecov 上で追えるようアップロードは実行する。
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: apps/vercel/coverage/lcov.info
+          flags: vercel
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - run: npm run coverage:check
+
   release:
     name: Release
-    needs: test
+    needs: [test, vercel]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
