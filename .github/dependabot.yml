@@ -33,6 +33,10 @@ updates:
     labels:
       - dependencies
     open-pull-requests-limit: 10
+    ignore:
+      # @cloudflare/vitest-pool-workers が抱える版に揃えて手で上げる。単独で上げると
+      # テストと dev・deploy で workerd が分かれ、CI の「one workerd」チェックで落ちる
+      - dependency-name: wrangler
 
   - package-ecosystem: github-actions
     directory: /

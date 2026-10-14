@@ -123,6 +123,11 @@ jobs:
 
       - run: npm ci
 
+      # テストは vitest-pool-workers が抱える wrangler と workerd で動く。dev と deploy の wrangler を
+      # 同じ版に揃え、テストと違うランタイムで動かさないようにする（wrangler だけ上げると落ちる）
+      - name: Check that the tests and wrangler share one workerd
+        run: test "$(npm query '#workerd' | jq '[.[].version] | unique | length')" = 1
+
       - run: npm run lint
 
       - run: npm run typecheck

@@ -78,3 +78,7 @@ npm test           # Workersのランタイム（workerd）の中でテストす
 npm run lint
 npm run typecheck
 ```
+
+テストは`@cloudflare/vitest-pool-workers`が持つwranglerとworkerdで動きます。
+`npm run dev`と`npm run deploy`も同じランタイムで動くよう、`wrangler`はそのwranglerと同じ版に固定しています。
+上げるときは、`@cloudflare/vitest-pool-workers`が使う版に合わせてください（CIで確かめます）。
