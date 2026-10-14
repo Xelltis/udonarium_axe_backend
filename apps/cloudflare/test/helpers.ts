@@ -6,6 +6,8 @@ export const BASE = 'https://backend.example/v1/assets';
 export const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 export const OGG_HEAD = [0x4f, 0x67, 0x67, 0x53];
 
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
 export const fileOf = (head: number[], size: number, seed = 0): Uint8Array => {
   const file = new Uint8Array(size);
   file.set(head);

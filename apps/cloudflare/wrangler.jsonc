@@ -17,5 +17,7 @@
   "vars": {
     // カンマ区切り。PUT はこの Origin からしか受けない
     "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
+    // バケットのライフサイクル規則と同じ日数にする
+    "ASSET_RETENTION_DAYS": "30",
   },
 }

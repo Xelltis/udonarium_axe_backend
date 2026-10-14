@@ -25,23 +25,32 @@ PUTでは、本文のハッシュがこの名前と合わなければ置きま�
 SVGは中にスクリプトを書けるので受け付けません。
 受け付けなかった画像は、これまでどおりP2Pで配られます。
 
+### キャッシュと保持期間
+
+GETの応答は`Cache-Control: public, max-age=…, immutable`で返します。
+`max-age`は7日か、保持期間の残りの短いほうです。
+キャッシュに残った版が、バケットから消えたあとまで「ある」と答えないようにするためです。
+
+保持期間（`ASSET_RETENTION_DAYS`）を過ぎたものは、バケットから消える前でも`404`を返します。
+アップロードした人が次に部屋を読み込んだとき、HEADが`404`になるので上げ直され、保持期間もそこから数え直します。
+
 ### エラー
 
 本文は`{"error": "<コード>"}`の形です。
 
-| 状態 | コード                | 起きるとき                                       |
-| ---- | --------------------- | ------------------------------------------------ |
-| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                   |
-| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                   |
-| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                    |
-| 404  | `not-found`           | その名前の中身が置かれていない                   |
-| 411  | `length-required`     | PUTに`Content-Length`がない                      |
-| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない |
-| 413  | `too-large`           | 種類ごとの上限を超えている                       |
-| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                   |
-| 429  | `rate-limited`        | 同じIPからのアップロードが1分に100件を超えた     |
-| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                   |
-| 500  | `internal-error`      | それ以外の失敗                                   |
+| 状態 | コード                | 起きるとき                                         |
+| ---- | --------------------- | -------------------------------------------------- |
+| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                     |
+| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                     |
+| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                      |
+| 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた |
+| 411  | `length-required`     | PUTに`Content-Length`がない                        |
+| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない   |
+| 413  | `too-large`           | 種類ごとの上限を超えている                         |
+| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                     |
+| 429  | `rate-limited`        | 同じIPからのアップロードが1分に100件を超えた       |
+| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                     |
+| 500  | `internal-error`      | それ以外の失敗                                     |
 
 `config-invalid`のときは、足りない設定の名前がWorkerのログに出ます。
 
@@ -56,11 +65,12 @@ Cloudflareのアカウントと、`npx wrangler login`でのログインが要�
    ```
 
 2. 保持期間を決めます。次の例では、置いてから30日で消します。
-   消えた画像は、使う人が次に部屋を読み込んだときにまた上がります。
 
    ```sh
    npx wrangler r2 bucket lifecycle add udonarium-axe-assets expire-30d --expire-days 30
    ```
+
+   `wrangler.jsonc`の`ASSET_RETENTION_DAYS`も同じ日数にします。
 
 3. `wrangler.jsonc`の`ACCESS_CONTROL_ALLOW_ORIGIN`に、アプリを配信しているOriginを書きます。
    複数あるときはカンマで区切ります。

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
-import { objectHeaders, setContentRange } from './response';
+import { objectHeaders, remainingSeconds, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
 
@@ -28,8 +28,9 @@ export const assetRoutes = new Hono<AppEnv>();
 /** HEAD は R2 の head で答え、中身のストリームを開かない */
 const headAsset = async (c: Context<AppEnv>, id: string) => {
   const object = await c.env.ASSETS.head(id);
-  if (!object) return fail(c, 404, 'not-found');
-  return new Response(null, { status: 200, headers: objectHeaders(object) });
+  const remaining = object ? remainingSeconds(object, c.var.config.retentionSeconds) : 0;
+  if (!object || remaining <= 0) return fail(c, 404, 'not-found');
+  return new Response(null, { status: 200, headers: objectHeaders(object, remaining) });
 };
 
 // Hono は HEAD も GET の経路に回し、返した本文を捨てる。
@@ -41,9 +42,10 @@ assetRoutes.get('/:id', async (c) => {
   // 条件付きリクエストと Range は R2 に任せる。条件が合わないと、R2 は本文の無いものを返す
   const headers = c.req.raw.headers;
   const object = await c.env.ASSETS.get(id, { onlyIf: headers, range: headers });
-  if (!object) return fail(c, 404, 'not-found');
+  const remaining = object ? remainingSeconds(object, c.var.config.retentionSeconds) : 0;
+  if (!object || remaining <= 0) return fail(c, 404, 'not-found');
 
-  const responseHeaders = objectHeaders(object);
+  const responseHeaders = objectHeaders(object, remaining);
   if (!('body' in object)) {
     if (headers.has('If-Match') || headers.has('If-Unmodified-Since')) {
       return fail(c, 412, 'precondition-failed');
@@ -73,7 +75,10 @@ assetRoutes.put('/:id', async (c) => {
   });
   if (!success) return fail(c, 429, 'rate-limited');
 
-  if (await c.env.ASSETS.head(id)) return c.json({ id, status: 'exists' }, 200);
+  const existing = await c.env.ASSETS.head(id);
+  if (existing && remainingSeconds(existing, c.var.config.retentionSeconds) > 0) {
+    return c.json({ id, status: 'exists' }, 200);
+  }
 
   const body = await c.req.arrayBuffer();
   const sniffed = sniff(new Uint8Array(body, 0, Math.min(SNIFF_BYTES, body.byteLength)));

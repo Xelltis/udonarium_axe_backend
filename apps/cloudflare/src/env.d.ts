@@ -6,6 +6,8 @@ declare namespace Cloudflare {
     UPLOAD_LIMITER: RateLimit;
     /** PUT を受ける Origin のカンマ区切り。`*` ならすべて */
     ACCESS_CONTROL_ALLOW_ORIGIN: string;
+    /** バケットに置いたものを残す日数。ライフサイクル規則と同じ値にする */
+    ASSET_RETENTION_DAYS: string;
   }
 }
 

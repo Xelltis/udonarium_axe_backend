@@ -5,6 +5,7 @@ import { MAX_BYTES } from '../src/assets/routes';
 import app from '../src/index';
 import {
   BASE,
+  DAY_MS,
   OGG_HEAD,
   ORIGIN,
   PNG_HEAD,
@@ -16,9 +17,17 @@ import {
   sha256Hex,
 } from './helpers';
 
+const RETENTION_SECONDS = 30 * 24 * 60 * 60;
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
+/** Date.now() だけを進める。R2 の uploaded は実際の時刻のまま */
+const travel = (ms: number) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() + ms);
+};
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -47,6 +56,18 @@ describe('PUT /v1/assets/:id', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id, status: 'exists' });
     expect((await env.ASSETS.head(id))?.uploaded).toEqual(before?.uploaded);
+  });
+
+  it('stores an asset again once its retention has run out', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    const before = await env.ASSETS.head(id);
+    travel(31 * DAY_MS);
+
+    const res = await put(id, file);
+
+    expect(res.status).toBe(201);
+    expect((await env.ASSETS.head(id))?.uploaded).not.toEqual(before?.uploaded);
   });
 
   it('turns away bytes whose hash is not the name, and stores nothing', async () => {
@@ -156,6 +177,27 @@ describe('GET /v1/assets/:id', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(res.headers.get('Vary')).toBeNull();
+  });
+
+  it('lets caches keep a copy no longer than the asset stays in the bucket', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    travel(25 * DAY_MS);
+
+    const res = await call(id);
+
+    const maxAge = Number(/max-age=(\d+)/.exec(res.headers.get('Cache-Control') ?? '')?.[1]);
+    expect(maxAge).toBeLessThanOrEqual(RETENTION_SECONDS - 25 * 24 * 60 * 60);
+    expect(maxAge).toBeGreaterThan(RETENTION_SECONDS - 25 * 24 * 60 * 60 - 60);
+  });
+
+  it('answers 404 for an asset past its retention, even before the bucket drops it', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    travel(30 * DAY_MS + 1000);
+
+    expect((await call(id)).status).toBe(404);
+    expect((await call(id, { method: 'HEAD' })).status).toBe(404);
   });
 
   it('serves bytes stored without a type as plain octets', async () => {

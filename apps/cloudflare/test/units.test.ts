@@ -42,18 +42,22 @@ describe('setContentRange', () => {
 describe('parseConfig', () => {
   const valid = {
     ACCESS_CONTROL_ALLOW_ORIGIN: ' https://a.example, ,https://b.example ',
+    ASSET_RETENTION_DAYS: '30',
   };
 
   it('reads the settings', () => {
     expect(parseConfig(valid)).toEqual({
       allowedOrigins: ['https://a.example', 'https://b.example'],
+      retentionSeconds: 30 * 24 * 60 * 60,
     });
   });
 
-  it.each([['no list of origins', { ACCESS_CONTROL_ALLOW_ORIGIN: undefined }]])(
-    'turns away %s',
-    (_name, change) => {
-      expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
-    },
-  );
+  it.each([
+    ['no list of origins', { ACCESS_CONTROL_ALLOW_ORIGIN: undefined }],
+    ['a retention that is not a number', { ASSET_RETENTION_DAYS: 'thirty' }],
+    ['a retention under a day', { ASSET_RETENTION_DAYS: '0' }],
+    ['a retention that is not whole days', { ASSET_RETENTION_DAYS: '1.5' }],
+  ])('turns away %s', (_name, change) => {
+    expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
+  });
 });
