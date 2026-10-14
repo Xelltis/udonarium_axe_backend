@@ -208,6 +208,26 @@ describe('PUT /v1/assets/:id', () => {
       const statuses = await uploadSix((i) => ({ 'CF-Connecting-IP': `2001:db8:1:2::${i + 1}` }));
       expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
     });
+
+    it('counts apart from another instance on the same account', async () => {
+      const ip = freshIp();
+      const statuses = await uploadSix(() => ({ 'CF-Connecting-IP': ip }));
+      const { file, id } = await freshFile(PNG_HEAD, 64);
+      const elsewhere = await exports.default.fetch(
+        new Request(`https://other-instance.example/v1/assets/${id}`, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            Origin: ORIGIN,
+            'Content-Length': String(file.byteLength),
+            'CF-Connecting-IP': ip,
+          },
+        }),
+      );
+
+      expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
+      expect(elsewhere.status).toBe(201);
+    });
   });
 });
 

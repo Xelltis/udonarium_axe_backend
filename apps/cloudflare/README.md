@@ -41,6 +41,7 @@ GETの応答は`Cache-Control: public, max-age=…, immutable`で返します。
 同じデータセンターからの2回目以降のGETは、[Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/)から返し、R2を読みません。
 Cache APIは`*.workers.dev`では効かないので、本番はカスタムドメインに置いてください。
 R2を読むGETとHEADは、送信元ごとに1分600件までです。
+レート制限は、同じアカウントに置いた別のWorkerとは別に数えます。
 
 ### エラー
 
@@ -65,32 +66,28 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 ## セットアップ
 
 Cloudflareのアカウントと、`npx wrangler login`でのログインが要ります。
+R2のバケットは最初のデプロイで「<Workerの名前>-assets」が作られるので、自分で作る必要はありません。
+同じアカウントに何台置いても、Workerの名前ごとに別のバケットになります。
 
-1. バケットを作ります。
-
-   ```sh
-   npx wrangler r2 bucket create udonarium-axe-assets
-   ```
-
-2. 保持期間を決めます。次の例では、置いてから30日で消します。
-
-   ```sh
-   npx wrangler r2 bucket lifecycle add udonarium-axe-assets expire-30d --expire-days 30
-   ```
-
-   `wrangler.jsonc`の`ASSET_RETENTION_DAYS`も同じ日数にします。
-
-3. `wrangler.jsonc`の`ACCESS_CONTROL_ALLOW_ORIGIN`に、アプリを配信しているOriginを書きます。
+1. `wrangler.jsonc`の`ACCESS_CONTROL_ALLOW_ORIGIN`に、アプリを配信しているOriginを書きます。
    複数あるときはカンマで区切ります。
 
-4. デプロイします。
+2. デプロイします。Workerの名前は`--name`で決めます。
 
    ```sh
    npm ci
-   npm run deploy
+   npx wrangler deploy --name my-udonarium-assets
    ```
 
    キャッシュを効かせるため、Workerにはカスタムドメインを付けてください。
+
+3. 保持期間を決めます。次の例では、置いてから30日で消します。
+
+   ```sh
+   npx wrangler r2 bucket lifecycle add my-udonarium-assets-assets expire-30d --expire-days 30
+   ```
+
+   `wrangler.jsonc`の`ASSET_RETENTION_DAYS`も同じ日数にします。
 
 アプリ側の`config.json`には、このWorkerのURLを`assets.url`として書きます。
 

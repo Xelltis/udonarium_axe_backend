@@ -4,8 +4,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-15",
   "observability": { "enabled": true },
-  // 画像と音声を SHA-256 の名前で置く。保持期間はバケットのライフサイクル規則で決める（README 参照）
-  "r2_buckets": [{ "binding": "ASSETS", "bucket_name": "udonarium-axe-assets" }],
+  // 画像と音声を SHA-256 の名前で置く。バケット名は書かず、最初のデプロイで「<Worker 名>-assets」を
+  // 作らせる。同じアカウントに何台置いても、Worker ごとに別のバケットになる。
+  // 保持期間はバケットのライフサイクル規則で決める（README 参照）
+  "r2_buckets": [{ "binding": "ASSETS" }],
+  // namespace_id は同じアカウントの Worker で共有されるが、鍵に受けたホスト名を付けて Worker ごとに数える
   "ratelimits": [
     // 新しく置くアップロードを、送信元（IPv6 は /64）ごとに数える。
     // 部屋を読み込むと画像がまとめて上がるので、余裕を持たせる

@@ -27,9 +27,19 @@ const R2_BAD_DIGEST = '(10037)';
 const networkOfRequest = (c: Context<AppEnv>): string =>
   networkOf(c.req.header('CF-Connecting-IP') ?? 'unknown');
 
-/** すべての鍵でレート制限に収まっていれば true。どれか1つでも超えたら false */
-const withinLimits = async (limiter: RateLimit, keys: string[]): Promise<boolean> => {
-  const outcomes = await Promise.all(keys.map((key) => limiter.limit({ key })));
+/**
+ * すべての鍵でレート制限に収まっていれば true。どれか1つでも超えたら false。
+ *
+ * namespace_id は同じアカウントの Worker どうしで共有されるので、鍵の頭に受けたホスト名を付けて、
+ * 同じアカウントに置いた別のインスタンスと数えるものを混ぜない。
+ */
+const withinLimits = async (
+  c: Context<AppEnv>,
+  limiter: RateLimit,
+  keys: string[],
+): Promise<boolean> => {
+  const host = new URL(c.req.url).host;
+  const outcomes = await Promise.all(keys.map((key) => limiter.limit({ key: `${host}/${key}` })));
   return outcomes.every(({ success }) => success);
 };
 
@@ -76,7 +86,7 @@ export const assetRoutes = new Hono<AppEnv>();
 
 /** HEAD は R2 の head で答え、中身のストリームを開かない */
 const headAsset = async (c: Context<AppEnv>, id: string) => {
-  if (!(await withinLimits(c.env.READ_LIMITER, [networkOfRequest(c)]))) {
+  if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
   const object = await c.env.ASSETS.head(id);
@@ -97,7 +107,7 @@ assetRoutes.get('/:id', async (c) => {
   const cached = await cache.match(c.req.raw);
   if (cached) return cached;
 
-  if (!(await withinLimits(c.env.READ_LIMITER, [networkOfRequest(c)]))) {
+  if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
   // 条件付きリクエストと Range は R2 に任せる。条件が合わないと、R2 は本文の無いものを返す
@@ -139,7 +149,7 @@ assetRoutes.put('/:id', async (c) => {
   }
 
   // IPv6 は /64 ごとに数える。アドレスを替えるだけでは増やせない
-  if (!(await withinLimits(c.env.UPLOAD_LIMITER, [networkOfRequest(c)]))) {
+  if (!(await withinLimits(c, c.env.UPLOAD_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
 
