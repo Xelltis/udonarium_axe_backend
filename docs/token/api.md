@@ -73,7 +73,7 @@ Content-Type: application/json
 
 - `Origin`は、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのどれかでなければなりません。
 - PHP版は、`Content-Type: application/json`でないリクエストを`415`で断ります。本文は64KBまでです。
-- PHP版は、`channelName`と`peerId`の中身も確かめます（空、200バイト超、`*`や`\`を含むもの、`udonarium-lobby-`で始まる部屋名を断る）。理由は[トークン発行のしくみ](/token/#安全のための制限)にあります。
+- `channelName`と`peerId`の中身も確かめます（空、200バイト超、`*`や`\`を含むもの、`udonarium-lobby-`で始まる部屋名を断る）。理由は[トークン発行のしくみ](/token/#安全のための制限)にあります。
 
 ### レスポンス
 

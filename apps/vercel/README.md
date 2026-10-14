@@ -146,6 +146,8 @@ Content-Type: application/json
 }
 ```
 
+`channelName` と `peerId` は 1〜200 バイトの文字列で、`*` と `\` を含められません。SkyWay はスコープの名前の `*` をワイルドカード、`\` をその打ち消しとして解釈するため、受け付けると発行したトークンの権限が頼まれた部屋やメンバーを越えて広がります。同じ理由で、ロビーの名前 (`udonarium-lobby-` で始まるもの) も `channelName` には使えません。いずれも `VALIDATION_FAILED` (400) を返します。
+
 **Response**
 
 ```json

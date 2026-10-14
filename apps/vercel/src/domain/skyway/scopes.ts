@@ -1,7 +1,13 @@
 import type { ChannelScope } from '@skyway-sdk/token';
 
+/**
+ * ロビーのチャンネル名の頭。ロビーのスコープはデータの送受信を許していないので、
+ * この頭で始まる名前を部屋として頼まれても、部屋のスコープ（送受信あり）は出さない。
+ */
+export const LOBBY_CHANNEL_PREFIX = 'udonarium-lobby-';
+
 export const buildLobbyChannelScope = (peerId: string, lobbySize: number): ChannelScope => ({
-  name: `udonarium-lobby-*-of-${lobbySize}`,
+  name: `${LOBBY_CHANNEL_PREFIX}*-of-${lobbySize}`,
   actions: ['read', 'create'],
   members: [
     {

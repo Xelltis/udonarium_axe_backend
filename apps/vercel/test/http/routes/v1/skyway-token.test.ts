@@ -64,4 +64,41 @@ describe('skywayTokenRoute', () => {
     );
     expect(res.status).toBe(400);
   });
+
+  // SkyWay reads "*" in a scope name as a wildcard and "\\" as its escape, so either would widen
+  // the token past the room and member it was asked for.
+  it.each([
+    ['an empty channel name', { channelName: '' }],
+    ['an empty peer id', { peerId: '' }],
+    ['a wildcard channel name', { channelName: '*' }],
+    ['a channel name holding a wildcard', { channelName: 'room-*' }],
+    ['a channel name holding a backslash', { channelName: 'room\\1' }],
+    ['a wildcard peer id', { peerId: '*' }],
+    ['a peer id holding a backslash', { peerId: 'peer\\1' }],
+    ['a lobby channel name', { channelName: 'udonarium-lobby-1-of-3' }],
+    ['a channel name over 200 bytes', { channelName: 'あ'.repeat(67) }],
+    ['a peer id over 200 bytes', { peerId: 'p'.repeat(201) }],
+  ])('turns away %s', async (_name, change) => {
+    const body = JSON.stringify({
+      formatVersion: 1,
+      channelName: 'room',
+      peerId: 'peer-1',
+      ...change,
+    });
+    const res = await buildApp().fetch(post('/skyway/tokens', body));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: 'VALIDATION_FAILED', message: 'Invalid request body.' },
+    });
+  });
+
+  it('takes names of exactly 200 bytes', async () => {
+    const body = JSON.stringify({
+      formatVersion: 1,
+      channelName: 'a'.repeat(200),
+      peerId: 'p'.repeat(200),
+    });
+    const res = await buildApp().fetch(post('/skyway/tokens', body));
+    expect(res.status).toBe(200);
+  });
 });
