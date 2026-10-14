@@ -125,7 +125,7 @@ DiscordのアクセストークンはWorkerのどこにも置かず、その人�
   "expiresIn": 900,
   "refreshToken": "…",
   "account": {
-    "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
+    "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
     "name": "Kai",
     "avatarUrl": "https://cdn.discordapp.com/avatars/…"
   }
@@ -133,6 +133,7 @@ DiscordのアクセストークンはWorkerのどこにも置かず、その人�
 ```
 
 `account.userId`は、同じDiscordのアカウントならいつも同じです。
+`acct_`で始まり、ログインしていない人はこの形の`userId`を名乗れません。
 部屋の`hello`の`userId`にはこれを使います。
 手札やインベントリが、端末やタブをまたいでも同じ人のものになります。
 
