@@ -7,29 +7,37 @@ export interface SniffedType {
 }
 
 /** 判定に読む先頭のバイト数 */
-export const SNIFF_BYTES = 16;
+export const SNIFF_BYTES = 32;
 
 /**
- * `ftyp` の後ろのブランドのうち、動画や音声ではなく静止画を表すもの。
- * 同じ箱が mp4 の先頭にも来るので、ブランドまで読まないと区別できない。
+ * `ftyp` の後ろのブランドのうち、受け付けるもの。
+ * 同じ箱が mp4 や mov の動画の先頭にも来るので、ブランドまで読まないと区別できない。
+ * 音声は M4A（とオーディオブックの M4B）だけで、動画にも使われる isom や mp42 は受け付けない。
  */
-const PICTURE_BRANDS: ReadonlyMap<string, string> = new Map([
-  ['avif', 'image/avif'],
-  ['avis', 'image/avif'],
-  ['heic', 'image/heic'],
-  ['heix', 'image/heic'],
-  ['hevc', 'image/heic'],
-  ['hevx', 'image/heic'],
-  ['heim', 'image/heif'],
-  ['heis', 'image/heif'],
-  ['mif1', 'image/heif'],
-  ['msf1', 'image/heif'],
+const FTYP_BRANDS: ReadonlyMap<string, SniffedType> = new Map([
+  ['avif', { kind: 'image', type: 'image/avif' }],
+  ['avis', { kind: 'image', type: 'image/avif' }],
+  ['heic', { kind: 'image', type: 'image/heic' }],
+  ['heix', { kind: 'image', type: 'image/heic' }],
+  ['hevc', { kind: 'image', type: 'image/heic' }],
+  ['hevx', { kind: 'image', type: 'image/heic' }],
+  ['heim', { kind: 'image', type: 'image/heif' }],
+  ['heis', { kind: 'image', type: 'image/heif' }],
+  ['mif1', { kind: 'image', type: 'image/heif' }],
+  ['msf1', { kind: 'image', type: 'image/heif' }],
+  ['M4A ', { kind: 'audio', type: 'audio/mp4' }],
+  ['M4B ', { kind: 'audio', type: 'audio/mp4' }],
 ]);
+
+/** BMP のファイルヘッダーの直後に来る情報ヘッダーの長さ。これ以外は BMP として読めない */
+const BMP_INFO_HEADER_SIZES: ReadonlySet<number> = new Set([12, 40, 52, 56, 64, 108, 124]);
 
 /**
  * バイト列の先頭から、受け付ける画像か音声かを判定する。どれでもなければ null。
  *
  * 宣言された Content-Type は信じず、形式そのものが先頭に持つ印だけを見る。
+ * 印のあとに何が続くかまでは確かめないので、中身が壊れていないことの保証にはならない。
+ * 配信する Content-Type を、ブラウザがスクリプトとして扱わないものに限るための判定。
  * SVG は中にスクリプトを書けるので受け付けない（クライアントは P2P で配る）。
  */
 export const sniff = (head: Uint8Array): SniffedType | null => {
@@ -37,26 +45,52 @@ export const sniff = (head: Uint8Array): SniffedType | null => {
   const starts = (...bytes: number[]) => bytes.every((byte, index) => head[index] === byte);
   const ascii = (from: number, length: number) =>
     String.fromCharCode(...head.subarray(from, from + length));
+  const uint32le = (from: number) =>
+    (head[from] | (head[from + 1] << 8) | (head[from + 2] << 16) | (head[from + 3] << 24)) >>> 0;
 
-  if (starts(0x89, 0x50, 0x4e, 0x47)) return { kind: 'image', type: 'image/png' };
-  if (starts(0xff, 0xd8, 0xff)) return { kind: 'image', type: 'image/jpeg' };
-  if (ascii(0, 4) === 'GIF8') return { kind: 'image', type: 'image/gif' };
-  if (ascii(0, 2) === 'BM') return { kind: 'image', type: 'image/bmp' };
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP')
-    return { kind: 'image', type: 'image/webp' };
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WAVE') return { kind: 'audio', type: 'audio/wav' };
-  if (ascii(4, 4) === 'ftyp') {
-    const picture = PICTURE_BRANDS.get(ascii(8, 4));
-    return picture ? { kind: 'image', type: picture } : { kind: 'audio', type: 'audio/mp4' };
+  if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) {
+    return { kind: 'image', type: 'image/png' };
   }
+  if (starts(0xff, 0xd8, 0xff)) return { kind: 'image', type: 'image/jpeg' };
+  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') {
+    return { kind: 'image', type: 'image/gif' };
+  }
+  if (ascii(0, 2) === 'BM' && BMP_INFO_HEADER_SIZES.has(uint32le(14))) {
+    return { kind: 'image', type: 'image/bmp' };
+  }
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP') {
+    return { kind: 'image', type: 'image/webp' };
+  }
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WAVE') return { kind: 'audio', type: 'audio/wav' };
+  if (ascii(4, 4) === 'ftyp') return FTYP_BRANDS.get(ascii(8, 4)) ?? null;
   if (ascii(0, 4) === 'OggS') return { kind: 'audio', type: 'audio/ogg' };
   if (ascii(0, 4) === 'fLaC') return { kind: 'audio', type: 'audio/flac' };
-  if (ascii(0, 3) === 'ID3') return { kind: 'audio', type: 'audio/mpeg' };
-  // ADTS（AAC）と MPEG オーディオはどちらもフレーム同期の 0xFFF から始まる。
-  // レイヤーの2ビットが 00 なら ADTS、それ以外なら MP3 などのフレーム。
-  if (head[0] === 0xff && (head[1] & 0xf6) === 0xf0) return { kind: 'audio', type: 'audio/aac' };
-  if (head[0] === 0xff && (head[1] & 0xe0) === 0xe0 && (head[1] & 0x06) !== 0) {
+  // ID3v2 のタグ。続く1バイトが版（2〜4）
+  if (ascii(0, 3) === 'ID3' && head[3] >= 2 && head[3] <= 4) {
     return { kind: 'audio', type: 'audio/mpeg' };
   }
+  if (isAdtsHeader(head)) return { kind: 'audio', type: 'audio/aac' };
+  if (isMp3FrameHeader(head)) return { kind: 'audio', type: 'audio/mpeg' };
   return null;
+};
+
+// ADTS（AAC）と MPEG オーディオのフレームは、どちらも同期ビット（0xFFF、MPEG 2.5 は 0xFFE）で
+// 始まる。2バイト目にあるレイヤーの2ビットが、ADTS では 00、MP3 では 01 になる。
+
+/** ADTS のヘッダー。サンプリング周波数の番号が 0〜12 のもの */
+const isAdtsHeader = (head: Uint8Array): boolean =>
+  head[0] === 0xff && (head[1] & 0xf6) === 0xf0 && ((head[2] >> 2) & 0x0f) <= 12;
+
+/**
+ * MP3（MPEG オーディオのレイヤー III）のフレームヘッダー。
+ * 版・ビットレート・サンプリング周波数のどれにも予約済みの値を使っていないものだけ。
+ * UTF-16LE の BOM（FF FE）のように、たまたま同期ビットで始まるだけのものを除く。
+ */
+const isMp3FrameHeader = (head: Uint8Array): boolean => {
+  if (head[0] !== 0xff || (head[1] & 0xe0) !== 0xe0) return false;
+  const version = (head[1] >> 3) & 0x03;
+  const layer = (head[1] >> 1) & 0x03;
+  const bitrate = head[2] >> 4;
+  const sampleRate = (head[2] >> 2) & 0x03;
+  return version !== 0b01 && layer === 0b01 && bitrate !== 0x0f && sampleRate !== 0b11;
 };
