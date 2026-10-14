@@ -1,64 +1,44 @@
-import { env } from 'cloudflare:test';
-import { exports } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { createExecutionContext, env } from 'cloudflare:test';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MAX_BYTES } from '../src/assets/routes';
+import app from '../src/index';
+import {
+  BASE,
+  OGG_HEAD,
+  ORIGIN,
+  PNG_HEAD,
+  call,
+  fileOf,
+  freshFile,
+  freshIp,
+  put,
+  sha256Hex,
+} from './helpers';
 
-const ORIGIN = 'https://app.example';
-const BASE = 'https://backend.example/v1/assets';
+const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
-const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const OGG_HEAD = [0x4f, 0x67, 0x67, 0x53];
-
-const fileOf = (head: number[], size: number, seed = 0): Uint8Array => {
-  const file = new Uint8Array(size);
-  file.set(head);
-  for (let i = head.length; i < size; i++) file[i] = (i * 31 + seed) & 0xff;
-  return file;
-};
-
-const sha256Hex = async (data: Uint8Array): Promise<string> =>
-  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data)), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
-
-let lastIp = 0;
-/** テストごとに別の IP にして、レート制限の数え方を混ぜない */
-const freshIp = () => `203.0.113.${++lastIp}`;
-
-const call = (path: string, init: RequestInit = {}) =>
-  exports.default.fetch(new Request(`${BASE}/${path}`, init));
-
-const put = (id: string, body: Uint8Array, headers: Record<string, string> = {}) =>
-  call(id, {
-    method: 'PUT',
-    body,
-    headers: {
-      Origin: ORIGIN,
-      'Content-Length': String(body.byteLength),
-      'CF-Connecting-IP': freshIp(),
-      ...headers,
-    },
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('PUT /v1/assets/:id', () => {
   it('stores bytes under their own hash, with the type read from the bytes', async () => {
-    const file = fileOf(PNG_HEAD, 1024);
-    const id = await sha256Hex(file);
+    const { file, id } = await freshFile(PNG_HEAD, 1024);
 
     const res = await put(id, file, { 'Content-Type': 'text/plain' });
 
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id, status: 'stored' });
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+    expect(res.headers.get('Vary')).toContain('Origin');
     const stored = await env.ASSETS.get(id);
     expect(stored?.httpMetadata?.contentType).toBe('image/png');
     expect(new Uint8Array((await stored?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(file);
   });
 
   it('answers 200 without writing again when the asset is already there', async () => {
-    const file = fileOf(PNG_HEAD, 256);
-    const id = await sha256Hex(file);
+    const { file, id } = await freshFile();
     await put(id, file);
     const before = await env.ASSETS.head(id);
 
@@ -70,8 +50,8 @@ describe('PUT /v1/assets/:id', () => {
   });
 
   it('turns away bytes whose hash is not the name, and stores nothing', async () => {
-    const file = fileOf(PNG_HEAD, 256);
-    const wrongId = await sha256Hex(fileOf(PNG_HEAD, 256, 1));
+    const { file } = await freshFile();
+    const { id: wrongId } = await freshFile();
 
     const res = await put(wrongId, file);
 
@@ -109,25 +89,23 @@ describe('PUT /v1/assets/:id', () => {
   });
 
   it('turns away a declared length over every limit before reading the body', async () => {
-    const file = fileOf(OGG_HEAD, 64);
-    const res = await put(await sha256Hex(file), file, {
-      'Content-Length': String(MAX_BYTES.audio + 1),
-    });
+    const { file, id } = await freshFile(OGG_HEAD, 64);
+    const res = await put(id, file, { 'Content-Length': String(MAX_BYTES.audio + 1) });
     expect(res.status).toBe(413);
   });
 
   it('asks for a length when the body is streamed without one', async () => {
-    const file = fileOf(PNG_HEAD, 64);
+    const { file, id } = await freshFile(PNG_HEAD, 64);
     const streamed = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(file);
         controller.close();
       },
     });
-    const res = await call(await sha256Hex(file), {
+    const res = await call(id, {
       method: 'PUT',
       body: streamed,
-      headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() },
+      headers: { Origin: ORIGIN },
     });
     expect(res.status).toBe(411);
     expect(await res.json()).toEqual({ error: 'length-required' });
@@ -137,61 +115,46 @@ describe('PUT /v1/assets/:id', () => {
     ['no Origin', undefined],
     ['an Origin not on the list', 'https://elsewhere.example'],
   ])('refuses an upload with %s', async (_name, origin) => {
-    const file = fileOf(PNG_HEAD, 64);
+    const { file, id } = await freshFile(PNG_HEAD, 64);
     const headers: Record<string, string> = {
       'Content-Length': String(file.byteLength),
-      'CF-Connecting-IP': freshIp(),
     };
     if (origin) headers['Origin'] = origin;
 
-    const res = await call(await sha256Hex(file), { method: 'PUT', body: file, headers });
+    const res = await call(id, { method: 'PUT', body: file, headers });
 
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: 'origin-not-allowed' });
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 
   it('stops one address once it has uploaded its share', async () => {
     const ip = freshIp();
     const statuses: number[] = [];
-    for (let seed = 0; seed < 6; seed++) {
-      const file = fileOf(PNG_HEAD, 64, seed + 100);
-      statuses.push((await put(await sha256Hex(file), file, { 'CF-Connecting-IP': ip })).status);
+    for (let i = 0; i < 6; i++) {
+      const { file, id } = await freshFile(PNG_HEAD, 64);
+      statuses.push((await put(id, file, { 'CF-Connecting-IP': ip })).status);
     }
     expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
   });
 });
 
-describe('GET and HEAD /v1/assets/:id', () => {
+describe('GET /v1/assets/:id', () => {
   it('hands the stored bytes to anyone, readable from any page', async () => {
-    const file = fileOf(OGG_HEAD, 512);
-    const id = await sha256Hex(file);
+    const { file, id } = await freshFile(OGG_HEAD, 512);
     await put(id, file);
 
-    const res = await call(id);
+    const res = await call(id, { headers: { Origin: 'https://elsewhere.example' } });
 
     expect(res.status).toBe(200);
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(file);
     expect(res.headers.get('Content-Type')).toBe('audio/ogg');
     expect(res.headers.get('Content-Length')).toBe('512');
     expect(res.headers.get('ETag')).toBe(`"${id}"`);
-    expect(res.headers.get('Cache-Control')).toBe('public, max-age=604800, immutable');
+    expect(res.headers.get('Cache-Control')).toBe(`public, max-age=${WEEK_SECONDS}, immutable`);
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
-  });
-
-  it('tells whether an asset is there without sending it', async () => {
-    const file = fileOf(PNG_HEAD, 300);
-    const id = await sha256Hex(file);
-    const missing = await call(id, { method: 'HEAD' });
-    await put(id, file);
-
-    const present = await call(id, { method: 'HEAD' });
-
-    expect(missing.status).toBe(404);
-    expect(present.status).toBe(200);
-    expect(present.headers.get('Content-Length')).toBe('300');
-    expect(present.headers.get('Content-Type')).toBe('image/png');
-    expect(await present.text()).toBe('');
+    expect(res.headers.get('Vary')).toBeNull();
   });
 
   it('answers 304 to a request that already holds the asset', async () => {
@@ -201,29 +164,95 @@ describe('GET and HEAD /v1/assets/:id', () => {
   });
 
   it('answers 404 for an asset that is not there and 400 for a bad name', async () => {
-    expect((await call('b'.repeat(64))).status).toBe(404);
+    const { id } = await freshFile();
+    const missing = await call(id);
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: 'not-found' });
     expect((await call('not-a-hash')).status).toBe(400);
   });
 });
 
+describe('HEAD /v1/assets/:id', () => {
+  it('tells whether an asset is there without sending it', async () => {
+    const { file, id } = await freshFile(PNG_HEAD, 300);
+    const missing = await call(id, { method: 'HEAD' });
+    await put(id, file);
+
+    const present = await call(id, { method: 'HEAD' });
+
+    expect(missing.status).toBe(404);
+    expect(present.status).toBe(200);
+    expect(present.headers.get('Content-Length')).toBe('300');
+    expect(present.headers.get('Content-Type')).toBe('image/png');
+    expect(present.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(await present.text()).toBe('');
+  });
+});
+
 describe('OPTIONS /v1/assets/:id', () => {
+  const preflight = (origin: string, method: string, requestHeaders?: string) => {
+    const headers: Record<string, string> = {
+      Origin: origin,
+      'Access-Control-Request-Method': method,
+    };
+    if (requestHeaders) headers['Access-Control-Request-Headers'] = requestHeaders;
+    return call('c'.repeat(64), { method: 'OPTIONS', headers });
+  };
+
   it('lets a listed page send an upload', async () => {
-    const res = await call('c'.repeat(64), {
-      method: 'OPTIONS',
-      headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'PUT' },
-    });
+    const res = await preflight(ORIGIN, 'PUT', 'content-type');
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
     expect(res.headers.get('Vary')).toContain('Origin');
   });
 
-  it('refuses a page that is not listed', async () => {
-    const res = await call('c'.repeat(64), {
-      method: 'OPTIONS',
-      headers: { Origin: 'https://elsewhere.example', 'Access-Control-Request-Method': 'PUT' },
-    });
+  it('refuses an upload from a page that is not listed', async () => {
+    const res = await preflight('https://elsewhere.example', 'PUT');
     expect(res.status).toBe(403);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('lets any page read with the headers it needs', async () => {
+    const res = await preflight('https://elsewhere.example', 'GET', 'if-none-match, range');
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('if-none-match,range');
+  });
+
+  it('answers a bare OPTIONS as a read', async () => {
+    const res = await call('c'.repeat(64), { method: 'OPTIONS' });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+  });
+});
+
+describe('configuration', () => {
+  it('answers 500 with config-invalid while a setting is missing', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = { ...env, ACCESS_CONTROL_ALLOW_ORIGIN: undefined };
+
+    const res = await app.fetch(
+      new Request(`${BASE}/${'a'.repeat(64)}`),
+      broken,
+      createExecutionContext(),
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'config-invalid' });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('ACCESS_CONTROL_ALLOW_ORIGIN'));
+  });
+});
+
+describe('GET /', () => {
+  it('says hello', async () => {
+    const res = await app.fetch(
+      new Request('https://backend.example/'),
+      env,
+      createExecutionContext(),
+    );
+    expect(await res.json()).toEqual({ message: 'Hello udonarium-axe-backend!' });
   });
 });

@@ -1,13 +1,9 @@
 import { Hono } from 'hono';
-import type { Context } from 'hono';
 
-import { isAllowedOrigin, parseAllowedOrigins } from '../http/origin';
+import type { AppEnv } from '../http/context';
+import { fail } from '../http/errors';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
-
-interface AssetEnv {
-  Bindings: Env;
-}
 
 /** アセットの名前。中身の SHA-256 を小文字の16進で書いたもの */
 const ASSET_ID = /^[0-9a-f]{64}$/;
@@ -28,24 +24,8 @@ const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));
  */
 const CACHE_CONTROL = 'public, max-age=604800, immutable';
 
-const ALLOWED_METHODS = 'GET, HEAD, PUT, OPTIONS';
-
-const fail = (
-  c: Context<AssetEnv>,
-  status: 400 | 403 | 404 | 411 | 413 | 415 | 429,
-  error: string,
-) => c.json({ error }, status);
-
 const toHex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
-
-const allowedOriginOf = (c: Context<AssetEnv>): string | null => {
-  const origin = c.req.header('Origin');
-  if (!origin) return null;
-  return isAllowedOrigin(origin, parseAllowedOrigins(c.env.ACCESS_CONTROL_ALLOW_ORIGIN))
-    ? origin
-    : null;
-};
 
 const objectHeaders = (id: string, object: R2Object): Headers => {
   const headers = new Headers();
@@ -58,30 +38,7 @@ const objectHeaders = (id: string, object: R2Object): Headers => {
   return headers;
 };
 
-export const assetRoutes = new Hono<AssetEnv>();
-
-// GET と HEAD は誰にでも返す（中身は名前を知っている人にしか辿れない）。
-// Origin で出し分けるとキャッシュに残った版がアプリから読めなくなるので、常に `*` を付ける。
-// PUT と、そのプリフライトは許可した Origin からしか受けない。
-assetRoutes.use('/:id', async (c, next) => {
-  if (c.req.method !== 'PUT' && c.req.method !== 'OPTIONS') {
-    await next();
-    c.res.headers.set('Access-Control-Allow-Origin', '*');
-    return;
-  }
-  const origin = allowedOriginOf(c);
-  if (!origin) return fail(c, 403, 'origin-not-allowed');
-  await next();
-  c.res.headers.set('Access-Control-Allow-Origin', origin);
-  c.res.headers.append('Vary', 'Origin');
-});
-
-assetRoutes.options('/:id', (c) => {
-  c.header('Access-Control-Allow-Methods', ALLOWED_METHODS);
-  c.header('Access-Control-Allow-Headers', 'Content-Type');
-  c.header('Access-Control-Max-Age', '86400');
-  return c.body(null, 204);
-});
+export const assetRoutes = new Hono<AppEnv>();
 
 assetRoutes.on('HEAD', '/:id', async (c) => {
   const id = c.req.param('id');

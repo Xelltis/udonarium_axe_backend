@@ -128,6 +128,10 @@ jobs:
       - name: Check that the tests and wrangler share one workerd
         run: test "$(npm query '#workerd' | jq '[.[].version] | unique | length')" = 1
 
+      # Origin の照合は apps/vercel と同じものを写して使う。どちらかだけ直すとここで落ちる
+      - name: Check that the origin matcher matches the Vercel app's
+        run: cmp src/http/origin.ts ../vercel/src/infra/url/origin.ts
+
       - run: npm run lint
 
       - run: npm run typecheck
