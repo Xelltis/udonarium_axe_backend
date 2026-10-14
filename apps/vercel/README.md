@@ -1,11 +1,11 @@
 # udonarium-backend-vercel
 
-[![CI](https://github.com/Xelltis/udonarium-backend-vercel/actions/workflows/ci.yml/badge.svg)](https://github.com/Xelltis/udonarium-backend-vercel/actions/workflows/ci.yml)
+[![CI](https://github.com/Xelltis/udonarium_axe_backend/actions/workflows/ci.yml/badge.svg)](https://github.com/Xelltis/udonarium_axe_backend/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Runtime: Vercel Functions](https://img.shields.io/badge/runtime-Vercel%20Functions-000000.svg?logo=vercel&logoColor=white)](https://vercel.com/docs/functions/runtimes/node-js)
 [![Node.js: 24.x](https://img.shields.io/badge/node-24.x-5FA04E.svg?logo=node.js&logoColor=white)](./package.json)
 [![Built with: Hono](https://img.shields.io/badge/built%20with-Hono-FF7A00.svg?logo=hono&logoColor=white)](https://hono.dev/)
-[![Test Coverage](https://codecov.io/gh/Xelltis/udonarium-backend-vercel/graph/badge.svg)](https://codecov.io/gh/Xelltis/udonarium-backend-vercel)
+[![Test Coverage](https://codecov.io/gh/Xelltis/udonarium_axe_backend/graph/badge.svg?flag=vercel)](https://codecov.io/gh/Xelltis/udonarium_axe_backend?flags%5B0%5D=vercel)
 
 ボードゲームオンラインセッション支援ツール [Udonarium](https://github.com/TK11235/udonarium) のバックエンド ([udonarium-backend](https://github.com/TK11235/udonarium-backend)) を、[Vercel Functions](https://vercel.com/docs/functions) 上で動作するように再実装したものです。
 
@@ -62,7 +62,7 @@
 
 ## Quick Deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium-backend-vercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
 1. 上記ボタンから Vercel にリポジトリを Clone & Import します
 2. デプロイ画面で必須の環境変数 (`SKYWAY_APP_ID` / `SKYWAY_SECRET` / `ACCESS_CONTROL_ALLOW_ORIGIN`) を入力します
@@ -237,7 +237,7 @@ npx eslint .
 npx prettier --write .
 ```
 
-バグ報告・機能要望は [Issues](https://github.com/Xelltis/udonarium-backend-vercel/issues) からお知らせください。
+バグ報告・機能要望は [Issues](https://github.com/Xelltis/udonarium_axe_backend/issues) からお知らせください。
 
 ## License
 

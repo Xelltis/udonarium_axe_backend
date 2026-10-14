@@ -50,6 +50,18 @@ bin/php-cs-fixer fix
 bin/php-cs-fixer check
 ```
 
+Vercel 版のコマンドは `apps/vercel` で実行します。lockfile もこのディレクトリにあります。
+
+```sh
+cd apps/vercel
+npm ci
+
+# lint・型検査・テスト（カバレッジ 100% を要求）
+npm run lint
+npm run typecheck
+npm test
+```
+
 ## コーディング規約
 
 - **PHP 8.3 との互換性を維持する** — `apps/php/src/` および `apps/php/index.php` では PHP 8.4 以降でのみ利用可能な機能（プロパティフック等）は使用しないでください

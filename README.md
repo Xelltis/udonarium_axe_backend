@@ -7,9 +7,10 @@
 [Udonarium Axe](https://github.com/Xelltis/udonarium_axe)のバックエンドを集めたリポジトリです。
 動かす場所ごとに、`apps/`の下へ分けて置いています。
 
-| ディレクトリ         | 内容                                  | 動かす場所                            |
-| -------------------- | ------------------------------------- | ------------------------------------- |
-| [apps/php](apps/php) | SkyWayの認証トークンを発行するPHP実装 | レンタルサーバー（Apache＋PHP 8.3〜） |
+| ディレクトリ               | 内容                                  | 動かす場所                            |
+| -------------------------- | ------------------------------------- | ------------------------------------- |
+| [apps/php](apps/php)       | SkyWayの認証トークンを発行するPHP実装 | レンタルサーバー（Apache＋PHP 8.3〜） |
+| [apps/vercel](apps/vercel) | 同じトークン発行をHonoで書いたもの    | Vercel Functions（Node.js 24）        |
 
 ## セルフホスト
 
@@ -17,10 +18,12 @@ PHP版は[リリース](https://github.com/Xelltis/udonarium_axe_backend/release
 展開した中身をそのままドキュメントルートに置き、`.env`を作ります。
 詳しい手順は[apps/php/README.md](apps/php/README.md)です。
 
+Vercel版は、[apps/vercel/README.md](apps/vercel/README.md)のDeployボタンから自分のVercelプロジェクトとして複製できます。
+
 ## 開発
 
 開発環境の作り方とコミットの決まりは[CONTRIBUTING.md](CONTRIBUTING.md)にあります。
-版はリポジトリ全体で1つで、mainへのマージのたびにsemantic-releaseが付けます。
+版はリポジトリ全体で1つで、mainのコミットからsemantic-releaseが付けます。
 
 ## ライセンス
 
