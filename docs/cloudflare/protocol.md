@@ -55,15 +55,15 @@ Content-Type: application/json
 
 ```json
 {
-    "rooms": [
-        {
-            "roomKey": "511c18c8…",
-            "roomId": "O46",
-            "name": "金曜の卓",
-            "hasPassword": true,
-            "members": 2
-        }
-    ]
+  "rooms": [
+    {
+      "roomKey": "511c18c8…",
+      "roomId": "O46",
+      "name": "金曜の卓",
+      "hasPassword": true,
+      "members": 2
+    }
+  ]
 }
 ```
 
@@ -102,13 +102,13 @@ WebSocketにつなぎ替えます（`101`）。
 
 ```json
 {
-    "type": "hello",
-    "protocolVersion": 2,
-    "peerId": "a1B2c3XyZq9W8e7r6-",
-    "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
-    "password": "secret",
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-    "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+  "type": "hello",
+  "protocolVersion": 2,
+  "peerId": "a1B2c3XyZq9W8e7r6-",
+  "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
+  "password": "secret",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
 }
 ```
 
@@ -124,15 +124,15 @@ WebSocketにつなぎ替えます（`101`）。
 
 ```json
 {
-    "type": "send",
-    "to": "Zz9Yy8XyZq9W8e7r6-",
-    "events": [
-        {
-            "eventName": "WRITING_A_MESSAGE_DETAIL",
-            "data": "…",
-            "sendFrom": "a1B2c3XyZq9W8e7r6-"
-        }
-    ]
+  "type": "send",
+  "to": "Zz9Yy8XyZq9W8e7r6-",
+  "events": [
+    {
+      "eventName": "WRITING_A_MESSAGE_DETAIL",
+      "data": "…",
+      "sendFrom": "a1B2c3XyZq9W8e7r6-"
+    }
+  ]
 }
 ```
 
@@ -206,20 +206,20 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 
 ```json
 {
-    "eventName": "ROLL_REQUEST",
-    "data": {
-        "message": {
-            "aliasName": "chat",
-            "identifier": "…",
-            "majorVersion": 1,
-            "minorVersion": 0.5,
-            "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
-        },
-        "command": "2d6+3",
-        "gameSystem": "SwordWorld2.5",
-        "speaker": "Kai",
-        "suffix": " [ゴブリン]"
-    }
+  "eventName": "ROLL_REQUEST",
+  "data": {
+    "message": {
+      "aliasName": "chat",
+      "identifier": "…",
+      "majorVersion": 1,
+      "minorVersion": 0.5,
+      "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
+    },
+    "command": "2d6+3",
+    "gameSystem": "SwordWorld2.5",
+    "speaker": "Kai",
+    "suffix": " [ゴブリン]"
+  }
 }
 ```
 
@@ -250,6 +250,31 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 - `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。
 - ダイス表やリソースの操作は、これまでどおりAxeが手元で処理します。
 - BCDiceの版は、Axeと揃えます（いまは4.10.0）。
+
+## 見せないもの
+
+見てはいけない人には、届けないか、一部を伏せて届けます。
+期待値は`apps/cloudflare/contracts/fixtures/visibility.json`にあります。
+
+| もの                                                                                               | 届けない・伏せる相手                                                         | どうするか                                                                                                    |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| カード（`card`）の下の`image/front`・`common/name`・`common/text`・`detail`の下                    | 表が見えない人（裏向き、自分が覗いていない、自分の手札でもない）。GMは見える | 届けない                                                                                                      |
+| 秘話（`attributes.to`が空でない`chat`）                                                            | 宛先と送り主（`from`か`originFrom`）のほか。GMも                             | 届けない                                                                                                      |
+| シークレット（`attributes.tag`に`secret`がある`chat`）                                             | 送り主とGMのほか                                                             | `value`と、`attributes`の`dicebot`・`stamp`・`attachmentImageIdentifiers`・`editHistory`・`vnEmote`を空にする |
+| 持ち主のいるダイス（`dice-symbol`）                                                                | 持ち主とGMのほか                                                             | `attributes.face`を空にする                                                                                   |
+| 公開を絞ったメモ（`text-note`の`disclosureMode`が`gm`か`selected`）の`common/title`・`common/text` | 見えない人（GMと持ち主は見える）                                             | 文字を`█`にする（空白はそのまま）                                                                             |
+| 同じメモの`detail`の下                                                                             | 同じ                                                                         | 届けない                                                                                                      |
+| タブ（`chat-tab`）の発言                                                                           | `plCanView`・`guestCanView`で見てよくない役割（`SystemTab`は誰にでも）       | 届けない                                                                                                      |
+| リアクション（`chat-reaction`）                                                                    | その発言が届かない人                                                         | 届けない                                                                                                      |
+
+データ要素は、親をたどった名前の道筋（根のデータ要素の下から、たとえば`image/front`）で見分けます。識別子の形（`front_<カードのID>`）では見分けません。
+
+- 見え方が変わったら（カードをめくる、手札に入れる、秘話の宛先を変える、タブを開く、役割が変わる）、見えるようになった人には`AUTHORITATIVE_OBJECT`で渡し、見えなくなった人には`WITHDRAW_GAME_OBJECT`で外させます。
+- カタログ、`REQUEST_GAME_OBJECT`への答え、サーバーで振ったダイスも、同じ決まりで届けます。クライアントのカタログに見えないものがあれば、`WITHDRAW_GAME_OBJECT`を返します。
+- 見えないものに書こうとすると、`WITHDRAW_GAME_OBJECT`が返り、何も変わりません。見えないものは消せません。
+- 伏せた形で持っているものを書き戻すと、伏せたところは置いてある中身に戻ります（ダイスを動かしても出目は消えない）。
+- 消したものの子孫は、送り主から見えなかったものも一緒に消し、持っている人には`DELETE_GAME_OBJECT`を送ります。
+- サーバーが差し込んだイベントは、ほかの人の束（`data`）に入ることがあります。誰からのイベントかは、束の`from`ではなく、イベントごとの`sendFrom`で見てください。
 
 ## 見学者が書けるもの
 
