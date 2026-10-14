@@ -45,6 +45,9 @@ import {
 import { attributesOf, withAttributes } from './objects';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
+import type { StoredEntry } from './store';
+import { unmasked, viewFor, viewKind } from './visibility';
+import type { Lookup, ViewKind, Viewer } from './visibility';
 
 /**
  * 変更をまとめて書くまでの間（ミリ秒）。待っているあいだは Hibernation に入らないので、
@@ -120,6 +123,9 @@ const fromAuthority = (eventName: string, data: unknown): EventContext => ({
 });
 
 type Reply = (eventName: string, data: unknown) => void;
+
+/** 受け取る人ごとの束に、イベントを1つ足す */
+type Push = (ws: WebSocket, event: EventContext) => void;
 
 /** サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value も） */
 const ROLLED_ATTRIBUTES = ['dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
@@ -343,7 +349,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       members: others.filter((other) => other !== previous).map((other) => memberOf(other.seat)),
       serverTime: Date.now(),
     });
-    this.post(ws, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents() });
+    this.post(ws, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents(seat) });
     void this.ctx.storage.deleteAlarm();
     if (previous) return;
     this.broadcast(ws, { type: 'join', member: memberOf(seat) });
@@ -406,12 +412,24 @@ export class RoomDurableObject extends DurableObject<Env> {
 
   // ---- 中継と同期 ----
 
+  /** その人から見た、そのオブジェクトの見え方 */
+  private kindOf(identifier: string, seat: Seat, lookup: Lookup = this.store.lookup): ViewKind {
+    return viewKind(identifier, seat, lookup);
+  }
+
+  /** その人に見せる形。見せないなら null */
+  private viewOf(identifier: string, seat: Seat): ObjectContext | null {
+    const context = this.store.get(identifier);
+    return context && viewFor(context, this.kindOf(identifier, seat));
+  }
+
   /**
    * 送られてきたイベントを、読むものは読んでから宛先へ届ける。送り主には返さない。
    *
    * 受け取る人ごとに、送られてきた順のまま並べる。宛先の無いものはほかの全員へ、宛先のあるものは
-   * その人だけへ。ただし UPDATE と DELETE は、サーバーの状態を変えたら宛先にかかわらず全員へ配る。
-   * サーバーからの答え（古い版への送り返しや、カタログへの返事）は、送り主にだけ返す。
+   * その人だけへ。UPDATE と DELETE は、サーバーの状態を変えたら宛先にかかわらず、見てよい人へ
+   * 見てよい形で配る。サーバーが差し込むもの（見え方が変わったものの出し入れ、古い版への送り返し、
+   * カタログへの返事）は sendFrom を AUTHORITY_PEER_ID にして、同じ束に入れる。
    */
   private relay(
     sender: WebSocket,
@@ -422,33 +440,29 @@ export class RoomDurableObject extends DurableObject<Env> {
     const others = this.seats(sender);
     const target = to === undefined ? undefined : others.find((other) => other.seat.peerId === to);
     const forAuthority = to === undefined || to === AUTHORITY_PEER_ID;
-    /** 宛先のある送り先を除いた、ほかの全員に届けるもの */
-    const common: EventContext[] = [];
-    /** 宛先の人に届けるもの */
-    const targeted: EventContext[] = [];
-    const replies: EventContext[] = [];
-    const reply = (eventName: string, data: unknown) =>
-      replies.push(fromAuthority(eventName, data));
+    const outbox = new Map<WebSocket, EventContext[]>();
+    const push: Push = (ws, event) => {
+      const list = outbox.get(ws) ?? [];
+      list.push(event);
+      outbox.set(ws, list);
+    };
+    const reply: Reply = (eventName, data) => push(sender, fromAuthority(eventName, data));
 
     for (const { eventName, data } of events) {
       const event: EventContext = { eventName, data, sendFrom: seat.peerId };
-      const toEveryone = (passed: EventContext = event) => {
-        common.push(passed);
-        targeted.push(passed);
+      const toAddressee = () => {
+        if (to === undefined) for (const other of others) push(other.ws, event);
+        else if (target) push(target.ws, event);
       };
-      const toAddressee = () => (to === undefined ? toEveryone() : targeted.push(event));
       switch (eventName) {
-        case SyncEvent.UPDATE: {
-          // サーバーが中身を直したら（PeerCursor の役割など）、直した方を配る
-          const accepted = this.update(data, seat, reply);
-          if (accepted) toEveryone({ ...event, data: accepted });
+        case SyncEvent.UPDATE:
+          this.update(data, seat, sender, push);
           break;
-        }
         case SyncEvent.DELETE:
-          if (this.remove(data, seat, reply)) toEveryone();
+          this.remove(event, seat, sender, push);
           break;
         case SyncEvent.FORGET_DELETED:
-          if (this.forget(data, seat)) toEveryone();
+          if (this.forget(data, seat)) for (const other of others) push(other.ws, event);
           break;
         case AuthorityEvent.ROLE_REQUEST:
           if (forAuthority) this.changeRole(data, seat, reply);
@@ -459,15 +473,15 @@ export class RoomDurableObject extends DurableObject<Env> {
           else toAddressee();
           break;
         case SyncEvent.CATALOG:
-          if (forAuthority) this.answerCatalog(data, reply);
+          if (forAuthority) this.answerCatalog(data, seat, reply);
           else toAddressee();
           break;
         case SyncEvent.REQUEST:
-          if (forAuthority) this.answerRequest(data, reply);
+          if (forAuthority) this.answerRequest(data, seat, reply);
           else toAddressee();
           break;
         case SyncEvent.REQUEST_CATALOG:
-          if (forAuthority) replies.push(...this.catalogEvents());
+          if (forAuthority) for (const catalog of this.catalogEvents(seat)) push(sender, catalog);
           else toAddressee();
           break;
         default:
@@ -475,29 +489,45 @@ export class RoomDurableObject extends DurableObject<Env> {
       }
     }
 
-    if (common.length > 0) {
-      const frame = encodeFrame({ type: 'data', from: seat.peerId, events: common });
-      for (const other of others) if (other !== target) this.sendFrame(other.ws, frame);
-    }
-    if (target && targeted.length > 0) {
-      this.post(target.ws, { type: 'data', from: seat.peerId, events: targeted });
-    }
-    if (replies.length > 0)
-      this.post(sender, { type: 'data', from: AUTHORITY_PEER_ID, events: replies });
+    this.deliver(outbox, (ws) => (ws === sender ? AUTHORITY_PEER_ID : seat.peerId));
     if (this.store.hasPending) this.scheduleFlush();
   }
 
   /**
-   * UPDATE を状態に当てる。ほかの人に配るなら、配る中身を返す。
+   * 受け取る人ごとの束を送る。同じ並びのイベントを受け取る人たちには、1度だけ符号にして送る
+   */
+  private deliver(outbox: Map<WebSocket, EventContext[]>, fromOf: (ws: WebSocket) => string): void {
+    const ids = new Map<EventContext, number>();
+    const frames = new Map<string, Uint8Array>();
+    for (const [ws, events] of outbox) {
+      const from = fromOf(ws);
+      const key = `${from}:${events.map((event) => ids.get(event) ?? ids.set(event, ids.size).get(event)).join(',')}`;
+      let frame = frames.get(key);
+      if (!frame) {
+        frame = encodeFrame({ type: 'data', from, events });
+        frames.set(key, frame);
+      }
+      this.sendFrame(ws, frame);
+    }
+  }
+
+  /**
+   * UPDATE を状態に当て、見てよい人へ見てよい形で配る。
    *
-   * PeerCursor の役割は、その人の席の役割で上書きする。上書きしたら、送り主にも直した方を渡す。
+   * 送り主から見えないものには書かせない（WITHDRAW を返す）。伏せた形で持っている人が書き戻して
+   * きたら、伏せたところを置いてある中身に戻す。PeerCursor の役割は、その人の席の役割で上書きする。
    * 見学者は、自分のカーソルと、見学者も話せるタブへの発言しか書けない。
    */
-  private update(data: unknown, seat: Seat, reply: Reply): ObjectContext | null {
+  private update(data: unknown, seat: Seat, sender: WebSocket, push: Push): void {
     const parsed = safeParse(objectContextSchema, data);
-    if (!parsed.success) return null;
+    if (!parsed.success) return;
     let context = parsed.output;
     const { identifier, aliasName } = context;
+    const reply: Reply = (eventName, data) => push(sender, fromAuthority(eventName, data));
+
+    const seen = this.kindOf(identifier, seat);
+    if (seen === 'hidden') return reply(AuthorityEvent.WITHDRAW, { identifier });
+    if (seen === 'masked') context = unmasked(context, this.store.get(identifier) as ObjectContext);
 
     let owner: string | null = null;
     let corrected = false;
@@ -505,15 +535,15 @@ export class RoomDurableObject extends DurableObject<Env> {
       owner = String(context.syncData.peerId);
       // 出ていった人のカーソルは置かない。クライアントは leave を受けて自分で片付ける
       const ownerSeat = this.seats().find((other) => other.seat.peerId === owner)?.seat;
-      if (!ownerSeat) return null;
+      if (!ownerSeat) return;
       if (seat.role === 'guest' && owner !== seat.peerId)
-        return this.refuseWrite(identifier, reply);
+        return this.refuseWrite(identifier, seat, reply);
       if (context.syncData.role !== ownerSeat.role) {
         context = { ...context, syncData: { ...context.syncData, role: ownerSeat.role } };
         corrected = true;
       }
     } else if (seat.role === 'guest' && !this.guestMayWrite(context, seat)) {
-      return this.refuseWrite(identifier, reply);
+      return this.refuseWrite(identifier, seat, reply);
     }
     if (aliasName === CHAT_MESSAGE_ALIAS) {
       const kept = this.keepRolledFields(context);
@@ -526,20 +556,95 @@ export class RoomDurableObject extends DurableObject<Env> {
       context,
       owner === null && this.store.isDeleted(identifier),
     );
-    switch (verdict) {
-      case 'accept':
-        this.store.put(context, owner);
-        if (corrected) reply(AuthorityEvent.AUTHORITATIVE, context);
-        return context;
-      case 'stale':
-        reply(SyncEvent.UPDATE, this.store.get(identifier));
-        return null;
-      case 'deleted':
-        reply(SyncEvent.DELETE, { aliasName, identifier });
-        return null;
-      default:
-        return null;
+    if (verdict === 'stale') {
+      reply(SyncEvent.UPDATE, this.viewOf(identifier, seat));
+    } else if (verdict === 'deleted') {
+      reply(SyncEvent.DELETE, { aliasName, identifier });
+    } else if (verdict === 'accept') {
+      const before = this.store.lookup(identifier);
+      this.store.put(context, owner);
+      this.spread(context, before, seat, sender, push, corrected);
     }
+  }
+
+  /**
+   * 置いたものを配る。ほかの人には見てよい形で（見えなくなった人には WITHDRAW）、送り主には、
+   * 送ってきたものと見え方や中身が違えば直したものを返す。見え方が変わったら、それで見え方の
+   * 決まるもの（子孫、リアクション）も、見えるようになった人に渡し、見えなくなった人から外させる
+   */
+  private spread(
+    context: ObjectContext,
+    before: StoredEntry | null,
+    seat: Seat,
+    sender: WebSocket,
+    push: Push,
+    corrected: boolean,
+  ): void {
+    const { identifier } = context;
+    const was: Lookup = (other) => (other === identifier ? before : this.store.lookup(other));
+    for (const { ws, seat: other } of this.seats(sender)) {
+      const then = before ? this.kindOf(identifier, other, was) : 'hidden';
+      const now = this.kindOf(identifier, other);
+      if (now !== 'hidden') {
+        push(ws, {
+          eventName: SyncEvent.UPDATE,
+          data: viewFor(context, now),
+          sendFrom: seat.peerId,
+        });
+      } else if (then !== 'hidden') {
+        push(ws, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
+      }
+    }
+    const mine = this.kindOf(identifier, seat);
+    if (mine === 'hidden') push(sender, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
+    else if (corrected) {
+      push(sender, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, mine)));
+    }
+
+    const after = this.store.lookup(identifier) as StoredEntry;
+    if (JSON.stringify(before?.view ?? null) !== JSON.stringify(after.view)) {
+      this.revisit(this.store.dependentsOf(identifier), this.seats(), was, push);
+    }
+  }
+
+  /**
+   * 見え方の決まるもとが変わったので、そのものの見え方を人ごとに比べ直す。見えるようになった人には
+   * AUTHORITATIVE_OBJECT で渡し（版が同じでも置き換わる）、見えなくなった人には WITHDRAW で外させる
+   */
+  private revisit(
+    identifiers: string[],
+    seats: { ws: WebSocket; seat: Viewer }[],
+    was: Lookup,
+    push: Push,
+  ): void {
+    for (const { ws, seat } of seats) {
+      for (const identifier of identifiers) {
+        this.resend(
+          ws,
+          identifier,
+          viewKind(identifier, seat, was),
+          viewKind(identifier, seat, this.store.lookup),
+          push,
+        );
+      }
+    }
+  }
+
+  /** 見え方が then から now に変わったものを、その人に渡すか外させる。変わらなければ何もしない */
+  private resend(
+    ws: WebSocket,
+    identifier: string,
+    then: ViewKind,
+    now: ViewKind,
+    push: Push,
+  ): void {
+    if (then === now) return;
+    if (now === 'hidden') {
+      push(ws, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
+      return;
+    }
+    const context = this.store.get(identifier) as ObjectContext;
+    push(ws, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, now)));
   }
 
   /**
@@ -588,7 +693,8 @@ export class RoomDurableObject extends DurableObject<Env> {
 
   /**
    * ダイスを振り、結果の発言を作って配る。頼まれた順に振り、システムを初めて使うときだけ読み込みを待つ。
-   * コマンドでなければ何もしない。見学者は、自分が発言できるタブでだけ振れる
+   * コマンドでなければ何もしない。見学者は、自分が発言できるタブでだけ振れる。
+   * 結果は見てよい人へ見てよい形で配る（秘話の宛先、シークレットなら伏せた形）
    */
   private requestRoll(data: unknown, seat: Seat): void {
     const parsed = safeParse(rollRequestSchema, data);
@@ -626,41 +732,70 @@ export class RoomDurableObject extends DurableObject<Env> {
         );
         this.store.put(result, null);
         this.scheduleFlush();
-        this.broadcast(undefined, {
-          type: 'data',
-          from: AUTHORITY_PEER_ID,
-          events: [fromAuthority(SyncEvent.UPDATE, result)],
-        });
+        for (const { ws, seat: other } of this.seats()) {
+          const view = viewFor(result, this.kindOf(result.identifier, other));
+          if (view) {
+            this.post(ws, {
+              type: 'data',
+              from: AUTHORITY_PEER_ID,
+              events: [fromAuthority(SyncEvent.UPDATE, view)],
+            });
+          }
+        }
       })
       .catch((err: unknown) => console.error('Roll failed:', err));
     this.ctx.waitUntil(this.rollQueue);
   }
 
   /**
-   * 書く権限の無い変更を、送り主の手元で戻させる。サーバーが持っていればその中身に戻し、
+   * 書く権限の無い変更を、送り主の手元で戻させる。サーバーが持っていればその人に見せる形に戻し、
    * 消したものなら消させ、どちらでもなければ（新しく作ろうとしたもの）印を残さずに取り下げさせる
    */
-  private refuseWrite(identifier: string, reply: Reply): null {
-    const stored = this.store.get(identifier);
-    if (stored) reply(AuthorityEvent.AUTHORITATIVE, stored);
+  private refuseWrite(identifier: string, seat: Seat, reply: Reply): void {
+    const view = this.viewOf(identifier, seat);
+    if (view) reply(AuthorityEvent.AUTHORITATIVE, view);
     else if (this.store.isDeleted(identifier))
       reply(SyncEvent.DELETE, { aliasName: '', identifier });
     else reply(AuthorityEvent.WITHDRAW, { identifier });
-    return null;
   }
 
-  /** DELETE を状態に当てる。ほかの人に配るなら true。見学者が消せるのは自分のカーソルだけ */
-  private remove(data: unknown, seat: Seat, reply: Reply): boolean {
-    const parsed = safeParse(deleteSchema, data);
-    if (!parsed.success) return false;
+  /**
+   * DELETE を状態に当てる。見学者が消せるのは自分のカーソルだけ。見えないものは消させない。
+   *
+   * 消したものの子孫も一緒に消す。送り主から見えなかった子孫（裏向きのカードの表など）は、送り主の
+   * 手元に無いので送り主からは消しに来ない。持っている人には、サーバーから DELETE を送る
+   */
+  private remove(event: EventContext, seat: Seat, sender: WebSocket, push: Push): void {
+    const parsed = safeParse(deleteSchema, event.data);
+    if (!parsed.success) return;
     const { aliasName, identifier } = parsed.output;
-    const owner = this.store.entryOf(identifier)?.owner ?? null;
-    if (seat.role === 'guest' && owner !== seat.peerId) {
-      this.refuseWrite(identifier, reply);
-      return false;
+    const reply: Reply = (eventName, data) => push(sender, fromAuthority(eventName, data));
+    const entry = this.store.entryOf(identifier);
+    // 子孫として、もう消してある
+    if (!entry && this.store.isDeleted(identifier)) return;
+    if (this.kindOf(identifier, seat) === 'hidden') return;
+    const owner = entry?.owner ?? null;
+    if (seat.role === 'guest' && owner !== seat.peerId)
+      return this.refuseWrite(identifier, seat, reply);
+
+    const doomed = [identifier, ...this.store.descendantsOf(identifier)];
+    const others = this.seats(sender);
+    const seen = new Map(
+      others.map(({ ws, seat: other }) => [ws, doomed.map((id) => this.kindOf(id, other))]),
+    );
+    const cursor = aliasName === PEER_CURSOR_ALIAS || owner !== null;
+    for (const id of doomed) this.store.delete(id, !cursor);
+    for (const { ws } of others) {
+      doomed.forEach((id, index) => {
+        if ((seen.get(ws) as ViewKind[])[index] === 'hidden') return;
+        push(
+          ws,
+          id === identifier
+            ? event
+            : fromAuthority(SyncEvent.DELETE, { aliasName: '', identifier: id }),
+        );
+      });
     }
-    this.store.delete(identifier, aliasName !== PEER_CURSOR_ALIAS && owner === null);
-    return true;
   }
 
   /** 見学者からは受けない */
@@ -673,7 +808,8 @@ export class RoomDurableObject extends DurableObject<Env> {
 
   /**
    * GM に頼まれて、部屋にいる人の役割を変える。席の表を直し、その人のカーソルの役割を
-   * 書き換えて版を上げ、全員に配る。断るときは、頼んだ人に理由を返す
+   * 書き換えて版を上げ、全員に配る。役割で見え方が変わるもの（裏向きのカードの表、シークレット、
+   * タブの発言など）は、その人に渡すか外させる。断るときは、頼んだ人に理由を返す
    */
   private changeRole(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(roleRequestSchema, data);
@@ -693,10 +829,22 @@ export class RoomDurableObject extends DurableObject<Env> {
       return reject('last-game-master');
 
     sql.exec('UPDATE seats SET role = ? WHERE user_id = ?', role, target.userId);
+    const outbox = new Map<WebSocket, EventContext[]>();
+    const push: Push = (ws, event) => outbox.set(ws, [...(outbox.get(ws) ?? []), event]);
     const updates: EventContext[] = [];
     for (const { ws, seat: other } of this.seats()) {
       if (other.userId !== target.userId) continue;
       ws.serializeAttachment({ ...other, role });
+      // すべてのものを、前の役割と今の役割で見比べる
+      for (const identifier of this.store.identifiers()) {
+        this.resend(
+          ws,
+          identifier,
+          this.kindOf(identifier, other),
+          this.kindOf(identifier, { ...other, role }),
+          push,
+        );
+      }
       for (const identifier of this.store.ownedBy(other.peerId)) {
         const cursor = this.store.get(identifier) as ObjectContext;
         const changed = {
@@ -709,21 +857,25 @@ export class RoomDurableObject extends DurableObject<Env> {
         updates.push(fromAuthority(SyncEvent.UPDATE, changed));
       }
     }
-    if (updates.length > 0) {
-      this.broadcast(undefined, { type: 'data', from: AUTHORITY_PEER_ID, events: updates });
-    }
+    for (const { ws } of this.seats()) for (const update of updates) push(ws, update);
+    this.deliver(outbox, () => AUTHORITY_PEER_ID);
   }
 
   /**
    * クライアントのカタログに答える。サーバーが持っていないか古いものは送ってもらい、
-   * 消したものは消させる。サーバーの方が新しいものは、クライアントがサーバーのカタログを見て取りに来る
+   * 消したものは消させ、その人から見えないものは手元から外させる。
+   * サーバーの方が新しいものは、クライアントがサーバーのカタログを見て取りに来る
    */
-  private answerCatalog(data: unknown, reply: (eventName: string, data: unknown) => void): void {
+  private answerCatalog(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(catalogSchema, data);
     if (!parsed.success) return;
     for (const { identifier, version } of parsed.output) {
       if (this.store.isDeleted(identifier)) {
         reply(SyncEvent.DELETE, { aliasName: '', identifier });
+        continue;
+      }
+      if (this.kindOf(identifier, seat) === 'hidden') {
+        reply(AuthorityEvent.WITHDRAW, { identifier });
         continue;
       }
       const stored = this.store.entryOf(identifier);
@@ -733,7 +885,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
   }
 
-  private answerRequest(data: unknown, reply: (eventName: string, data: unknown) => void): void {
+  /** 頼まれたものを、その人に見せる形で返す。見せないものには何も返さない */
+  private answerRequest(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(requestSchema, data);
     if (!parsed.success) return;
     const identifier = parsed.output;
@@ -741,13 +894,18 @@ export class RoomDurableObject extends DurableObject<Env> {
       reply(SyncEvent.DELETE, { aliasName: '', identifier });
       return;
     }
-    const context = this.store.get(identifier);
-    if (context) reply(SyncEvent.UPDATE, context);
+    const view = this.viewOf(identifier, seat);
+    if (view) reply(SyncEvent.UPDATE, view);
   }
 
-  /** サーバーのカタログ。空でも1件は送り、カタログを送り終えたことがわかるようにする */
-  private catalogEvents(): EventContext[] {
-    const catalog = this.store.catalog();
+  /**
+   * その人に見せるカタログ。見せないものは載せない。空でも1件は送り、
+   * カタログを送り終えたことがわかるようにする
+   */
+  private catalogEvents(seat: Seat): EventContext[] {
+    const catalog = this.store
+      .catalog()
+      .filter(({ identifier }) => this.kindOf(identifier, seat) !== 'hidden');
     const events = [fromAuthority(SyncEvent.CATALOG, catalog.slice(0, CATALOG_BATCH))];
     for (let start = CATALOG_BATCH; start < catalog.length; start += CATALOG_BATCH) {
       events.push(fromAuthority(SyncEvent.CATALOG, catalog.slice(start, start + CATALOG_BATCH)));

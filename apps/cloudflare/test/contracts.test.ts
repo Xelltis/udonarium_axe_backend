@@ -4,9 +4,13 @@ import { safeParse } from 'valibot';
 import errors from '../contracts/fixtures/errors.json';
 import lww from '../contracts/fixtures/lww.json';
 import messages from '../contracts/fixtures/messages.json';
+import visibility from '../contracts/fixtures/visibility.json';
 import { CLOSE_CODE, ERROR_CODES, PROTOCOL_VERSION, judgeUpdate } from '../contracts/protocol';
 import type { UpdateVerdict } from '../contracts/protocol';
+import type { ObjectContext } from '../contracts/protocol';
 import { clientMessageSchema } from '../src/rooms/messages';
+import { describe as describeObject, viewKind } from '../src/rooms/visibility';
+import type { ViewEntry, Viewer } from '../src/rooms/visibility';
 
 describe('the LWW contract', () => {
   it.each(lww.cases)('judges $name as $verdict', ({ stored, incoming, deleted, verdict }) => {
@@ -44,4 +48,22 @@ describe('the error contract', () => {
     }
     expect(CLOSE_CODE).toBe(4000);
   });
+});
+
+describe('the visibility contract', () => {
+  const cases = visibility.cases.flatMap(({ room, identifier, expect: kinds }) =>
+    Object.entries(kinds).map(([viewer, kind]) => ({ room, identifier, viewer, kind })),
+  );
+
+  it.each(cases)(
+    'shows $identifier in $room to $viewer as $kind',
+    ({ room, identifier, viewer, kind }) => {
+      const objects = visibility.rooms[room as keyof typeof visibility.rooms] as ObjectContext[];
+      const entries = new Map<string, ViewEntry>(
+        objects.map((o) => [o.identifier, describeObject(o)]),
+      );
+      const seer = visibility.viewers[viewer as keyof typeof visibility.viewers] as Viewer;
+      expect(viewKind(identifier, seer, (id) => entries.get(id) ?? null)).toBe(kind);
+    },
+  );
 });

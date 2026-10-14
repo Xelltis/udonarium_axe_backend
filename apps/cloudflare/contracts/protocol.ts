@@ -124,7 +124,11 @@ export interface LeaveMessage {
   peerId: string;
 }
 
-/** イベントの束。from は送り主のピア ID で、サーバー自身なら AUTHORITY_PEER_ID */
+/**
+ * イベントの束。from は送り主のピア ID で、サーバー自身なら AUTHORITY_PEER_ID。
+ * サーバーは、ほかの人の束にも自分のイベント（見え方が変わったものの出し入れなど）を差し込むことがある。
+ * 誰からのイベントかは、束の from ではなく、イベントごとの sendFrom で見ること
+ */
 export interface DataMessage {
   type: 'data';
   from: string;
@@ -337,6 +341,33 @@ export const SERVER_ROLL_FIELD = 'serverRoll';
  */
 export type RoleRejectReason =
   'not-game-master' | 'unknown-peer' | 'not-logged-in' | 'last-game-master';
+
+/**
+ * 見てはいけない人に届けないもの、伏せて届けるもの。期待値は fixtures/visibility.json にある。
+ *
+ * - カード：表が見えない人（裏向きで、自分が覗いておらず、自分の手札でもない人。GM は見える）には、
+ *   カードの下のデータ要素のうち image/front・common/name・common/text と detail の下を届けない
+ * - メモ（disclosureMode が gm か selected で、見えない人）：common/title と common/text は文字を █ にして
+ *   届け（空白はそのまま）、detail の下は届けない
+ * - 持ち主のいるダイス：持ち主と GM のほかには、attributes.face を空にして届ける
+ * - 秘話（attributes.to が空でない発言）：宛先と送り主（from か originFrom）だけに届ける。GM にも届けない
+ * - シークレット（attributes.tag に secret がある発言）：送り主と GM のほかには、value と、attributes の
+ *   MASKED_CHAT_ATTRIBUTES を空にして届ける
+ * - タブ：plCanView・guestCanView で見てよくない役割には、そのタブの発言を届けない（SystemTab は誰にでも）
+ * - リアクション（chat-reaction）：その発言が届かない人には届けない
+ *
+ * 見え方が変わったら、見えるようになった人には AUTHORITATIVE_OBJECT、見えなくなった人には
+ * WITHDRAW_GAME_OBJECT を送る。見えないものに書こうとすると WITHDRAW_GAME_OBJECT が返り、伏せた形で
+ * 持っているものを書き戻すと、伏せたところは置いてある中身に戻る。見えないものは消せない。
+ * 消したものの子孫は、見えない人が消したときもサーバーが一緒に消し、持っている人に DELETE を送る
+ */
+export const MASKED_CHAT_ATTRIBUTES = [
+  'dicebot',
+  'stamp',
+  'attachmentImageIdentifiers',
+  'editHistory',
+  'vnEmote',
+] as const;
 
 /** チャットの発言と、発言を入れるタブの種類。見学者が話せるのは guestCanSpeak のタブだけ */
 export const CHAT_MESSAGE_ALIAS = 'chat';

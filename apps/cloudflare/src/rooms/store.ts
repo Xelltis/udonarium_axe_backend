@@ -1,5 +1,7 @@
 import type { CatalogItem, ObjectContext } from '../../contracts/protocol';
 import { decodeData, encodeData } from './codec';
+import { describe } from './visibility';
+import type { View, ViewEntry } from './visibility';
 
 /**
  * SQLite の1行は 2MB まで。syncData の上限が無いもの（白板の場面など）は、これより大きければ
@@ -7,8 +9,8 @@ import { decodeData, encodeData } from './codec';
  */
 export const CHUNK_BYTES = 1024 * 1024;
 
-/** 版と持ち主だけの、メモリに置く索引 */
-export interface StoredEntry {
+/** 版・持ち主・親・見え方の手がかりだけの、メモリに置く索引 */
+export interface StoredEntry extends ViewEntry {
   alias: string;
   majorVersion: number;
   minorVersion: number;
@@ -33,6 +35,8 @@ export const migrate = (sql: SqlStorage): void => {
     major REAL NOT NULL,
     minor REAL NOT NULL,
     owner TEXT,
+    parent TEXT NOT NULL DEFAULT '',
+    view TEXT,
     chunks INTEGER NOT NULL DEFAULT 0,
     data BLOB
   )`);
@@ -63,22 +67,94 @@ export class RoomStore {
   constructor(private readonly storage: DurableObjectStorage) {}
 
   private get index(): Map<string, StoredEntry> {
-    this.entries ??= new Map(
-      this.storage.sql
-        .exec<{
-          identifier: string;
-          alias: string;
-          major: number;
-          minor: number;
-          owner: string | null;
-        }>('SELECT identifier, alias, major, minor, owner FROM objects')
-        .toArray()
-        .map((row) => [
-          row.identifier,
-          { alias: row.alias, majorVersion: row.major, minorVersion: row.minor, owner: row.owner },
-        ]),
-    );
+    return this.load();
+  }
+
+  /** 索引を、初めて要るときに SQLite から読む */
+  private load(): Map<string, StoredEntry> {
+    if (this.entries) return this.entries;
+    this.entries = new Map();
+    const rows = this.storage.sql
+      .exec<{
+        identifier: string;
+        alias: string;
+        major: number;
+        minor: number;
+        owner: string | null;
+        parent: string;
+        view: string | null;
+      }>('SELECT identifier, alias, major, minor, owner, parent, view FROM objects')
+      .toArray();
+    for (const row of rows) {
+      this.remember(row.identifier, {
+        alias: row.alias,
+        majorVersion: row.major,
+        minorVersion: row.minor,
+        owner: row.owner,
+        parent: row.parent,
+        view: row.view === null ? null : (JSON.parse(row.view) as View),
+      });
+    }
     return this.entries;
+  }
+
+  /** 親から子へ、発言からリアクションへの引き */
+  private readonly children = new Map<string, Set<string>>();
+  private readonly followers = new Map<string, Set<string>>();
+
+  /** 索引に置き、親子とリアクションの引きもそろえる */
+  private remember(identifier: string, entry: StoredEntry): void {
+    this.forgetRelations(identifier);
+    (this.entries as Map<string, StoredEntry>).set(identifier, entry);
+    if (entry.parent) relate(this.children, entry.parent, identifier);
+    if (entry.view?.kind === 'reaction') relate(this.followers, entry.view.message, identifier);
+  }
+
+  private forgetRelations(identifier: string): void {
+    const entry = this.entries?.get(identifier);
+    if (entry?.parent) this.children.get(entry.parent)?.delete(identifier);
+    if (entry?.view?.kind === 'reaction')
+      this.followers.get(entry.view.message)?.delete(identifier);
+  }
+
+  /** 見え方を決めるために、識別子から索引の1行を引く */
+  readonly lookup = (identifier: string): StoredEntry | null => this.index.get(identifier) ?? null;
+
+  /**
+   * そのオブジェクトの見え方で見え方が変わるもの。子孫（カードの表の絵、タブの発言など）と、
+   * 発言へのリアクション
+   */
+  dependentsOf(identifier: string): string[] {
+    return this.reach(identifier, true);
+  }
+
+  /** 子孫。親を消すと一緒に消すもの */
+  descendantsOf(identifier: string): string[] {
+    return this.reach(identifier, false);
+  }
+
+  /** いま持っているものすべての識別子 */
+  identifiers(): string[] {
+    return [...this.load().keys()];
+  }
+
+  private reach(identifier: string, withFollowers: boolean): string[] {
+    this.load();
+    const found = new Set<string>();
+    const queue = [identifier];
+    while (queue.length > 0) {
+      const current = queue.shift() as string;
+      const next = [
+        ...(this.children.get(current) ?? []),
+        ...(withFollowers ? (this.followers.get(current) ?? []) : []),
+      ];
+      for (const id of next) {
+        if (id === identifier || found.has(id)) continue;
+        found.add(id);
+        queue.push(id);
+      }
+    }
+    return [...found];
   }
 
   private get deleted(): Set<string> {
@@ -147,17 +223,21 @@ export class RoomStore {
   }
 
   put(context: ObjectContext, owner: string | null): void {
-    this.index.set(context.identifier, {
+    this.load();
+    this.remember(context.identifier, {
       alias: context.aliasName,
       majorVersion: context.majorVersion,
       minorVersion: context.minorVersion,
       owner,
+      ...describe(context),
     });
     this.stage(context.identifier, { context, owner });
   }
 
   /** 持っているものを消す。tombstone を置けば、同じ識別子をもう受けない */
   delete(identifier: string, tombstone: boolean): void {
+    this.load();
+    this.forgetRelations(identifier);
     this.index.delete(identifier);
     this.stage(identifier, { context: null });
     if (tombstone) {
@@ -226,14 +306,18 @@ export class RoomStore {
     const sql = this.storage.sql;
     const data = encodeData(context.syncData);
     const chunks = data.byteLength > CHUNK_BYTES ? Math.ceil(data.byteLength / CHUNK_BYTES) : 0;
+    const { parent, view } = describe(context);
     sql.exec(
-      `INSERT OR REPLACE INTO objects (identifier, alias, major, minor, owner, chunks, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO objects
+         (identifier, alias, major, minor, owner, parent, view, chunks, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       context.identifier,
       context.aliasName,
       context.majorVersion,
       context.minorVersion,
       owner,
+      parent,
+      view === null ? null : JSON.stringify(view),
       chunks,
       chunks === 0 ? data : null,
     );
@@ -247,3 +331,9 @@ export class RoomStore {
     }
   }
 }
+
+const relate = (relations: Map<string, Set<string>>, from: string, to: string): void => {
+  const set = relations.get(from) ?? new Set<string>();
+  set.add(to);
+  relations.set(from, set);
+};

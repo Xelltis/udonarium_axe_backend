@@ -47,7 +47,13 @@ const rollRequest = (
 });
 
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
-  contextOf(identifier, 1, 0.5, { attributes: { name: identifier, guestCanSpeak } }, 'chat-tab');
+  contextOf(
+    identifier,
+    1,
+    0.5,
+    { attributes: { name: identifier, plCanView: true, guestCanView: true, guestCanSpeak } },
+    'chat-tab',
+  );
 
 /** PL の alice と bob、見学者の carol がいる部屋。タブ main は見学者も話せる */
 const room = async () => {

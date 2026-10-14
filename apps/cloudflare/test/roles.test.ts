@@ -17,7 +17,13 @@ const cursorOf = (peerId: string, role: string, majorVersion = 1) =>
 
 // タブも発言も ObjectNode なので、SyncVar は attributes に入る
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
-  contextOf(identifier, 1, 0.5, { attributes: { name: identifier, guestCanSpeak } }, 'chat-tab');
+  contextOf(
+    identifier,
+    1,
+    0.5,
+    { attributes: { name: identifier, plCanView: true, guestCanView: true, guestCanSpeak } },
+    'chat-tab',
+  );
 
 const messageOf = (identifier: string, tab: string, from: string, majorVersion = 1) =>
   contextOf(
