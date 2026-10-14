@@ -49,6 +49,12 @@ CloudflareのCache APIは`*.workers.dev`では効かないので、そのまま�
 
 カスタムドメインには、そのドメインのDNSをCloudflareで管理している必要があります。
 
+::: warning cookieを使わないホスト名にする
+Axeやログインの画面とは別の、アセットのためだけのホスト名にしてください。
+置かれたSVGを直接開いても、そのホスト名のcookieを読ませないためです。
+詳しくは[安全のしくみ](/cloudflare/security#svgはサンドボックスに入れて配る)にあります。
+:::
+
 ## 4. Axeにつなぐ
 
 Axeの`assets/config.json`の`assets.url`に、手順3のURLを書きます。

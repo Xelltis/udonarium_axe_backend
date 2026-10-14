@@ -6,8 +6,18 @@ export interface SniffedType {
   type: string;
 }
 
-/** 判定に読む先頭のバイト数 */
-export const SNIFF_BYTES = 32;
+/**
+ * 判定に読む先頭のバイト数。SVG は XML 宣言・コメント・DOCTYPE のあとにルート要素が来るので、
+ * それらを読み飛ばせるだけの長さを取る
+ */
+export const SNIFF_BYTES = 4096;
+
+/**
+ * SVG の判定で読み飛ばす、ルート要素より前のもの（空白、XML 宣言と処理命令、コメント、DOCTYPE）。
+ * 閉じていないものを渡されても先頭から1度なぞるだけで済むよう、隣りあう繰り返しが同じ文字を
+ * 取りあわない形にしてある
+ */
+const XML_PROLOG = /^(?:\s+|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^[>]*(?:\[[\s\S]*?\]\s*)?>)*/;
 
 /**
  * `ftyp` の後ろのブランドのうち、受け付けるもの。
@@ -37,8 +47,8 @@ const BMP_INFO_HEADER_SIZES: ReadonlySet<number> = new Set([12, 40, 52, 56, 64, 
  *
  * 宣言された Content-Type は信じず、形式そのものが先頭に持つ印だけを見る。
  * 印のあとに何が続くかまでは確かめないので、中身が壊れていないことの保証にはならない。
- * 配信する Content-Type を、ブラウザがスクリプトとして扱わないものに限るための判定。
- * SVG は中にスクリプトを書けるので受け付けない（クライアントは P2P で配る）。
+ * 配信する Content-Type を、決まった形式に限るための判定。
+ * SVG は中にスクリプトを書けるので、配るときにサンドボックスに入れる（response.ts）。
  */
 export const sniff = (head: Uint8Array): SniffedType | null => {
   if (head.length < 4) return null;
@@ -71,7 +81,17 @@ export const sniff = (head: Uint8Array): SniffedType | null => {
   }
   if (isAdtsHeader(head)) return { kind: 'audio', type: 'audio/aac' };
   if (isMp3FrameHeader(head)) return { kind: 'audio', type: 'audio/mpeg' };
+  if (isSvg(head)) return { kind: 'image', type: 'image/svg+xml' };
   return null;
+};
+
+/**
+ * SVG の文書。BOM と、ルート要素より前のものを読み飛ばし、ルート要素が `<svg` で始まるもの。
+ * 前置きが判定に読む長さに収まらないものは、SVG と見なさない。
+ */
+const isSvg = (head: Uint8Array): boolean => {
+  const text = new TextDecoder().decode(head);
+  return /^<svg[\s>/]/.test(text.replace(XML_PROLOG, ''));
 };
 
 // ADTS（AAC）と MPEG オーディオのフレームは、どちらも同期ビット（0xFFF、MPEG 2.5 は 0xFFE）で

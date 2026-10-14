@@ -17,7 +17,7 @@ Cloudflare版のエラーは`{"error": "<コード>"}`の形で返るので、�
 | -------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `config-invalid`     | `ACCESS_CONTROL_ALLOW_ORIGIN`か`ASSET_RETENTION_DAYS`が無い、形が違う | Workerのログに足りない設定の名前が出る。[設定項目](/cloudflare/configuration)を見直す |
 | `origin-not-allowed` | PUTのOriginが許可リストにない                                         | `ACCESS_CONTROL_ALLOW_ORIGIN`を、Axeを開いているページのOriginに合わせる              |
-| `unsupported-type`   | 受け付けない形式（SVG、動画など）                                     | 正常な動き。その画像はP2Pで配られる                                                   |
+| `unsupported-type`   | 受け付けない形式（動画など）                                          | 正常な動き。その画像はP2Pで配られる                                                   |
 | `too-large`          | 画像が2MiB、音声が10MiBを超えた                                       | 正常な動き。その画像はP2Pで配られる                                                   |
 | `hash-mismatch`      | 本文のハッシュが名前と合わない                                        | 正常な動き。Axeはその画像をP2Pだけで配る                                              |
 | `rate-limited`       | 送信元からの上限を超えた                                              | 大きな部屋を何度も読み込み直した直後など。少し待てば戻る。Axeは間を置いて試し直す     |

@@ -38,9 +38,33 @@ describe('sniff', () => {
   });
 
   it.each([
-    ['svg', bytes('<svg xmlns="http://www.w3.org/2000/svg">')],
+    ['bare', '<svg xmlns="http://www.w3.org/2000/svg">'],
+    ['self-closing', '<svg/>'],
+    ['after an XML declaration', '<?xml version="1.0" encoding="UTF-8"?>\n<svg>'],
+    ['after a BOM', '\uFEFF<svg>'],
+    ['after a comment', '<!-- Created with Inkscape -->\n<svg\n  width="10">'],
+    [
+      'after a DOCTYPE',
+      '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"\n  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<svg>',
+    ],
+    ['after a DOCTYPE with entities', '<!DOCTYPE svg [\n  <!ENTITY ns "x">\n]>\n<svg>'],
+    [
+      'after every kind of prolog',
+      '\t<?xml version="1.0"?><!--a--><?xml-stylesheet href="a"?>\n<!DOCTYPE svg><svg>',
+    ],
+  ])('reads an SVG %s', (_name, text) => {
+    expect(sniff(new TextEncoder().encode(text))).toEqual({ kind: 'image', type: 'image/svg+xml' });
+  });
+
+  it.each([
     ['xml prolog', bytes('<?xml version="1.0"?>')],
     ['html', bytes('<!DOCTYPE html>')],
+    ['html with an svg inside', bytes('<!DOCTYPE html><html><svg></svg></html>')],
+    ['xhtml', bytes('<?xml version="1.0"?>\n<html xmlns="http://www.w3.org/1999/xhtml">')],
+    ['another element starting with svg', bytes('<svgx>')],
+    ['svg inside an unclosed comment', bytes('<!-- <svg>')],
+    ['svg after an unclosed DOCTYPE', bytes('<!DOCTYPE svg [ <svg>')],
+    ['svg after text', bytes('hello <svg>')],
     ['zip', bytes('PK', 3, 4)],
     ['png signature cut short', bytes(0x89, 'PNG', 0x0d, 0x0a, 0x1a, 0x00)],
     ['GIF8 without a version', bytes('GIF8xa')],

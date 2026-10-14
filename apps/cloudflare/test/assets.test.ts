@@ -3,6 +3,7 @@ import { exports } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MAX_BYTES } from '../src/assets/routes';
+import { SNIFF_BYTES } from '../src/assets/sniff';
 import app from '../src/index';
 import {
   BASE,
@@ -97,10 +98,30 @@ describe('PUT /v1/assets/:id', () => {
   );
 
   it('turns away a file that is neither a picture nor a sound', async () => {
-    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
-    const res = await put(await sha256Hex(svg), svg);
+    const html = new TextEncoder().encode('<!DOCTYPE html><html><script>alert(1)</script></html>');
+    const res = await put(await sha256Hex(html), html);
     expect(res.status).toBe(415);
     expect(await res.json()).toEqual({ error: 'unsupported-type' });
+  });
+
+  it('stores an SVG longer than the part it reads to tell the type', async () => {
+    const svg = new TextEncoder().encode(
+      `<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg">${'<rect/>'.repeat(2000)}</svg>`,
+    );
+    const id = await sha256Hex(svg);
+
+    const res = await put(id, svg);
+
+    expect(res.status).toBe(201);
+    const stored = await env.ASSETS.get(id);
+    expect(stored?.httpMetadata?.contentType).toBe('image/svg+xml');
+    expect(new Uint8Array((await stored?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(svg);
+  });
+
+  it('turns away an SVG whose root comes after the part it reads', async () => {
+    const svg = new TextEncoder().encode(`<!--${'-'.repeat(SNIFF_BYTES)}--><svg></svg>`);
+    const res = await put(await sha256Hex(svg), svg);
+    expect(res.status).toBe(415);
   });
 
   it.each([
@@ -276,6 +297,28 @@ describe('GET /v1/assets/:id', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(res.headers.get('Vary')).toBeNull();
+    expect(res.headers.get('Content-Security-Policy')).toBeNull();
+  });
+
+  it('serves an SVG in a sandbox, so a script inside it cannot run', async () => {
+    const svg = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>',
+    );
+    const id = await sha256Hex(svg);
+    await put(id, svg);
+
+    const res = await call(id);
+    const head = await call(id, { method: 'HEAD' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('image/svg+xml');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    for (const response of [res, head]) {
+      const policy = response.headers.get('Content-Security-Policy') ?? '';
+      expect(policy.split(';').map((directive) => directive.trim())).toEqual(
+        expect.arrayContaining(["default-src 'none'", 'sandbox']),
+      );
+    }
   });
 
   it('lets caches keep a copy no longer than the asset stays in the bucket', async () => {

@@ -2,6 +2,13 @@
 const MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /**
+ * SVG を開いたときに効かせる CSP。中に書かれたスクリプトを動かさず、外へ読みに行かせない。
+ * 描くのに要る、埋め込みの画像（data:）と style 属性だけを通す
+ */
+const SVG_CONTENT_SECURITY_POLICY =
+  "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+
+/**
  * 保持期間のうち、まだ残っている秒数。過ぎていれば 0 以下。
  *
  * ライフサイクル規則は期限を過ぎてから消すまでに間があくので、期限を過ぎたものはもう無いものとして
@@ -28,6 +35,10 @@ export const objectHeaders = (object: R2Object, remaining: number): Headers => {
   headers.set('Accept-Ranges', 'bytes');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  // SVG は文書として開けばスクリプトが動く。<img> で読むぶんには CSP は効かず、もともと動かない
+  if (object.httpMetadata?.contentType === 'image/svg+xml') {
+    headers.set('Content-Security-Policy', SVG_CONTENT_SECURITY_POLICY);
+  }
   return headers;
 };
 

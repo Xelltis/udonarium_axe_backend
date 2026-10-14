@@ -48,6 +48,9 @@ curl -I https://assets.example.com/v1/assets/<sha256>
 | `Cross-Origin-Resource-Policy` | `cross-origin`                                                             |
 | `Access-Control-Allow-Origin`  | `*`                                                                        |
 
+SVGのときだけ、`Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox`も付けます。
+理由は[安全のしくみ](/cloudflare/security#svgはサンドボックスに入れて配る)にあります。
+
 ### 条件付きリクエストと範囲指定
 
 | リクエストのヘッダー                               | 動き                                       |
@@ -90,12 +93,14 @@ Content-Length: 12345
 
 ### 受け付ける形式と上限
 
-| 種類 | 形式                                  | 上限  |
-| ---- | ------------------------------------- | ----- |
-| 画像 | PNG・JPEG・GIF・BMP・WebP・AVIF・HEIC | 2MiB  |
-| 音声 | MP3・WAV・Ogg・FLAC・M4A・AAC         | 10MiB |
+| 種類 | 形式                                       | 上限  |
+| ---- | ------------------------------------------ | ----- |
+| 画像 | PNG・JPEG・GIF・BMP・WebP・AVIF・HEIC・SVG | 2MiB  |
+| 音声 | MP3・WAV・Ogg・FLAC・M4A・AAC              | 10MiB |
 
-SVGと、MP4やMOVの動画は受け付けません。
+SVGは、BOM・XML宣言・コメント・DOCTYPEを読み飛ばしたあと、ルート要素が`<svg`で始まるものです。
+これらの前置きは、先頭から4KiBに収まっている必要があります。
+MP4やMOVの動画は受け付けません。
 理由は[安全のしくみ](/cloudflare/security#形式の判定)にあります。
 
 ## プリフライト（`OPTIONS`）
