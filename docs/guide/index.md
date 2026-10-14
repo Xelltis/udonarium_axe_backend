@@ -39,7 +39,8 @@ SkyWayを使わないので、SkyWayのアプリもトークン発行サーバ�
 - 裏向きのカードや秘話を、見てはいけない人の画面に届けない
 - GMとPLはログインして入り、匿名の人は見学だけにする
 
-サーバー版は、Cloudflare版のWorkerに部屋のサーバーとログインを足して作ります。
+部屋のサーバーは、Cloudflare版のWorkerに入っています（→ [部屋のサーバー](/cloudflare/rooms)）。
+サーバー側はできていて、Axe側の対応とログインはこれからです。
 進み具合は[今後の計画](/guide/roadmap)にあります。
 
 どちらの方式で配信するかは、配信ごとに選びます。
@@ -60,12 +61,12 @@ SkyWay版は、サーバー版ができたあとも残ります。
 
 ## このリポジトリに入っているもの
 
-| ディレクトリ      | 中身                                                                       | 動かす場所                            |
-| ----------------- | -------------------------------------------------------------------------- | ------------------------------------- |
-| `apps/php`        | SkyWay版のトークン発行サーバー（PHP）                                      | レンタルサーバー（Apache＋PHP 8.3〜） |
-| `apps/vercel`     | 同じトークン発行をTypeScript（Hono）で書いたもの                           | Vercel Functions（Node.js 24）        |
-| `apps/cloudflare` | サーバー版の土台になるWorker。いまは画像と音声の置き場（アセットサーバー） | Cloudflare Workers＋R2                |
-| `docs`            | このドキュメント（VitePress）                                              | GitHub Pages                          |
+| ディレクトリ      | 中身                                                                       | 動かす場所                              |
+| ----------------- | -------------------------------------------------------------------------- | --------------------------------------- |
+| `apps/php`        | SkyWay版のトークン発行サーバー（PHP）                                      | レンタルサーバー（Apache＋PHP 8.3〜）   |
+| `apps/vercel`     | 同じトークン発行をTypeScript（Hono）で書いたもの                           | Vercel Functions（Node.js 24）          |
+| `apps/cloudflare` | サーバー版のWorker。画像と音声の置き場（アセットサーバー）と部屋のサーバー | Cloudflare Workers＋R2＋Durable Objects |
+| `docs`            | このドキュメント（VitePress）                                              | GitHub Pages                            |
 
 SkyWay版で遊ぶなら、PHP版とVercel版のどちらか1つあれば足ります。
 Cloudflare版は、それらとは別に、必要なときに足すものです。

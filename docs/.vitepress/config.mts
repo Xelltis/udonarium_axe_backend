@@ -205,12 +205,14 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Cloudflare版（サーバー版の土台）',
+        text: 'Cloudflare版（サーバー版）',
         collapsed: false,
         items: [
           { text: '概要', link: '/cloudflare/' },
           { text: 'デプロイする', link: '/cloudflare/deploy' },
           { text: '設定項目', link: '/cloudflare/configuration' },
+          { text: '部屋のサーバー', link: '/cloudflare/rooms' },
+          { text: '部屋のプロトコル', link: '/cloudflare/protocol' },
           { text: 'APIリファレンス', link: '/cloudflare/api' },
           { text: '安全のしくみ', link: '/cloudflare/security' },
           { text: '運用と料金', link: '/cloudflare/operations' },

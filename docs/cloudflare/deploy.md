@@ -34,8 +34,9 @@ R2を使い始めていないアカウントでは、バケットを作れずに
 | Workerの名前                  | 例：`udonarium-axe-assets`。R2のバケットは「<この名前>-assets」で作られる    |
 | `ACCESS_CONTROL_ALLOW_ORIGIN` | Axeを配信しているOrigin（例：`https://axe.example.com`）。複数はカンマ区切り |
 | `ASSET_RETENTION_DAYS`        | 画像と音声を残す日数。既定は`30`                                             |
+| `ROOM_RETENTION_HOURS`        | 最後の1人が抜けてから部屋を消すまでの時間。既定は`24`                        |
 
-**Deploy**を押すと、リポジトリの複製、R2のバケットの作成、Workerのデプロイがまとめて行われます。
+**Deploy**を押すと、リポジトリの複製、R2のバケットの作成、部屋のサーバー（Durable Objects）の作成、Workerのデプロイがまとめて行われます。
 完了すると、`https://<Workerの名前>.<アカウントのサブドメイン>.workers.dev`のURLが出ます。
 
 ## 3. カスタムドメインを付ける
@@ -85,6 +86,19 @@ Axeで部屋に画像を足し、開発者ツール（F12）の「ネットワ�
 1. 画像を足した人のブラウザ：`HEAD`（`404`）のあと`PUT`（`201`）
 2. ほかの参加者のブラウザ：`GET`（`200`）
 
+部屋のサーバーは、部屋を作ってみて確かめます。
+`Origin`には、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたものを付けます。
+
+```sh
+curl -X POST https://assets.example.com/v1/rooms \
+  -H "Origin: https://axe.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test"}'
+```
+
+`{"roomKey":"…","roomId":"…"}`が返れば動いています。
+作った部屋は、誰も入らなければ`ROOM_RETENTION_HOURS`（既定24時間）で消えます。
+
 ## 手元からwranglerでデプロイする
 
 Deployボタンを使わずに、手元からデプロイすることもできます。
@@ -98,14 +112,14 @@ npx wrangler deploy --name my-udonarium-assets \
   --var ACCESS_CONTROL_ALLOW_ORIGIN:https://axe.example.com
 ```
 
-- `--name`でWorkerの名前を決めます。R2のバケットは「<この名前>-assets」で、最初のデプロイのときに作られます。
+- `--name`でWorkerの名前を決めます。R2のバケットは「<この名前>-assets」で、最初のデプロイのときに作られます。部屋のサーバーのDurable Objectsも、このときに作られます。
 - `--var`で、`wrangler.jsonc`に書いてある手元用の値（`http://localhost:4200`）を差し替えます。
 - 2回目からは同じコマンドで更新でき、バケットはそのまま使い続けます。
 
 ## 何台も置くとき
 
 身内用と公開用など、同じCloudflareアカウントに何台でも置けます。
-Workerの名前を変えてデプロイすれば、R2のバケットもWorkerごとに別々に作られ、レート制限も別々に数えます。
+Workerの名前を変えてデプロイすれば、R2のバケットも部屋もWorkerごとに別々に作られ、レート制限も別々に数えます。
 
 ## 更新するとき
 

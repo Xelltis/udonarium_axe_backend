@@ -32,7 +32,7 @@ npm run docs:preview
 | `docs/vercel/`      | Vercel版                                 |
 | `docs/cloudflare/`  | Cloudflare版                             |
 | `docs/development/` | 開発に参加する人向け                     |
-| `docs/.vitepress/`  | 設定（`config.mts`）とテーマ              |
+| `docs/.vitepress/`  | 設定（`config.mts`）とテーマ             |
 
 ページを足したら、`docs/.vitepress/config.mts`の`sidebar`にも足してください。
 

@@ -21,6 +21,11 @@ udonarium_axe_backend/
 `apps/vercel`と`apps/cloudflare`は自分のlockfileを持つ独立したnpmのプロジェクトで、Deployボタンはそのディレクトリだけを複製します。
 ほかのアプリのファイルを読み込む（`import`する）ことはしないでください。
 
+Cloudflare版の部屋のサーバーとAxeのあいだのやりとりは、`apps/cloudflare/contracts/`に型とフィクスチャ（JSONの例）を置いています。
+このディレクトリはサーバー側が持ち主で、Axeは同じ内容を写して使い、両側のテストが同じJSONを読みます。
+Deployボタンが`apps/cloudflare`だけを複製するので、リポジトリの直下ではなく、その中に置いています。
+やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](/cloudflare/protocol)）。
+
 Vercel版とCloudflare版では、Originの照合を同じ形で書いています（`apps/vercel/src/infra/url/origin.ts`と`apps/cloudflare/src/http/origin.ts`）。
 この2つはCIで中身が同じかを確かめているので、片方を直したら、もう片方も同じように直してください。
 
