@@ -33,8 +33,14 @@ Environmentごとに、次のSecretを入れます。
 | `ACCESS_CONTROL_ALLOW_ORIGIN` | そのWorkerで受けるAxeのOrigin。カンマ区切りで複数書ける                                 |
 | `CLOUDFLARE_API_TOKEN`        | デプロイに使うCloudflareのAPIトークン（下の「APIトークン」を参照）                      |
 | `CLOUDFLARE_ACCOUNT_ID`       | CloudflareのアカウントID。全部のEnvironmentで同じなら、リポジトリのSecretに置いてもよい |
+| `DISCORD_CLIENT_ID`           | ログインに使うDiscordのアプリのClient ID（ログインと部屋を使うとき）                    |
+| `DISCORD_CLIENT_SECRET`       | 同じアプリのClient Secret                                                               |
+| `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数。Environmentごとに別のものにする                 |
 
-`ACCESS_CONTROL_ALLOW_ORIGIN`は、デプロイのたびにWorkerのシークレットとして入れ直します。
+ログインの3つは、そろえて入れるか、どれも入れないかのどちらかにします。一部だけだと、デプロイのジョブが止まります。
+Discordのアプリの作りかたは[ログインと役割](/cloudflare/login#ログインを使えるようにする)にあります。
+
+`ACCESS_CONTROL_ALLOW_ORIGIN`とログインの3つは、デプロイのたびにWorkerのシークレットとして入れ直します。
 `wrangler.jsonc`に書いた手元用の値（`http://localhost:4200`）は、このシークレットで置き換わります。
 
 `gh`コマンドを使うと、次のように入れられます。
@@ -46,6 +52,9 @@ gh secret set WORKER_NAME --env $E --repo $R --body udonarium-axe-production
 gh secret set ACCESS_CONTROL_ALLOW_ORIGIN --env $E --repo $R --body https://axe.example.com
 gh secret set CLOUDFLARE_API_TOKEN --env $E --repo $R      # 実行すると値を尋ねられる
 gh secret set CLOUDFLARE_ACCOUNT_ID --repo $R --body <アカウントID>
+gh secret set DISCORD_CLIENT_ID --env $E --repo $R --body <Client ID>
+gh secret set DISCORD_CLIENT_SECRET --env $E --repo $R  # 値を尋ねられる
+openssl rand -base64 48 | gh secret set SESSION_SECRET --env $E --repo $R
 ```
 
 ### 3. デプロイ先を書く

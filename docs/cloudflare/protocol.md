@@ -3,6 +3,7 @@
 [部屋のサーバー](/cloudflare/rooms)とAxeのあいだでやりとりするものの形です。
 型と定数は`apps/cloudflare/contracts/protocol.ts`に、例は`apps/cloudflare/contracts/fixtures/`にあります。
 このページの内容と食い違うときは、そちらが正しいものです。
+いまの版は**2**です。ログインのAPIは[ログインと役割](/cloudflare/login)にあります。
 
 ## HTTP
 
@@ -18,9 +19,12 @@
 
 ### `POST /v1/rooms`
 
+ログインした人だけが作れます。作った人が、その部屋のGMになります。
+
 ```http
 POST /v1/rooms
 Origin: https://axe.example.com
+Authorization: Bearer <アクセストークン>
 Content-Type: application/json
 
 { "name": "金曜の卓", "password": "secret" }
@@ -40,10 +44,12 @@ Content-Type: application/json
 - `roomKey`：部屋の鍵。128ビットの乱数を小文字の16進で書いた32文字。部屋に入るときと、招待リンクに使います。
 - `roomId`：表示用の3文字。ほかの部屋とぶつかることがあります。部屋は`roomKey`で区別します。
 
-| 状態  | 本文                          | 起きるとき                                   |
-| ----- | ----------------------------- | -------------------------------------------- |
-| `400` | `{"error":"invalid-request"}` | 本文がJSONでない、名前やパスワードの形が違う |
-| `429` | `{"error":"rate-limited"}`    | 送信元から部屋を作る・入る回数が上限を超えた |
+| 状態  | 本文                            | 起きるとき                                   |
+| ----- | ------------------------------- | -------------------------------------------- |
+| `400` | `{"error":"invalid-request"}`   | 本文がJSONでない、名前やパスワードの形が違う |
+| `401` | `{"error":"login-required"}`    | アクセストークンが無いか、無効か、期限切れ   |
+| `429` | `{"error":"rate-limited"}`      | 送信元から部屋を作る・入る回数が上限を超えた |
+| `503` | `{"error":"login-unavailable"}` | このWorkerにログインが置かれていない         |
 
 ### `GET /v1/rooms`
 
@@ -97,15 +103,19 @@ WebSocketにつなぎ替えます（`101`）。
 ```json
 {
   "type": "hello",
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "peerId": "a1B2c3XyZq9W8e7r6-",
   "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
-  "password": "secret"
+  "password": "secret",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
 }
 ```
 
 - `peerId`は、SkyWay版と同じ形のピアIDです。英数字・`_`・`-`の64文字までに限ります。
 - `password`は、パスワードのある部屋に入るときに付けます。
+- `accessToken`は、ログインしているときに付けます。付けなければ見学（`guest`）として入ります。付けるなら、`userId`はアカウントの`userId`と同じにします。違うと`unauthorized`で切られます。
+- `invite`は、招待リンクに付いてきた招待です。ログインした人がその部屋に初めて入るときの役割になります。
 - `hello`のすぐあとに、返事を待たずに別のものを送っても構いません。入れたあとで順に処理します。
 
 ### `send`
@@ -131,17 +141,23 @@ WebSocketにつなぎ替えます（`101`）。
 
 `{"type":"time"}`を送ると、サーバーの時刻を返します。時計のずれを測るのに使います。
 
+### `invite`
+
+`{"type":"invite","role":"pl"}`を送ると、その役割で入れる招待を返します。GMだけが作れます（→ [招待](/cloudflare/login#招待)）。
+
 ## サーバーから送るもの
 
-| `type`    | 中身                                                                    | 送るとき             |
-| --------- | ----------------------------------------------------------------------- | -------------------- |
-| `welcome` | `protocolVersion`、`peerId`、`authorityPeerId`、`members`、`serverTime` | `hello`が通ったとき  |
-| `join`    | `member`（`peerId`と`userId`）                                          | 誰かが入ったとき     |
-| `leave`   | `peerId`                                                                | 誰かが抜けたとき     |
-| `data`    | `from`（送り主のピアID）、`events`                                      | イベントを届けるとき |
-| `time`    | `serverTime`（Unixミリ秒）                                              | `time`を受けたとき   |
-| `error`   | `code`、`protocolVersion`                                               | 接続を閉じる前       |
+| `type`    | 中身                                                                            | 送るとき             |
+| --------- | ------------------------------------------------------------------------------- | -------------------- |
+| `welcome` | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime` | `hello`が通ったとき  |
+| `join`    | `member`（`peerId`、`userId`、`role`）                                          | 誰かが入ったとき     |
+| `leave`   | `peerId`                                                                        | 誰かが抜けたとき     |
+| `data`    | `from`（送り主のピアID）、`events`                                              | イベントを届けるとき |
+| `time`    | `serverTime`（Unixミリ秒）                                                      | `time`を受けたとき   |
+| `invite`  | `role`、`invite`、`expiresAt`。GMでなければ`invite`と`expiresAt`は`null`        | `invite`を受けたとき |
+| `error`   | `code`、`protocolVersion`                                                       | 接続を閉じる前       |
 
+- `welcome`の`role`は、サーバーが決めた自分の役割（`gm`・`pl`・`guest`）です。自分の`PeerCursor`の`role`はこれにします。
 - `welcome`の`members`には、つないだ本人とサーバーは入りません。
 - サーバー自身のピアIDは`welcome`の`authorityPeerId`（`@authority`）で知らせます。ピアIDの形から推し量らないでください。
 - `welcome`のすぐあとには、必ずサーバーのカタログ（`from`が`@authority`の`data`）が届きます。部屋が空でも、空のカタログが1件届きます。
@@ -154,28 +170,59 @@ WebSocketにつなぎ替えます（`101`）。
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `UPDATE_GAME_OBJECT`      | 版を比べ、新しければ置いて、宛先にかかわらずほかの全員に配る（→ [新しい方を勝たせる](/cloudflare/rooms#新しい方を勝たせる)） |
 | `DELETE_GAME_OBJECT`      | 消して印を残し、宛先にかかわらずほかの全員に配る                                                                             |
-| `FORGET_DELETED_OBJECTS`  | 消した印を外し、ほかの全員に配る                                                                                             |
+| `FORGET_DELETED_OBJECTS`  | 消した印を外し、ほかの全員に配る。見学者からのものは受けない                                                                 |
+| `ROLE_REQUEST`            | 宛先がサーバーか、宛先なしなら、役割を変える（→ [役割を変える](/cloudflare/login#役割を変える)）                             |
 | `SYNCHRONIZE_GAME_OBJECT` | 宛先がサーバーか、宛先なしなら、サーバーが答える。足りないものを取り寄せ、消したものは消させる                               |
 | `REQUEST_GAME_OBJECT`     | 宛先がサーバーか、宛先なしなら、サーバーが持っているものを返す                                                               |
 | `REQUEST_CATALOG`         | 宛先がサーバーか、宛先なしなら、サーバーのカタログを返す                                                                     |
 
 カタログは、1つのイベントに2048件ずつ入れます。
-宛先がほかの参加者になっている`SYNCHRONIZE_GAME_OBJECT`・`REQUEST_GAME_OBJECT`・`REQUEST_CATALOG`は、読まずにその人へ届けます。
+宛先がほかの参加者になっている`SYNCHRONIZE_GAME_OBJECT`・`REQUEST_GAME_OBJECT`・`REQUEST_CATALOG`・`ROLE_REQUEST`は、読まずにその人へ届けます。
+
+`PeerCursor`の`syncData.role`は、いつもサーバーが決めた役割で上書きします。
+送った役割と違っていたら、送り主には直したものを`AUTHORITATIVE_OBJECT`で返します。
+
+## サーバーが送るイベント
+
+`from`が`@authority`の`data`で届きます。
+
+| イベント               | 中身                                  | すること                                                                                                     |
+| ---------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `AUTHORITATIVE_OBJECT` | オブジェクトの中身（`ObjectContext`） | 版にかかわらず置き換え、消した印も外す。書く権限の無い変更を戻すときと、サーバーが直したものを渡すときに使う |
+| `WITHDRAW_GAME_OBJECT` | `{ identifier }`                      | 消した印を残さずに、手元から外す。書く権限の無い人が作ったものを取り下げさせるときに使う                     |
+| `ROLE_REJECTED`        | `{ peerId, role, reason }`            | `ROLE_REQUEST`を断った。理由は[役割を変える](/cloudflare/login#役割を変える)にある                           |
+
+## 見学者が書けるもの
+
+見学（`guest`）の人が書けるのは、次のものだけです。
+
+- 自分の`PeerCursor`（書き換えと、消すこと）
+- 見学者も話せるタブ（`chat-tab`の`guestCanSpeak`が`true`）への新しい発言（`chat`）。ダイスの結果のように`from`が本人でないものも書ける
+- 自分の発言（`from`か`originFrom`が自分の`userId`）の書き直し
+
+それ以外の`UPDATE_GAME_OBJECT`と`DELETE_GAME_OBJECT`は配らず、見学者の画面で戻させます。
+
+| 書こうとしたもの               | 見学者に返すもの                         |
+| ------------------------------ | ---------------------------------------- |
+| サーバーが持っているもの       | `AUTHORITATIVE_OBJECT`（サーバーの中身） |
+| 消したもの                     | `DELETE_GAME_OBJECT`                     |
+| どちらでもない（新しく作った） | `WITHDRAW_GAME_OBJECT`                   |
 
 ## 接続を閉じる理由
 
 サーバーは`error`を送ってから、close code `4000`、reasonに同じコードを付けて閉じます。
 
-| コード              | 起きるとき                                                                         | つなぎ直して直るか |
-| ------------------- | ---------------------------------------------------------------------------------- | :----------------: |
-| `protocol-mismatch` | `hello`の`protocolVersion`がサーバーと違う。Axeを読み込み直して更新する            |                    |
-| `room-not-found`    | 部屋が無い（作られていないか、消えた）                                             |                    |
-| `room-full`         | 部屋にいる人が32人に達している                                                     |         ✅         |
-| `wrong-password`    | パスワードが違うか、無い                                                           |                    |
-| `hello-required`    | 最初のメッセージが`hello`でない                                                    |                    |
-| `bad-message`       | MessagePackとして読めない、展開すると32MiBを超える、封筒の形が違う                 |                    |
-| `too-many-messages` | 10秒のあいだに2000を超えるフレームを送った                                         |         ✅         |
-| `replaced`          | 同じピアIDで新しい接続が入った。つなぎ直すと新しい方を追い出すので、つなぎ直さない |                    |
+| コード              | 起きるとき                                                                                  | つなぎ直して直るか |
+| ------------------- | ------------------------------------------------------------------------------------------- | :----------------: |
+| `protocol-mismatch` | `hello`の`protocolVersion`がサーバーと違う。Axeを読み込み直して更新する                     |                    |
+| `room-not-found`    | 部屋が無い（作られていないか、消えた）                                                      |                    |
+| `room-full`         | 部屋にいる人が32人に達している                                                              |         ✅         |
+| `wrong-password`    | パスワードが違うか、無い                                                                    |                    |
+| `hello-required`    | 最初のメッセージが`hello`でない                                                             |                    |
+| `bad-message`       | MessagePackとして読めない、展開すると32MiBを超える、封筒の形が違う                          |                    |
+| `too-many-messages` | 10秒のあいだに2000を超えるフレームを送った                                                  |         ✅         |
+| `replaced`          | 同じピアIDで新しい接続が入った。つなぎ直すと新しい方を追い出すので、つなぎ直さない          |                    |
+| `unauthorized`      | `accessToken`が無効か期限切れ、または`userId`がアカウントと違う。トークンを替えてつなぎ直す |         ✅         |
 
 ## 契約のフィクスチャ
 

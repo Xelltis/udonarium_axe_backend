@@ -11,6 +11,21 @@ Deployボタンで置いた場合は、複製した自分のリポジトリの`w
 | `ASSET_RETENTION_DAYS`        | `30`                    | 置いたものを残す日数（1以上の整数）                                       |
 | `ROOM_RETENTION_HOURS`        | `24`                    | 最後の1人が抜けてから部屋を消すまでの時間（1以上の整数）                  |
 
+## シークレット
+
+ログインと部屋を使うときに、Workerのシークレットとして入れます。
+`wrangler.jsonc`には書きません（手元では`.dev.vars`に書きます。ひな形は`.dev.vars.example`）。
+
+| 名前                    | 内容                                                 |
+| ----------------------- | ---------------------------------------------------- |
+| `DISCORD_CLIENT_ID`     | ログインに使うDiscordのアプリのClient ID             |
+| `DISCORD_CLIENT_SECRET` | 同じアプリのClient Secret                            |
+| `SESSION_SECRET`        | アクセストークンと招待に署名する鍵。32文字以上の乱数 |
+
+3つは、そろえて入れるか、どれも入れないかのどちらかにします。
+どれも入れなければ、ログインと部屋は使えず、アセットサーバーだけが動きます。
+くわしくは[ログインと役割](/cloudflare/login#ログインを使えるようにする)を見てください。
+
 どれかが無い、または形が違うと、すべてのリクエストに`500 config-invalid`を返し、足りない設定の名前をWorkerのログに出します。
 
 ### `ACCESS_CONTROL_ALLOW_ORIGIN`
@@ -43,15 +58,17 @@ Workerが使うCloudflareの資源です。
 | `ASSETS`         | R2バケット     | 画像と音声の置き場。名前は書かず、最初のデプロイで「<Workerの名前>-assets」が作られる |
 | `ROOMS`          | Durable Object | 部屋ごとに1つ（`RoomDurableObject`）。名前は部屋の鍵                                  |
 | `LOBBY`          | Durable Object | 部屋の一覧（`LobbyDurableObject`）。Workerに1つ                                       |
+| `ACCOUNTS`       | Durable Object | ログインした人ごとに1つ（`AccountDurableObject`）。名前は`discord:<ID>`               |
 | `UPLOAD_LIMITER` | レート制限     | 新しく置くPUTを、送信元ごとに1分100件まで                                             |
 | `READ_LIMITER`   | レート制限     | R2を読むGETとHEADを、送信元ごとに1分600件まで                                         |
 | `ROOM_LIMITER`   | レート制限     | 部屋を作る・部屋に入るのを、送信元ごとに合わせて1分30回まで                           |
+| `AUTH_LIMITER`   | レート制限     | Discordから戻るのとトークンを発行するのを、送信元ごとに合わせて1分60回まで            |
 
 Durable Objectsは、SQLiteに状態を置く種類です。
 `wrangler.jsonc`の`migrations`に書いてあるので、最初のデプロイで作られます。
 クラスの名前を変えたり消したりするときは、`migrations`に新しい`tag`を足します（今ある`tag`は書き換えません）。
 
-部屋のフレームのgzipとパスワードのハッシュに`node:zlib`と`node:crypto`を使うので、`compatibility_flags`に`nodejs_compat`を入れています。
+部屋のフレームのgzip、パスワードのハッシュ、トークンの署名に`node:zlib`と`node:crypto`を使うので、`compatibility_flags`に`nodejs_compat`を入れています。
 
 ### レート制限を変える
 

@@ -23,6 +23,10 @@ Cloudflare版のエラーは`{"error": "<コード>"}`の形で返るので、�
 | `rate-limited`       | 送信元からの上限を超えた                                              | 大きな部屋を何度も読み込み直した直後など。少し待てば戻る。Axeは間を置いて試し直す     |
 | `not-found`          | 置かれていない、または保持期間を過ぎた                                | 正常な動き。画像を足した人が次に部屋を読み込めば、また上がる                          |
 | `invalid-request`    | 部屋を作る本文がJSONでない、名前が空か長すぎる                        | 名前は1〜255文字、パスワードは64文字まで                                              |
+| `login-required`     | 部屋を作る・画像を置くのに、ログインしていない（トークンが切れた）    | ログインし直す。Axeはふだん、切れる前にトークンを替える                               |
+| `login-unavailable`  | ログインの3つ（`DISCORD_CLIENT_ID`など）がWorkerに入っていない        | [ログインを使えるようにする](/cloudflare/login#ログインを使えるようにする)            |
+| `invalid-grant`      | ログインのコードやリフレッシュトークンが、無効・使用済み・期限切れ    | ログインし直す                                                                        |
+| `blocked`            | 運営する人が、その画像を置かせないようにした                          | 正常な動き。その画像はP2Pでも配らないでください                                       |
 | `room-not-found`     | その部屋が無い。作られていないか、最後の1人が抜けて時間が過ぎて消えた | 部屋を作り直す                                                                        |
 | `room-full`          | 部屋に32人いる、またはWebSocketが64本つながっている                   | 誰かが抜けるのを待つ                                                                  |
 | `upgrade-required`   | 部屋に入るURLを、WebSocketでなく普通のリクエストで開いた              | 正常な動き。部屋にはAxeからつなぐ                                                     |
@@ -45,6 +49,13 @@ Cloudflare版のエラーは`{"error": "<コード>"}`の形で返るので、�
 - **`GET`が`429`。** 送信元からの読み出しが上限を超えています。同じ回線から大勢が参加している（学校や会社のネットワーク、モバイル回線の共有など）と起きやすくなります。[設定項目](/cloudflare/configuration#レート制限を変える)で`READ_LIMITER`の上限を上げます。
 - **混在コンテンツ（Mixed Content）のエラー。** Axeが`https://`なのに、`assets.url`が`http://`になっています。
 
+## ログインできない
+
+- **Discordの画面で「Invalid OAuth2 redirect_uri」と出る**：Discordのアプリの**Redirects**に、`https://<Workerのドメイン>/v1/login/discord/callback`が入っていません。
+- **Axeに戻ってきたが`login_error=provider-failed`**：`DISCORD_CLIENT_ID`か`DISCORD_CLIENT_SECRET`が、Discordのアプリと合っていません。Client Secretを作り直したときは、Workerのシークレットも入れ直します。
+- **ログインを始めると`400 invalid-request`**：戻り先のOriginが`ACCESS_CONTROL_ALLOW_ORIGIN`に名前で書かれていません（`*`は数えません）。
+- **すべてのリクエストが`500 config-invalid`**：ログインの3つのうち一部だけが入っているか、`SESSION_SECRET`が32文字より短いです。
+
 ## 部屋に入れない・切れる
 
 部屋のサーバーは、接続を閉じる前に理由（コード）を送ります。
@@ -53,6 +64,7 @@ Cloudflare版のエラーは`{"error": "<コード>"}`の形で返るので、�
 - **`protocol-mismatch`**：Axeとサーバーの版が合っていません。Axeを読み込み直して、新しい版にします。それでも直らなければ、Workerが古いままです。新しい版をデプロイしてください。
 - **`wrong-password`**：パスワードが違います。部屋を作った人に確かめてください。
 - **`replaced`**：同じ人が別のタブや端末から入り直しました。古い方は閉じられます。
+- **`unauthorized`**：アクセストークンが切れたか、無効です。Axeがトークンを替えてつなぎ直します。繰り返すなら、ログインし直してください。
 - **`too-many-messages`**：短いあいだに送りすぎました。ふつうに遊んでいて起きるなら、[Issues](https://github.com/Xelltis/udonarium_axe_backend/issues)で知らせてください。
 - **つないですぐ`403`**：Axeを開いているページのOriginが、`ACCESS_CONTROL_ALLOW_ORIGIN`にありません。
 

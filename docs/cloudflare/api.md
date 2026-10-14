@@ -84,6 +84,7 @@ Content-Length: 12345
 ```
 
 - `Origin`は、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのどれかでなければなりません。
+- ログインを置いたWorkerでは、`Authorization: Bearer <アクセストークン>`が要ります（→ [ログインと役割](/cloudflare/login#アップロード)）。
 - `Content-Length`が要ります。本文は読みためずに、そのままR2へ流します。
 - 宣言された`Content-Type`は見ません。中身の先頭のバイトで形式を判定します。
 - 本文のSHA-256が名前と合わなければ、何も置かずに`400 hash-mismatch`を返します。
@@ -124,6 +125,7 @@ MP4やMOVの動画は受け付けません。
 | ---- | --------------------- | ------------------------------------------------------ |
 | 400  | `invalid-id`          | 名前が64文字の小文字16進でない                         |
 | 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                         |
+| 401  | `login-required`      | ログインを置いたWorkerで、PUTにアクセストークンが無い  |
 | 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                          |
 | 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた     |
 | 411  | `length-required`     | PUTに`Content-Length`がない                            |
@@ -131,6 +133,7 @@ MP4やMOVの動画は受け付けません。
 | 413  | `too-large`           | 種類ごとの上限を超えている                             |
 | 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                         |
 | 429  | `rate-limited`        | アップロードかR2の読み出しが、1分あたりの上限を超えた  |
+| 451  | `blocked`             | 運営する人が、その名前のものを置かせないようにした     |
 | 500  | `config-invalid`      | 環境変数が足りないか、形が違う                         |
 | 500  | `internal-error`      | それ以外の失敗（本文が`Content-Length`と合わないなど） |
 

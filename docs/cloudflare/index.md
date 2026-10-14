@@ -6,8 +6,8 @@ Cloudflare Workersの上で動く、Axeの**サーバー版**のWorkerです。
 - **アセットサーバー**：画像と音声の置き場。SkyWay版の配信に足せば、卓の参加者はP2Pの代わりにここから画像と音声を受け取れます。
 - **部屋のサーバー**：部屋ごとのDurable Objectが、参加者のやりとりを中継し、卓の状態を持ちます。SkyWayもトークン発行サーバーも使わずに遊ぶためのものです（→ [部屋のサーバー](/cloudflare/rooms)）。
 
-部屋のサーバーは、サーバー側はできていますが、Axe側の対応はこれからです。
-ログインもこれから足していきます（→ [今後の計画](/guide/roadmap)）。
+部屋に入るときは、GMとPLはDiscordでログインし、ログインしていない人は見学になります（→ [ログインと役割](/cloudflare/login)）。
+部屋のサーバーとログインは、サーバー側はできていますが、Axe側の対応はこれからです（→ [今後の計画](/guide/roadmap)）。
 
 ## アセットサーバーのしくみ
 
@@ -53,7 +53,8 @@ GM（画像を足した人）
 
 - [デプロイする](/cloudflare/deploy)
 - [設定項目](/cloudflare/configuration)
-- [部屋のサーバー](/cloudflare/rooms) / [部屋のプロトコル](/cloudflare/protocol)
+- [部屋のサーバー](/cloudflare/rooms) / [ログインと役割](/cloudflare/login) / [部屋のプロトコル](/cloudflare/protocol)
+- [運営する人へ](/cloudflare/policies)
 - [APIリファレンス](/cloudflare/api)
 - [安全のしくみ](/cloudflare/security)
 - [運用と料金](/cloudflare/operations)
