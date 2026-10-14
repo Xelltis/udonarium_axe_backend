@@ -19,9 +19,23 @@ PHP版は[リリース](https://github.com/Xelltis/udonarium_axe_backend/release
 展開した中身をそのままドキュメントルートに置き、`.env`を作ります。
 詳しい手順は[apps/php/README.md](apps/php/README.md)です。
 
-Vercel版は、[apps/vercel/README.md](apps/vercel/README.md)のDeployボタンから自分のVercelプロジェクトとして複製できます。
+Vercel版とCloudflare版は、ボタンから自分のアカウントにデプロイできます。
+このリポジトリのそのディレクトリが、自分のGitHubリポジトリとして複製されます。
+同じアカウントに何度でもデプロイでき、名前を変えればそれぞれ別のものになります。
 
-Cloudflare版はwranglerでデプロイします。R2のバケットの作り方と保持期間の決め方は[apps/cloudflare/README.md](apps/cloudflare/README.md)にあります。
+Vercel版（SkyWayの認証トークンの発行）:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
+
+要る環境変数は[apps/vercel/README.md](apps/vercel/README.md)にあります。
+
+Cloudflare版（画像と音声の置き場）:
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Xelltis/udonarium_axe_backend/tree/main/apps/cloudflare)
+
+R2のバケットはデプロイのときに作られます。
+前もって、アカウントでR2を使い始めておくことが要ります。
+詳しくは[apps/cloudflare/README.md](apps/cloudflare/README.md)にあります。
 
 ## 開発
 

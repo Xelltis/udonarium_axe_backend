@@ -1,8 +1,12 @@
 # udonarium-axe-backend（Cloudflare版）
 
-Udonarium Axeの画像と音声を、中身のSHA-256を名前にしてR2に置くWorkerです。
-同じ画像は何度上げても1つしか置かれず、卓の参加者はP2Pの代わりにここから受け取ります。
-部屋のサーバー（Durable Objects）も、今後このWorkerに足します。
+Udonarium Axeのサーバー版の土台になるWorkerです。
+いまは、画像と音声を中身のSHA-256を名前にしてR2に置き、卓の参加者がP2Pの代わりにここから受け取れるようにしています。
+同じ画像は何度上げても1つしか置かれません。
+
+部屋のサーバー（Durable Objects）とログインも、このWorkerに足していきます。
+それができると、サーバー版の配信ではSkyWayを使わずに遊べるようになります。
+SkyWay版の配信は、これからも残ります。
 
 ## エンドポイント
 
@@ -15,10 +19,20 @@ Udonarium Axeの画像と音声を、中身のSHA-256を名前にしてR2に置�
 `:sha256`は中身のSHA-256を小文字の16進で書いた64文字です。
 PUTでは、本文のハッシュがこの名前と合わなければ置きません。
 
-新しく置くPUTは、送信元（IPv6は/64ごと）ごとに1分100件までです。
+### アップロードの制限
+
+PUTは、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginからしか受けません。
+新しく置くPUTは、送信元ごとに1分100件までです。
+IPv6は/64ごとにまとめて数えるので、アドレスを替えても増やせません。
 すでに置いてあるものへのPUTは数えません。
 
-受け付ける形式は先頭のバイトで判定し、宣言されたContent-Typeは見ません。
+Originはブラウザ以外からなら好きに書けるので、これは乱用を抑えるための制限で、置ける人を限るものではありません。
+置いたものは保持期間を過ぎると消えます。
+サーバー版の部屋ができたら、ログインして得たセッショントークンをPUTにも求めます。
+
+### 受け付ける形式
+
+形式は先頭のバイトで判定し、宣言されたContent-Typeは見ません。
 
 | 種類 | 形式                                  | 上限  |
 | ---- | ------------------------------------- | ----- |
@@ -35,7 +49,7 @@ GETの応答は`Cache-Control: public, max-age=…, immutable`で返します。
 `max-age`は7日か、保持期間の残りの短いほうです。
 キャッシュに残った版が、バケットから消えたあとまで「ある」と答えないようにするためです。
 
-保持期間（`ASSET_RETENTION_DAYS`）を過ぎたものは`404`を返します。
+保持期間（`ASSET_RETENTION_DAYS`、既定は30日）を過ぎたものは`404`を返します。
 アップロードした人が次に部屋を読み込んだとき、HEADが`404`になるので上げ直され、保持期間もそこから数え直します。
 過ぎたものは、新しく置くついでに少しずつバケットから消すので、ライフサイクル規則は要りません。
 
@@ -66,26 +80,39 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 
 ## セットアップ
 
-Cloudflareのアカウントと、`npx wrangler login`でのログインが要ります。
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Xelltis/udonarium_axe_backend/tree/main/apps/cloudflare)
+
+ボタンから、このディレクトリを自分のGitHubリポジトリとして複製し、Cloudflareのアカウントにデプロイできます。
 R2のバケットは最初のデプロイで「<Workerの名前>-assets」が作られるので、自分で作る必要はありません。
 同じアカウントに何台置いても、Workerの名前ごとに別のバケットになります。
 
-1. `wrangler.jsonc`の`ACCESS_CONTROL_ALLOW_ORIGIN`に、アプリを配信しているOriginを書きます。
-   複数あるときはカンマで区切ります。
+前もって、アカウントでR2を使い始めておきます。
+ダッシュボードの「Storage & databases → R2」で、アカウントに一度だけ申し込みます（無料枠があります）。
+まだのアカウントでは、バケットを作れずにデプロイが失敗します。
 
-2. デプロイします。Workerの名前は`--name`で決めます。
+デプロイの画面では、次のものを尋ねられます。
 
-   ```sh
-   npm ci
-   npx wrangler deploy --name my-udonarium-assets
-   ```
+| 名前                          | 中身                                                     |
+| ----------------------------- | -------------------------------------------------------- |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` | アプリを配信しているOrigin。複数あるときはカンマで区切る |
+| `ASSET_RETENTION_DAYS`        | 画像と音声を残す日数（既定は30）                         |
 
-   キャッシュを効かせるため、Workerにはカスタムドメインを付けてください。
-
+キャッシュを効かせるため、デプロイしたWorkerにはカスタムドメインを付けてください。
 アプリ側の`config.json`には、このWorkerのURLを`assets.url`として書きます。
 
 Workerを呼んだ回数そのものは、Workerの中では減らせません。
 読み出しを繰り返されるのが心配なら、カスタムドメインのゾーンにWAFのレート制限ルールを足してください。
+
+### wranglerで手元からデプロイする
+
+`npx wrangler login`でログインしてから、次のようにします。
+Workerの名前は`--name`で決め、R2のバケットも名前ごとに作られます。
+
+```sh
+npm ci
+npx wrangler deploy --name my-udonarium-assets \
+  --var ACCESS_CONTROL_ALLOW_ORIGIN:https://axe.example.com
+```
 
 ### mainからの自動デプロイ
 

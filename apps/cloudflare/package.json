@@ -39,5 +39,18 @@
   "allowScripts": {
     "esbuild@0.28.1": true,
     "workerd@1.20260815.1": true
+  },
+  "cloudflare": {
+    "bindings": {
+      "ASSETS": {
+        "description": "画像と音声を置くR2バケット。新しく作られる（アカウントでR2を使い始めておく必要がある）"
+      },
+      "ACCESS_CONTROL_ALLOW_ORIGIN": {
+        "description": "アプリ（Udonarium Axe）を配信しているOrigin。複数あるときはカンマで区切る。例：`https://axe.example.com`"
+      },
+      "ASSET_RETENTION_DAYS": {
+        "description": "画像と音声を残す日数。過ぎたものは消え、使う人が次に部屋を読み込んだときに上げ直される"
+      }
+    }
   }
 }
