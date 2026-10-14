@@ -2,7 +2,22 @@ import { describe, expect, it } from 'vitest';
 
 import { setContentRange } from '../src/assets/response';
 import { ConfigError, parseConfig } from '../src/config';
+import { networkOf } from '../src/http/network';
 import { isAllowedOrigin } from '../src/http/origin';
+
+describe('networkOf', () => {
+  it.each([
+    ['192.0.2.1', '192.0.2.1'],
+    ['2001:db8:1:2:3:4:5:6', '2001:db8:1:2::/64'],
+    ['2001:0db8:0001:0002::0005', '2001:db8:1:2::/64'],
+    ['2001:DB8::1', '2001:db8:0:0::/64'],
+    ['2001:db8::', '2001:db8:0:0::/64'],
+    ['::1', '0:0:0:0::/64'],
+    ['::ffff:192.0.2.1', '192.0.2.1'],
+  ])('counts %s as %s', (address, network) => {
+    expect(networkOf(address)).toBe(network);
+  });
+});
 
 describe('isAllowedOrigin', () => {
   const allowed = ['https://app.example', 'http://localhost:4200', 'not a url'];

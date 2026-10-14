@@ -46,15 +46,20 @@ describe('PUT /v1/assets/:id', () => {
     expect(new Uint8Array((await stored?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(file);
   });
 
-  it('answers 200 without writing again when the asset is already there', async () => {
+  it('answers 200 without writing again or counting, when the asset is already there', async () => {
     const { file, id } = await freshFile();
     await put(id, file);
     const before = await env.ASSETS.head(id);
+    const ip = freshIp();
 
-    const res = await put(id, file);
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await put(id, file, { 'CF-Connecting-IP': ip });
+      statuses.push(res.status);
+      expect(await res.json()).toEqual({ id, status: 'exists' });
+    }
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id, status: 'exists' });
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
     expect((await env.ASSETS.head(id))?.uploaded).toEqual(before?.uploaded);
   });
 
@@ -149,14 +154,27 @@ describe('PUT /v1/assets/:id', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 
-  it('stops one address once it has uploaded its share', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const { file, id } = await freshFile(PNG_HEAD, 64);
-      statuses.push((await put(id, file, { 'CF-Connecting-IP': ip })).status);
-    }
-    expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
+  describe('rate limit', () => {
+    const uploadSix = async (headersOf: (i: number) => Record<string, string>) => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const { file, id } = await freshFile(PNG_HEAD, 64);
+        statuses.push((await put(id, file, headersOf(i))).status);
+      }
+      return statuses;
+    };
+
+    it('stops one address once it has uploaded its share', async () => {
+      const ip = freshIp();
+      expect(await uploadSix(() => ({ 'CF-Connecting-IP': ip }))).toEqual([
+        201, 201, 201, 201, 201, 429,
+      ]);
+    });
+
+    it('counts every IPv6 address in a /64 as one sender', async () => {
+      const statuses = await uploadSix((i) => ({ 'CF-Connecting-IP': `2001:db8:1:2::${i + 1}` }));
+      expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
+    });
   });
 });
 

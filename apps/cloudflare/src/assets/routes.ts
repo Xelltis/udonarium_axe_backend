@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
+import { networkOf } from '../http/network';
 import { objectHeaders, remainingSeconds, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
@@ -19,6 +20,9 @@ export const MAX_BYTES: Readonly<Record<AssetKind, number>> = {
 };
 
 const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));
+
+const networkOfRequest = (c: Context<AppEnv>): string =>
+  networkOf(c.req.header('CF-Connecting-IP') ?? 'unknown');
 
 const toHex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -70,15 +74,15 @@ assetRoutes.put('/:id', async (c) => {
   }
   if (declared > MAX_ANY_BYTES) return fail(c, 413, 'too-large');
 
-  const { success } = await c.env.UPLOAD_LIMITER.limit({
-    key: c.req.header('CF-Connecting-IP') ?? 'unknown',
-  });
-  if (!success) return fail(c, 429, 'rate-limited');
-
+  // 置いてあるものは数えずに答える。部屋を読み込むと、上がっている画像もまとめて送られてくるため
   const existing = await c.env.ASSETS.head(id);
   if (existing && remainingSeconds(existing, c.var.config.retentionSeconds) > 0) {
     return c.json({ id, status: 'exists' }, 200);
   }
+
+  // IPv6 は /64 ごとに数える。アドレスを替えるだけでは増やせない
+  const { success } = await c.env.UPLOAD_LIMITER.limit({ key: networkOfRequest(c) });
+  if (!success) return fail(c, 429, 'rate-limited');
 
   const body = await c.req.arrayBuffer();
   const sniffed = sniff(new Uint8Array(body, 0, Math.min(SNIFF_BYTES, body.byteLength)));

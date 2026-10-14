@@ -15,6 +15,9 @@ Udonarium Axeの画像と音声を、中身のSHA-256を名前にしてR2に置�
 `:sha256`は中身のSHA-256を小文字の16進で書いた64文字です。
 PUTでは、本文のハッシュがこの名前と合わなければ置きません。
 
+新しく置くPUTは、送信元（IPv6は/64ごと）ごとに1分100件までです。
+すでに置いてあるものへのPUTは数えません。
+
 受け付ける形式は先頭のバイトで判定し、宣言されたContent-Typeは見ません。
 
 | 種類 | 形式                                  | 上限  |
@@ -38,19 +41,19 @@ GETの応答は`Cache-Control: public, max-age=…, immutable`で返します。
 
 本文は`{"error": "<コード>"}`の形です。
 
-| 状態 | コード                | 起きるとき                                         |
-| ---- | --------------------- | -------------------------------------------------- |
-| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                     |
-| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                     |
-| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                      |
-| 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた |
-| 411  | `length-required`     | PUTに`Content-Length`がない                        |
-| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない   |
-| 413  | `too-large`           | 種類ごとの上限を超えている                         |
-| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                     |
-| 429  | `rate-limited`        | 同じIPからのアップロードが1分に100件を超えた       |
-| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                     |
-| 500  | `internal-error`      | それ以外の失敗                                     |
+| 状態 | コード                | 起きるとき                                               |
+| ---- | --------------------- | -------------------------------------------------------- |
+| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                           |
+| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                           |
+| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                            |
+| 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた       |
+| 411  | `length-required`     | PUTに`Content-Length`がない                              |
+| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない         |
+| 413  | `too-large`           | 種類ごとの上限を超えている                               |
+| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                           |
+| 429  | `rate-limited`        | 同じ送信元から新しく置くアップロードが1分に100件を超えた |
+| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                           |
+| 500  | `internal-error`      | それ以外の失敗                                           |
 
 `config-invalid`のときは、足りない設定の名前がWorkerのログに出ます。
 
