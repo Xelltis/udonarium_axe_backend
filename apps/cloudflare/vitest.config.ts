@@ -17,5 +17,18 @@ export default defineConfig({
   ],
   test: {
     include: ['test/**/*.test.ts'],
+    coverage: {
+      // workerd の中では V8 のカバレッジを取れないので istanbul を使う
+      provider: 'istanbul',
+      reporter: ['text', 'lcovonly'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.d.ts', 'src/http/context.ts'],
+      thresholds: {
+        lines: 100,
+        functions: 100,
+        branches: 100,
+        statements: 100,
+      },
+    },
   },
 });

@@ -136,8 +136,20 @@ jobs:
 
       - run: npm run typecheck
 
-      # Workers のランタイム（workerd）の中で、R2 とレート制限をローカルに立てて流す
+      # Workers のランタイム（workerd）の中で、R2 とレート制限をローカルに立てて流す。
+      # カバレッジが 100% を切ると落ちる
       - run: npm test
+
+      # カバレッジ閾値割れで npm test が落ちた場合も、どの行が落ちたかを
+      # Codecov 上で追えるようアップロードは実行する。
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: apps/cloudflare/coverage/lcov.info
+          flags: cloudflare
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   release:
     name: Release

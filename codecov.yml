@@ -3,13 +3,13 @@
 codecov:
   require_ci_to_pass: true
   notify:
-    # カバレッジを上げるのは PHP 8.5 ジョブと Vercel ジョブの 2 つ
-    after_n_builds: 2
+    # カバレッジを上げるのは PHP 8.5 ジョブと Vercel ジョブと Cloudflare ジョブの 3 つ
+    after_n_builds: 3
 
 coverage:
   precision: 2
   round: down
-  # apps/php/src/ と apps/vercel の src/・api/ は現状 100%。低下が色で分かるよう下限を高めに置く
+  # apps/php/src/ と apps/vercel の src/・api/ と apps/cloudflare/src/ は現状 100%。低下が色で分かるよう下限を高めに置く
   range: "90...100"
   status:
     project:
@@ -33,6 +33,10 @@ flags:
     paths:
       - apps/vercel/
     carryforward: true
+  cloudflare:
+    paths:
+      - apps/cloudflare/
+    carryforward: true
 
 comment:
   layout: "header, diff, flags, files"
@@ -43,7 +47,7 @@ comment:
   require_changes: false
 
 # PHP の計測対象は apps/php/phpunit.xml の <source> で src/ に限定済み。
-# Vercel の除外は apps/vercel/vitest.config.ts の coverage.exclude と対応させる。
+# Vercel と Cloudflare の除外は、それぞれの vitest.config.ts の coverage.exclude と対応させる。
 # どちらも、レポーターや <source> の設定が変わっても意図が崩れないよう明示する。
 ignore:
   - "apps/php/tests/**"
@@ -55,4 +59,7 @@ ignore:
   - "apps/vercel/scripts/**"
   - "apps/vercel/src/**/types.ts"
   - "apps/vercel/src/http/context.ts"
+  - "apps/cloudflare/test/**"
+  - "apps/cloudflare/src/**/*.d.ts"
+  - "apps/cloudflare/src/http/context.ts"
   - "stubs/**"

@@ -62,6 +62,18 @@ npm run typecheck
 npm test
 ```
 
+Cloudflare 版のコマンドは `apps/cloudflare` で実行します。lockfile もこのディレクトリにあります。
+
+```sh
+cd apps/cloudflare
+npm ci
+
+# lint・型検査・テスト（workerd の中で動かし、カバレッジ 100% を要求）
+npm run lint
+npm run typecheck
+npm test
+```
+
 ## コーディング規約
 
 - **PHP 8.3 との互換性を維持する** — `apps/php/src/` および `apps/php/index.php` では PHP 8.4 以降でのみ利用可能な機能（プロパティフック等）は使用しないでください

@@ -102,7 +102,7 @@ Workerを呼んだ回数そのものは、Workerの中では減らせません�
 ```sh
 npm ci
 npm run dev        # http://localhost:8787 で起動
-npm test           # Workersのランタイム（workerd）の中でテストする
+npm test           # Workersのランタイム（workerd）の中でテストする。カバレッジ100%を要求
 npm run lint
 npm run typecheck
 ```
