@@ -9,7 +9,7 @@ codecov:
 coverage:
   precision: 2
   round: down
-  # src/ は現状 100%。低下が色で分かるよう下限を高めに置く
+  # apps/php/src/ は現状 100%。低下が色で分かるよう下限を高めに置く
   range: "90...100"
   status:
     project:
@@ -31,12 +31,12 @@ comment:
   # 条件は無いので false にする。
   require_changes: false
 
-# 計測対象は phpunit.xml の <source> で src/ に限定済み。
+# 計測対象は apps/php/phpunit.xml の <source> で src/ に限定済み。
 # 将来 <source> を広げたときの保険として除外を明示する。
 ignore:
-  - "tests/**"
-  - "bin/**"
+  - "apps/php/tests/**"
+  - "apps/php/bin/**"
+  - "apps/php/docs/**"
+  - "apps/php/vendor/**"
+  - "apps/php/index.php"
   - "stubs/**"
-  - "docs/**"
-  - "vendor/**"
-  - "index.php"

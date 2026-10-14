@@ -11,8 +11,8 @@ Docker で開発環境を構築できます。
 git clone https://github.com/Xelltis/udonarium_axe_backend.git
 cd udonarium_axe_backend
 
-# Docker で起動
-docker compose up -d
+# Docker で起動（PHP 版は apps/php にある）
+(cd apps/php && docker compose up -d)
 
 # npm 依存のインストール（commitlint 用）
 npm install
@@ -32,7 +32,11 @@ npx lefthook install
 
 ## コマンド一覧
 
+PHP 版のコマンドは `apps/php` で実行します。
+
 ```sh
+cd apps/php
+
 # テスト
 bin/phpunit
 
@@ -48,7 +52,7 @@ bin/php-cs-fixer check
 
 ## コーディング規約
 
-- **PHP 8.3 との互換性を維持する** — `src/` および `index.php` では PHP 8.4 以降でのみ利用可能な機能（プロパティフック等）は使用しないでください
+- **PHP 8.3 との互換性を維持する** — `apps/php/src/` および `apps/php/index.php` では PHP 8.4 以降でのみ利用可能な機能（プロパティフック等）は使用しないでください
 - **テストは PHPUnit 12 / 13 の両方で動作させる** — CI は PHP 8.3（PHPUnit 12）と PHP 8.4+（PHPUnit 13）の両方でテストを実行します
 - **PHP-CS-Fixer** (`@PER-CS`) に従う
 - すべての PHP ファイルに `declare(strict_types=1)` を記述する

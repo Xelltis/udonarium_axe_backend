@@ -2,9 +2,11 @@ pre-commit:
   parallel: true
   commands:
     php-cs-fixer:
+      root: "apps/php/"
       glob: "*.php"
       run: docker run --rm -v "$PWD:/var/www/html" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer check --diff --config=.php-cs-fixer.php {staged_files}
     phpstan:
+      root: "apps/php/"
       glob: "*.php"
       run: docker run --rm -v "$PWD:/var/www/html" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpstan analyse --memory-limit=256M
 

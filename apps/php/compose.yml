@@ -1,3 +1,6 @@
+# apps/php に移す前と同じプロジェクト名にして、コンテナ名を変えない
+name: udonarium_axe_backend
+
 services:
   app:
     build: .
