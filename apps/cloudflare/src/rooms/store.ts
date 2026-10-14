@@ -173,9 +173,14 @@ export class RoomStore {
     }
   }
 
+  /** その人のあいだだけ置いているもの（その人のカーソル）の識別子 */
+  ownedBy(peerId: string): string[] {
+    return [...this.index].filter(([, entry]) => entry.owner === peerId).map(([id]) => id);
+  }
+
   /** その人が出たので、その人のあいだだけ置いていたものを消す。消した識別子を返す */
   removeOwnedBy(peerId: string): string[] {
-    const owned = [...this.index].filter(([, entry]) => entry.owner === peerId).map(([id]) => id);
+    const owned = this.ownedBy(peerId);
     for (const identifier of owned) this.delete(identifier, false);
     return owned;
   }

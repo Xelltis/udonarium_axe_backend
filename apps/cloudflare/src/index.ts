@@ -4,10 +4,12 @@ import type { MiddlewareHandler } from 'hono';
 import { assetRoutes } from './assets/routes';
 import { parseConfig } from './config';
 import type { AppEnv } from './http/context';
-import { assetCors, roomCors } from './http/cors';
+import { accountRoutes, authRoutes, loginRoutes } from './auth/routes';
+import { apiCors, assetCors } from './http/cors';
 import { onError } from './http/errors';
 import { roomRoutes } from './rooms/routes';
 
+export { AccountDurableObject } from './auth/account';
 export { LobbyDurableObject } from './rooms/lobby';
 export { RoomDurableObject } from './rooms/room';
 
@@ -24,8 +26,14 @@ app.get('/', (c) => c.json({ message: 'Hello udonarium-axe-backend!' }));
 app.use('/v1/*', configLoader);
 app.use('/v1/assets/*', assetCors());
 app.route('/v1/assets', assetRoutes);
-app.use('/v1/rooms', roomCors());
-app.use('/v1/rooms/*', roomCors());
+for (const path of ['/v1/rooms', '/v1/auth', '/v1/account']) {
+  app.use(path, apiCors());
+  app.use(`${path}/*`, apiCors());
+}
 app.route('/v1/rooms', roomRoutes);
+app.route('/v1/auth', authRoutes);
+app.route('/v1/account', accountRoutes);
+// ブラウザがページとして開くもの（Discord への行き来）。Origin は付かないので確かめない
+app.route('/v1/login', loginRoutes);
 
 export default app;

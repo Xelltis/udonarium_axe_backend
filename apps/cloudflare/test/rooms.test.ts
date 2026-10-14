@@ -125,8 +125,8 @@ describe('POST /v1/rooms', () => {
     );
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
-    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,POST');
-    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,POST,DELETE');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization');
   });
 
   it('stops one address once it has opened its share of rooms', async () => {
@@ -191,6 +191,7 @@ describe('joining a room', () => {
       protocolVersion: PROTOCOL_VERSION,
       peerId: 'alice-room-1',
       authorityPeerId: AUTHORITY_PEER_ID,
+      role: 'pl',
       members: [],
       serverTime: expect.any(Number),
     });
@@ -206,9 +207,12 @@ describe('joining a room', () => {
 
     const bob = await join(roomKey, 'bob');
 
-    expect(bob.welcome.members).toEqual([{ peerId: 'alice', userId: 'user-alice' }]);
+    expect(bob.welcome.members).toEqual([{ peerId: 'alice', userId: 'user-alice', role: 'pl' }]);
     const joined = await alice.client.next('join');
-    expect(joined).toEqual({ type: 'join', member: { peerId: 'bob', userId: 'user-bob' } });
+    expect(joined).toEqual({
+      type: 'join',
+      member: { peerId: 'bob', userId: 'user-bob', role: 'pl' },
+    });
     expect(keysOf(joined)).toEqual(keysOf(messages.server.join));
     expect(
       (
@@ -337,7 +341,7 @@ describe('joining a room', () => {
 
     const again = await join(roomKey, 'bob');
 
-    expect(again.welcome.members).toEqual([{ peerId: 'alice', userId: 'user-alice' }]);
+    expect(again.welcome.members).toEqual([{ peerId: 'alice', userId: 'user-alice', role: 'pl' }]);
     expect((await bob.client.next('error')).code).toBe('replaced');
     expect(await bob.client.closed).toEqual({ code: CLOSE_CODE, reason: 'replaced' });
     await alice.client.expectQuiet();
@@ -704,7 +708,13 @@ describe('the state of the room', () => {
 
   describe('peer cursors', () => {
     const cursorOf = (peerId: string, majorVersion = 1) =>
-      contextOf(`cursor-${peerId}`, majorVersion, 0.5, { peerId, name: peerId }, 'PeerCursor');
+      contextOf(
+        `cursor-${peerId}`,
+        majorVersion,
+        0.5,
+        { peerId, name: peerId, role: 'pl' },
+        'PeerCursor',
+      );
 
     it('keeps a cursor while its peer is here, and drops it without a trace once the peer leaves', async () => {
       const { roomKey, alice, bob } = await twoInRoom();
@@ -803,7 +813,7 @@ describe('keeping the room', () => {
     );
 
     expect(chunks).toBe(2);
-    expect(bob.welcome.members).toEqual([{ peerId: 'alice', userId: 'user-alice' }]);
+    expect(bob.welcome.members).toEqual([{ peerId: 'alice', userId: 'user-alice', role: 'pl' }]);
     expect(bob.catalog[0].data).toEqual(
       expect.arrayContaining([
         { identifier: 'board', version: 1.5 },
@@ -820,7 +830,7 @@ describe('keeping the room', () => {
     });
     expect(await alice.client.next('join')).toEqual({
       type: 'join',
-      member: { peerId: 'bob', userId: 'user-bob' },
+      member: { peerId: 'bob', userId: 'user-bob', role: 'pl' },
     });
   });
 

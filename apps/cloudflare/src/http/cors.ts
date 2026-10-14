@@ -16,7 +16,7 @@ const readCors = cors({ origin: '*', allowMethods: ['GET', 'HEAD'], maxAge: MAX_
 const writeCors = cors({
   origin: (origin) => origin,
   allowMethods: ['PUT'],
-  allowHeaders: ['Content-Type'],
+  allowHeaders: ['Content-Type', 'Authorization'],
   maxAge: MAX_AGE_SECONDS,
 });
 
@@ -26,24 +26,24 @@ const WRITE_METHODS = new Set(['PUT']);
 const intendedMethodOf = (c: Context): string | undefined =>
   c.req.method === 'OPTIONS' ? c.req.header('Access-Control-Request-Method') : c.req.method;
 
-// 部屋の作成と一覧の Origin も roomCors で確かめ済み
-const roomHeaders = cors({
+// 部屋・ログイン・アカウントの Origin は apiCors で確かめ済み
+const apiHeaders = cors({
   origin: (origin) => origin,
-  allowMethods: ['GET', 'POST'],
-  allowHeaders: ['Content-Type'],
+  allowMethods: ['GET', 'POST', 'DELETE'],
+  allowHeaders: ['Content-Type', 'Authorization'],
   maxAge: MAX_AGE_SECONDS,
 });
 
 /**
- * 部屋のものは、一覧も含めて、許可した Origin からしか受けない。WebSocket の接続も同じ。
+ * 部屋・ログイン・アカウントのものは、許可した Origin からしか受けない。部屋の WebSocket の接続も同じ。
  * WebSocket の応答（101）にはヘッダーを足せないので、CORS のヘッダーは付けない。
  */
-export const roomCors = (): MiddlewareHandler<AppEnv> => async (c, next) => {
+export const apiCors = (): MiddlewareHandler<AppEnv> => async (c, next) => {
   if (!isAllowedOrigin(c.req.header('Origin'), c.var.config.allowedOrigins)) {
     return fail(c, 403, 'origin-not-allowed');
   }
   if (c.req.header('Upgrade')) return next();
-  return roomHeaders(c, next);
+  return apiHeaders(c, next);
 };
 
 /**

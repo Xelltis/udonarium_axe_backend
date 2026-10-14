@@ -3,6 +3,7 @@ import { maxLength, minLength, nullish, object, pipe, safeParse, string } from '
 
 import { MAX_PASSWORD_LENGTH, MAX_ROOM_NAME_LENGTH } from '../../contracts/protocol';
 import type { CreateRoomResponse, RoomListResponse } from '../../contracts/protocol';
+import { bearerOf } from '../auth/session';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';
@@ -34,7 +35,12 @@ roomRoutes.get('/', async (c) => {
   return c.json<RoomListResponse>({ rooms });
 });
 
+/** 部屋を作る。ログインした人だけが作れ、作った人が GM になる。ログインを置いていなければ 503 */
 roomRoutes.post('/', async (c) => {
+  const login = c.var.config.login;
+  if (!login) return fail(c, 503, 'login-unavailable');
+  const claims = bearerOf(c, login);
+  if (!claims) return fail(c, 401, 'login-required');
   if (!(await withinLimits(c, c.env.ROOM_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
@@ -48,6 +54,7 @@ roomRoutes.post('/', async (c) => {
     roomId,
     name: parsed.output.name,
     password: parsed.output.password ?? '',
+    creatorUserId: claims.uid,
   });
   return c.json<CreateRoomResponse>({ roomKey, roomId }, 201);
 });

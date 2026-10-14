@@ -1,5 +1,7 @@
 import { exports } from 'cloudflare:workers';
 
+import { ACCESS_TOKEN_SECONDS, signToken } from '../src/auth/tokens';
+
 export const ORIGIN = 'https://app.example';
 export const BASE = 'https://backend.example/v1/assets';
 
@@ -7,6 +9,17 @@ export const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 export const OGG_HEAD = [0x4f, 0x67, 0x67, 0x53];
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** vitest.config.ts の SESSION_SECRET と同じもの */
+export const SESSION_SECRET = 'test-session-secret-0123456789abcdef';
+
+/** ログインした人のアクセストークン。userId を指定しなければ、同じ1人 */
+export const accessTokenFor = (userId = 'uploader', seconds = ACCESS_TOKEN_SECONDS) =>
+  signToken<'access'>(
+    { aud: 'access', sub: `discord:${userId}`, uid: userId, name: userId },
+    seconds,
+    SESSION_SECRET,
+  );
 
 export const fileOf = (head: number[], size: number, seed = 0): Uint8Array => {
   const file = new Uint8Array(size);
@@ -45,6 +58,7 @@ export const put = (id: string, body: Uint8Array, headers: Record<string, string
     headers: {
       Origin: ORIGIN,
       'Content-Length': String(body.byteLength),
+      Authorization: `Bearer ${accessTokenFor()}`,
       ...headers,
     },
   });

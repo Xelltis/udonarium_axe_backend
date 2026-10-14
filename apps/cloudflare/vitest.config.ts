@@ -6,12 +6,18 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
       miniflare: {
-        bindings: { ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example,http://localhost:4200' },
+        bindings: {
+          ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example,http://localhost:4200',
+          DISCORD_CLIENT_ID: 'test-client',
+          DISCORD_CLIENT_SECRET: 'test-client-secret',
+          SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        },
         // テストでは上限を小さくして、429 を数回のリクエストで確かめる
         ratelimits: {
           UPLOAD_LIMITER: { namespace_id: '1001', simple: { limit: 5, period: 60 } },
           READ_LIMITER: { namespace_id: '1002', simple: { limit: 5, period: 60 } },
           ROOM_LIMITER: { namespace_id: '1003', simple: { limit: 5, period: 60 } },
+          AUTH_LIMITER: { namespace_id: '1004', simple: { limit: 5, period: 60 } },
         },
       },
     }),

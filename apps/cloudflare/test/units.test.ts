@@ -101,6 +101,20 @@ describe('parseConfig', () => {
       allowedOrigins: ['https://a.example', 'https://b.example'],
       retentionSeconds: 30 * 24 * 60 * 60,
       roomRetentionSeconds: 24 * 60 * 60,
+      login: null,
+    });
+  });
+
+  it('reads the login settings when all three are there', () => {
+    const login = {
+      DISCORD_CLIENT_ID: 'client',
+      DISCORD_CLIENT_SECRET: 'client-secret',
+      SESSION_SECRET: 's'.repeat(32),
+    };
+    expect(parseConfig({ ...valid, ...login }).login).toEqual({
+      discordClientId: 'client',
+      discordClientSecret: 'client-secret',
+      sessionSecret: 's'.repeat(32),
     });
   });
 
@@ -111,6 +125,14 @@ describe('parseConfig', () => {
     ['a retention that is not whole days', { ASSET_RETENTION_DAYS: '1.5' }],
     ['no room retention', { ROOM_RETENTION_HOURS: undefined }],
     ['a room retention under an hour', { ROOM_RETENTION_HOURS: '0' }],
+    [
+      'only part of the login settings',
+      { DISCORD_CLIENT_ID: 'client', SESSION_SECRET: 's'.repeat(32) },
+    ],
+    [
+      'a session secret that is too short',
+      { DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 'c', SESSION_SECRET: 'short' },
+    ],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
   });

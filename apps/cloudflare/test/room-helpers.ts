@@ -6,11 +6,14 @@ import { gzipSync } from 'node:zlib';
 import { PROTOCOL_VERSION } from '../contracts/protocol';
 import type { CreateRoomResponse, ServerMessage } from '../contracts/protocol';
 import { decodeFrame } from '../src/rooms/codec';
-import { ORIGIN, freshIp } from './helpers';
+import { ORIGIN, accessTokenFor, freshIp } from './helpers';
 
 export const ROOMS = 'https://backend.example/v1/rooms';
 
-/** 部屋を作る API を呼ぶ */
+/** 部屋を作った人。どの部屋にも入らないので、入る人はみな PL になる */
+export const HOST = 'user-host';
+
+/** 部屋を作る API を呼ぶ。指定しなければ HOST がログインして作る */
 export const postRoom = (body: unknown, headers: Record<string, string> = {}) =>
   exports.default.fetch(
     new Request(ROOMS, {
@@ -19,15 +22,22 @@ export const postRoom = (body: unknown, headers: Record<string, string> = {}) =>
         Origin: ORIGIN,
         'Content-Type': 'application/json',
         'CF-Connecting-IP': freshIp(),
+        Authorization: `Bearer ${accessTokenFor(HOST)}`,
         ...headers,
       },
       body: typeof body === 'string' ? body : JSON.stringify(body),
     }),
   );
 
-/** 部屋を作り、その鍵を返す */
-export const createRoom = async (body: { name?: string; password?: string } = {}) => {
-  const res = await postRoom({ name: 'test room', ...body });
+/** 部屋を作り、その鍵を返す。creator を指定すれば、その peerId の人が GM になる */
+export const createRoom = async (
+  body: { name?: string; password?: string } = {},
+  creator?: string,
+) => {
+  const res = await postRoom(
+    { name: 'test room', ...body },
+    creator ? { Authorization: `Bearer ${accessTokenFor(`user-${creator}`)}` } : {},
+  );
   if (res.status !== 201) throw new Error(`room not created: ${res.status}`);
   return (await res.json<CreateRoomResponse>()).roomKey;
 };
@@ -119,12 +129,14 @@ export class Client {
     this.send({ type: 'send', ...(to === undefined ? {} : { to }), events });
   }
 
+  /** 入る。ふだんは `user-<peerId>` としてログインしている。accessToken を null にすれば見学で入る */
   hello(peerId: string, extra: Record<string, unknown> = {}): void {
     this.send({
       type: 'hello',
       protocolVersion: PROTOCOL_VERSION,
       peerId,
       userId: `user-${peerId}`,
+      accessToken: accessTokenFor(`user-${peerId}`),
       ...extra,
     });
   }

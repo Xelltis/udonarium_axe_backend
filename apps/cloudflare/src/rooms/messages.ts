@@ -8,6 +8,7 @@ import {
   nullish,
   number,
   object,
+  picklist,
   pipe,
   regex,
   string,
@@ -15,7 +16,7 @@ import {
   variant,
 } from 'valibot';
 
-import { MAX_PASSWORD_LENGTH } from '../../contracts/protocol';
+import { MAX_PASSWORD_LENGTH, PEER_ROLES } from '../../contracts/protocol';
 
 // クライアントの MessagePack は undefined を nil にするので、省けるものは null も受ける
 
@@ -38,6 +39,8 @@ export const helloSchema = object({
   peerId: peerIdSchema,
   userId: pipe(string(), maxLength(128)),
   password: nullish(pipe(string(), maxLength(MAX_PASSWORD_LENGTH))),
+  accessToken: nullish(string()),
+  invite: nullish(string()),
 });
 
 export const clientMessageSchema = variant('type', [
@@ -48,7 +51,10 @@ export const clientMessageSchema = variant('type', [
     events: pipe(array(eventSchema), maxLength(MAX_EVENTS_PER_MESSAGE)),
   }),
   object({ type: literal('time') }),
+  object({ type: literal('invite'), role: picklist(PEER_ROLES) }),
 ]);
+
+export const roleRequestSchema = object({ peerId: string(), role: picklist(PEER_ROLES) });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && value.constructor === Object;

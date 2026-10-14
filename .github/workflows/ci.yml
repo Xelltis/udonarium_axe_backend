@@ -160,7 +160,8 @@ jobs:
   #   - CLOUDFLARE_API_TOKEN（初回は Workers Admin と R2 Storage Write・Read、2回目からは
   #     そのWorkerだけの Workers Editor に絞る。main だけが使える Environment に置く）
   #   - CLOUDFLARE_ACCOUNT_ID（リポジトリの Secret に置いてもよい）
-  # ACCESS_CONTROL_ALLOW_ORIGIN は Worker のシークレットとして、デプロイのたびにコードと同じ版で入れ直す。
+  #   - DISCORD_CLIENT_ID・DISCORD_CLIENT_SECRET・SESSION_SECRET（ログインと部屋を使うとき。3つそろえる）
+  # ACCESS_CONTROL_ALLOW_ORIGIN とログインの3つは Worker のシークレットとして、デプロイのたびにコードと同じ版で入れ直す。
   deploy-cloudflare:
     name: Deploy Cloudflare (${{ matrix.environment }})
     needs: [cloudflare]
@@ -203,6 +204,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WORKER_NAME: ${{ secrets.WORKER_NAME }}
           ACCESS_CONTROL_ALLOW_ORIGIN: ${{ secrets.ACCESS_CONTROL_ALLOW_ORIGIN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           ENVIRONMENT: ${{ matrix.environment }}
         run: |
           for name in WORKER_NAME ACCESS_CONTROL_ALLOW_ORIGIN; do
@@ -211,9 +215,23 @@ jobs:
               exit 1
             fi
           done
+          # ログインの3つは、そろえて置くか、どれも置かないか。一部だけだと Worker が config-invalid を返す
+          login=0
+          for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET; do
+            [ -n "${!name}" ] && login=$((login + 1))
+          done
+          if [ "$login" -ne 0 ] && [ "$login" -ne 3 ]; then
+            echo "::error::Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET together for the $ENVIRONMENT environment"
+            exit 1
+          fi
           secrets="$RUNNER_TEMP/worker-secrets.json"
           trap 'rm -f "$secrets"' EXIT
-          (umask 077 && jq -n '{ACCESS_CONTROL_ALLOW_ORIGIN: env.ACCESS_CONTROL_ALLOW_ORIGIN}' > "$secrets")
+          (umask 077 && jq -n '{ACCESS_CONTROL_ALLOW_ORIGIN: env.ACCESS_CONTROL_ALLOW_ORIGIN}
+            + if (env.SESSION_SECRET // "") != "" then {
+                DISCORD_CLIENT_ID: env.DISCORD_CLIENT_ID,
+                DISCORD_CLIENT_SECRET: env.DISCORD_CLIENT_SECRET,
+                SESSION_SECRET: env.SESSION_SECRET
+              } else {} end' > "$secrets")
           npx wrangler deploy --name "$WORKER_NAME" --secrets-file "$secrets"
 
   release:

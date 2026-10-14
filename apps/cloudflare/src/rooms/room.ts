@@ -3,7 +3,10 @@ import { safeParse } from 'valibot';
 
 import {
   AUTHORITY_PEER_ID,
+  AuthorityEvent,
   CATALOG_BATCH,
+  CHAT_MESSAGE_ALIAS,
+  CHAT_TAB_ALIAS,
   CLOSE_CODE,
   MAX_MEMBERS,
   PEER_CURSOR_ALIAS,
@@ -13,7 +16,15 @@ import {
   SyncEvent,
   judgeUpdate,
 } from '../../contracts/protocol';
-import type { ErrorCode, EventContext, ServerMessage } from '../../contracts/protocol';
+import type {
+  ErrorCode,
+  EventContext,
+  ObjectContext,
+  PeerRole,
+  RoleRejectReason,
+  ServerMessage,
+} from '../../contracts/protocol';
+import { INVITE_SECONDS, readToken, signToken } from '../auth/tokens';
 import { parseConfig } from '../config';
 import { decodeFrame, encodeFrame } from './codec';
 import { LOBBY_NAME } from './lobby';
@@ -25,6 +36,7 @@ import {
   helloSchema,
   objectContextSchema,
   requestSchema,
+  roleRequestSchema,
 } from './messages';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
@@ -49,6 +61,8 @@ export interface RoomInit {
   name: string;
   /** 空ならパスワードの無い部屋 */
   password: string;
+  /** 部屋を作った人のユーザー ID。この人が GM になる */
+  creatorUserId: string;
 }
 
 /**
@@ -60,6 +74,10 @@ interface Seat {
   userId: string;
   /** 部屋の一覧に人数を知らせるときの鍵 */
   roomKey: string;
+  /** サーバーが決めた役割 */
+  role: PeerRole;
+  /** ログインして入った。ログインしていない人は見学のまま、役割を変えられない */
+  account: boolean;
   /** サーバーが閉じた（断った、または同じピア ID の新しい接続に替わった） */
   closed?: boolean;
 }
@@ -74,6 +92,8 @@ interface RoomRow extends Record<string, SqlStorageValue> {
 
 const seatOf = (ws: WebSocket): Seat | null => ws.deserializeAttachment() as Seat | null;
 
+const memberOf = (seat: Seat) => ({ peerId: seat.peerId, userId: seat.userId, role: seat.role });
+
 const isHello = (value: unknown): value is { protocolVersion?: unknown } =>
   typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'hello';
 
@@ -82,6 +102,8 @@ const fromAuthority = (eventName: string, data: unknown): EventContext => ({
   data,
   sendFrom: AUTHORITY_PEER_ID,
 });
+
+type Reply = (eventName: string, data: unknown) => void;
 
 /**
  * 1つの部屋。部屋にいる人の WebSocket を受け、イベントを中継しながら、部屋の状態を持つ。
@@ -125,7 +147,13 @@ export class RoomDurableObject extends DurableObject<Env> {
       password_hash BLOB,
       created_at INTEGER NOT NULL
     )`);
+    // ログインした人ごとの役割。部屋を作った人が GM になる
+    sql.exec(`CREATE TABLE IF NOT EXISTS seats (
+      user_id TEXT PRIMARY KEY,
+      role TEXT NOT NULL
+    )`);
     migrate(sql);
+    sql.exec(`INSERT INTO seats (user_id, role) VALUES (?, 'gm')`, init.creatorUserId);
     sql.exec(
       `INSERT INTO room (id, room_key, room_id, name, password_salt, password_hash, created_at)
        VALUES (1, ?, ?, ?, ?, ?, ?)`,
@@ -180,6 +208,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.relay(ws, seat, received.to ?? undefined, received.events);
     } else if (received.type === 'time') {
       this.post(ws, { type: 'time', serverTime: Date.now() });
+    } else if (received.type === 'invite') {
+      this.invite(ws, seat, received.role);
     }
     // 入ったあとの hello は何もしない
   }
@@ -221,7 +251,53 @@ export class RoomDurableObject extends DurableObject<Env> {
     ) {
       return this.refuse(ws, 'wrong-password');
     }
-    this.seat(ws, { peerId: hello.peerId, userId: hello.userId, roomKey: room.room_key });
+
+    // ログインしていなければ見学。ログインしていれば、トークンの人と userId が同じでなければならない
+    const seat: Seat = {
+      peerId: hello.peerId,
+      userId: hello.userId,
+      roomKey: room.room_key,
+      role: 'guest',
+      account: false,
+    };
+    if (hello.accessToken) {
+      const secret = this.sessionSecret();
+      const claims = readToken(hello.accessToken, 'access', secret);
+      if (!claims || claims.uid !== hello.userId) return this.refuse(ws, 'unauthorized');
+      seat.role = this.roleOf(hello.userId, hello.invite ?? null, room.room_key, secret);
+      seat.account = true;
+    }
+    this.seat(ws, seat);
+  }
+
+  /**
+   * ログインした人の役割。前に入ったことがあればそのときの役割、初めてなら招待の役割、
+   * 招待が無いか、この部屋のものでなければ PL
+   */
+  private roleOf(userId: string, invite: string | null, roomKey: string, secret: string): PeerRole {
+    const sql = this.ctx.storage.sql;
+    const known = sql
+      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
+      .toArray()[0];
+    if (known) return known.role;
+    const invited = invite ? readToken(invite, 'invite', secret) : null;
+    const role = invited?.room === roomKey ? invited.role : 'pl';
+    sql.exec('INSERT INTO seats (user_id, role) VALUES (?, ?)', userId, role);
+    return role;
+  }
+
+  /** GM に頼まれて、招待を作る。GM でなければ invite を null にして返す */
+  private invite(ws: WebSocket, seat: Seat, role: PeerRole): void {
+    if (seat.role !== 'gm') {
+      this.post(ws, { type: 'invite', role, invite: null, expiresAt: null });
+      return;
+    }
+    const invite = signToken<'invite'>(
+      { aud: 'invite', room: seat.roomKey, role },
+      INVITE_SECONDS,
+      this.sessionSecret(),
+    );
+    this.post(ws, { type: 'invite', role, invite, expiresAt: Date.now() + INVITE_SECONDS * 1000 });
   }
 
   private seat(ws: WebSocket, seat: Seat): void {
@@ -237,15 +313,14 @@ export class RoomDurableObject extends DurableObject<Env> {
       protocolVersion: PROTOCOL_VERSION,
       peerId: seat.peerId,
       authorityPeerId: AUTHORITY_PEER_ID,
-      members: others
-        .filter((other) => other !== previous)
-        .map((other) => ({ peerId: other.seat.peerId, userId: other.seat.userId })),
+      role: seat.role,
+      members: others.filter((other) => other !== previous).map((other) => memberOf(other.seat)),
       serverTime: Date.now(),
     });
     this.post(ws, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents() });
     void this.ctx.storage.deleteAlarm();
     if (previous) return;
-    this.broadcast(ws, { type: 'join', member: { peerId: seat.peerId, userId: seat.userId } });
+    this.broadcast(ws, { type: 'join', member: memberOf(seat) });
     this.notifyLobby(seat.roomKey);
   }
 
@@ -328,20 +403,27 @@ export class RoomDurableObject extends DurableObject<Env> {
 
     for (const { eventName, data } of events) {
       const event: EventContext = { eventName, data, sendFrom: seat.peerId };
-      const toEveryone = () => {
-        common.push(event);
-        targeted.push(event);
+      const toEveryone = (passed: EventContext = event) => {
+        common.push(passed);
+        targeted.push(passed);
       };
       const toAddressee = () => (to === undefined ? toEveryone() : targeted.push(event));
       switch (eventName) {
-        case SyncEvent.UPDATE:
-          if (this.update(data, reply)) toEveryone();
+        case SyncEvent.UPDATE: {
+          // サーバーが中身を直したら（PeerCursor の役割など）、直した方を配る
+          const accepted = this.update(data, seat, reply);
+          if (accepted) toEveryone({ ...event, data: accepted });
           break;
+        }
         case SyncEvent.DELETE:
-          if (this.remove(data)) toEveryone();
+          if (this.remove(data, seat, reply)) toEveryone();
           break;
         case SyncEvent.FORGET_DELETED:
-          if (this.forget(data)) toEveryone();
+          if (this.forget(data, seat)) toEveryone();
+          break;
+        case AuthorityEvent.ROLE_REQUEST:
+          if (forAuthority) this.changeRole(data, seat, reply);
+          else toAddressee();
           break;
         case SyncEvent.CATALOG:
           if (forAuthority) this.answerCatalog(data, reply);
@@ -372,18 +454,33 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (this.store.hasPending) this.scheduleFlush();
   }
 
-  /** UPDATE を状態に当てる。ほかの人に配るなら true */
-  private update(data: unknown, reply: (eventName: string, data: unknown) => void): boolean {
+  /**
+   * UPDATE を状態に当てる。ほかの人に配るなら、配る中身を返す。
+   *
+   * PeerCursor の役割は、その人の席の役割で上書きする。上書きしたら、送り主にも直した方を渡す。
+   * 見学者は、自分のカーソルと、見学者も話せるタブへの発言しか書けない。
+   */
+  private update(data: unknown, seat: Seat, reply: Reply): ObjectContext | null {
     const parsed = safeParse(objectContextSchema, data);
-    if (!parsed.success) return false;
-    const context = parsed.output;
+    if (!parsed.success) return null;
+    let context = parsed.output;
     const { identifier, aliasName } = context;
 
     let owner: string | null = null;
+    let corrected = false;
     if (aliasName === PEER_CURSOR_ALIAS) {
       owner = String(context.syncData.peerId);
       // 出ていった人のカーソルは置かない。クライアントは leave を受けて自分で片付ける
-      if (!this.seats().some(({ seat }) => seat.peerId === owner)) return false;
+      const ownerSeat = this.seats().find((other) => other.seat.peerId === owner)?.seat;
+      if (!ownerSeat) return null;
+      if (seat.role === 'guest' && owner !== seat.peerId)
+        return this.refuseWrite(identifier, reply);
+      if (context.syncData.role !== ownerSeat.role) {
+        context = { ...context, syncData: { ...context.syncData, role: ownerSeat.role } };
+        corrected = true;
+      }
+    } else if (seat.role === 'guest' && !this.guestMayWrite(context, seat)) {
+      return this.refuseWrite(identifier, reply);
     }
 
     const verdict = judgeUpdate(
@@ -394,34 +491,111 @@ export class RoomDurableObject extends DurableObject<Env> {
     switch (verdict) {
       case 'accept':
         this.store.put(context, owner);
-        return true;
+        if (corrected) reply(AuthorityEvent.AUTHORITATIVE, context);
+        return context;
       case 'stale':
         reply(SyncEvent.UPDATE, this.store.get(identifier));
-        return false;
+        return null;
       case 'deleted':
         reply(SyncEvent.DELETE, { aliasName, identifier });
-        return false;
+        return null;
       default:
-        return false;
+        return null;
     }
   }
 
-  /** DELETE を状態に当てる。ほかの人に配るなら true */
-  private remove(data: unknown): boolean {
+  /**
+   * 見学者が書いてよいもの。見学者も話せるタブ（guestCanSpeak）への新しい発言と、自分の発言の書き直し。
+   * ダイスの結果のように、発言の from が本人でないものもあるので、新しい発言は from を問わない
+   */
+  private guestMayWrite(context: ObjectContext, seat: Seat): boolean {
+    if (context.aliasName !== CHAT_MESSAGE_ALIAS) return false;
+    const tab = this.store.get(String(context.syncData.parentIdentifier));
+    if (tab?.aliasName !== CHAT_TAB_ALIAS || tab.syncData.guestCanSpeak !== true) return false;
+    const stored = this.store.get(context.identifier);
+    return (
+      stored === null ||
+      stored.syncData.from === seat.userId ||
+      stored.syncData.originFrom === seat.userId
+    );
+  }
+
+  /**
+   * 書く権限の無い変更を、送り主の手元で戻させる。サーバーが持っていればその中身に戻し、
+   * 消したものなら消させ、どちらでもなければ（新しく作ろうとしたもの）印を残さずに取り下げさせる
+   */
+  private refuseWrite(identifier: string, reply: Reply): null {
+    const stored = this.store.get(identifier);
+    if (stored) reply(AuthorityEvent.AUTHORITATIVE, stored);
+    else if (this.store.isDeleted(identifier))
+      reply(SyncEvent.DELETE, { aliasName: '', identifier });
+    else reply(AuthorityEvent.WITHDRAW, { identifier });
+    return null;
+  }
+
+  /** DELETE を状態に当てる。ほかの人に配るなら true。見学者が消せるのは自分のカーソルだけ */
+  private remove(data: unknown, seat: Seat, reply: Reply): boolean {
     const parsed = safeParse(deleteSchema, data);
     if (!parsed.success) return false;
     const { aliasName, identifier } = parsed.output;
-    const isCursor =
-      aliasName === PEER_CURSOR_ALIAS || (this.store.entryOf(identifier)?.owner ?? null) !== null;
-    this.store.delete(identifier, !isCursor);
+    const owner = this.store.entryOf(identifier)?.owner ?? null;
+    if (seat.role === 'guest' && owner !== seat.peerId) {
+      this.refuseWrite(identifier, reply);
+      return false;
+    }
+    this.store.delete(identifier, aliasName !== PEER_CURSOR_ALIAS && owner === null);
     return true;
   }
 
-  private forget(data: unknown): boolean {
+  /** 見学者からは受けない */
+  private forget(data: unknown, seat: Seat): boolean {
     const parsed = safeParse(forgetSchema, data);
-    if (!parsed.success) return false;
+    if (!parsed.success || seat.role === 'guest') return false;
     this.store.forget(parsed.output.identifiers ?? []);
     return true;
+  }
+
+  /**
+   * GM に頼まれて、部屋にいる人の役割を変える。席の表を直し、その人のカーソルの役割を
+   * 書き換えて版を上げ、全員に配る。断るときは、頼んだ人に理由を返す
+   */
+  private changeRole(data: unknown, seat: Seat, reply: Reply): void {
+    const parsed = safeParse(roleRequestSchema, data);
+    if (!parsed.success) return;
+    const { peerId, role } = parsed.output;
+    const reject = (reason: RoleRejectReason) =>
+      reply(AuthorityEvent.ROLE_REJECTED, { peerId, role, reason });
+    if (seat.role !== 'gm') return reject('not-game-master');
+    const target = this.seats().find((other) => other.seat.peerId === peerId)?.seat;
+    if (!target) return reject('unknown-peer');
+    if (!target.account) return reject('not-logged-in');
+    const sql = this.ctx.storage.sql;
+    const gameMasters = sql
+      .exec<{ count: number }>("SELECT COUNT(*) AS count FROM seats WHERE role = 'gm'")
+      .one().count;
+    if (target.role === 'gm' && role !== 'gm' && gameMasters <= 1)
+      return reject('last-game-master');
+
+    sql.exec('UPDATE seats SET role = ? WHERE user_id = ?', role, target.userId);
+    const updates: EventContext[] = [];
+    for (const { ws, seat: other } of this.seats()) {
+      if (other.userId !== target.userId) continue;
+      ws.serializeAttachment({ ...other, role });
+      for (const identifier of this.store.ownedBy(other.peerId)) {
+        const cursor = this.store.get(identifier) as ObjectContext;
+        const changed = {
+          ...cursor,
+          majorVersion: cursor.majorVersion + 1,
+          minorVersion: Math.random(),
+          syncData: { ...cursor.syncData, role },
+        };
+        this.store.put(changed, other.peerId);
+        updates.push(fromAuthority(SyncEvent.UPDATE, changed));
+      }
+    }
+    if (updates.length > 0) {
+      this.broadcast(undefined, { type: 'data', from: AUTHORITY_PEER_ID, events: updates });
+    }
   }
 
   /**
@@ -507,6 +681,14 @@ export class RoomDurableObject extends DurableObject<Env> {
 
   private retentionMs(): number {
     return parseConfig(this.env).roomRetentionSeconds * 1000;
+  }
+
+  /**
+   * トークンを確かめる鍵。部屋はログインを置いた Worker でしか作れないが、あとでログインを外すと
+   * 空になり、どのトークンも通らなくなる（見学では入れる）
+   */
+  private sessionSecret(): string {
+    return parseConfig(this.env).login?.sessionSecret ?? '';
   }
 
   private lobby() {

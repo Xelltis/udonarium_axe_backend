@@ -14,8 +14,18 @@ declare namespace Cloudflare {
     ROOMS: DurableObjectNamespace<import('./rooms/room').RoomDurableObject>;
     /** 部屋の一覧。Worker ごとに1つ */
     LOBBY: DurableObjectNamespace<import('./rooms/lobby').LobbyDurableObject>;
+    /** ログインした人ごとに1つ。名前は `discord:<ID>` */
+    ACCOUNTS: DurableObjectNamespace<import('./auth/account').AccountDurableObject>;
     /** 部屋を作る回数と、部屋につなぐ回数を送信元ごとに数えるレート制限 */
     ROOM_LIMITER: RateLimit;
+    /** ログインとトークンの発行を送信元ごとに数えるレート制限 */
+    AUTH_LIMITER: RateLimit;
+    /** Discord のアプリの Client ID。ログインの3つをそろえて置くと、ログインと部屋が使える */
+    DISCORD_CLIENT_ID?: string;
+    /** Discord のアプリの Client Secret（シークレットとして置く） */
+    DISCORD_CLIENT_SECRET?: string;
+    /** トークンに署名する鍵。32文字以上の乱数（シークレットとして置く） */
+    SESSION_SECRET?: string;
     /** 最後の1人が出てから部屋を消すまでの時間 */
     ROOM_RETENTION_HOURS: string;
   }

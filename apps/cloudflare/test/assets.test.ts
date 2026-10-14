@@ -503,7 +503,7 @@ describe('OPTIONS /v1/assets/:id', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
-    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization');
     expect(res.headers.get('Vary')).toContain('Origin');
   });
 

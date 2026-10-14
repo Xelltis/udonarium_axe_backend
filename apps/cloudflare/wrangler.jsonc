@@ -14,10 +14,13 @@
     "bindings": [
       { "name": "ROOMS", "class_name": "RoomDurableObject" },
       { "name": "LOBBY", "class_name": "LobbyDurableObject" },
+      { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
     ],
   },
+  // 足すときは tag を増やす。いまある tag は書き換えない
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "LobbyDurableObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["AccountDurableObject"] },
   ],
   // namespace_id は同じアカウントの Worker で共有されるが、鍵に受けたホスト名を付けて Worker ごとに数える
   "ratelimits": [
@@ -40,6 +43,12 @@
       "namespace_id": "1003",
       "simple": { "limit": 30, "period": 60 },
     },
+    // Discord から戻ってきたときと、トークンを発行するときを送信元ごとに数える
+    {
+      "name": "AUTH_LIMITER",
+      "namespace_id": "1004",
+      "simple": { "limit": 60, "period": 60 },
+    },
   ],
   "vars": {
     // カンマ区切り。PUT は、この Origin からしか受けない。
@@ -49,5 +58,7 @@
     "ASSET_RETENTION_DAYS": "30",
     // 最後の1人が出てから部屋を消すまでの時間
     "ROOM_RETENTION_HOURS": "24",
+    // DISCORD_CLIENT_ID・DISCORD_CLIENT_SECRET・SESSION_SECRET はシークレットとして置く（README 参照）。
+    // 手元では .dev.vars に書く
   },
 }

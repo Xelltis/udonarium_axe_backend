@@ -54,6 +54,15 @@
       },
       "ROOM_RETENTION_HOURS": {
         "description": "部屋から最後の1人が出てから、部屋を消すまでの時間"
+      },
+      "DISCORD_CLIENT_ID": {
+        "description": "ログインに使う[Discordのアプリ](https://discord.com/developers/applications)の「OAuth2 → Client ID」。ログインと部屋を使わないなら空のまま"
+      },
+      "DISCORD_CLIENT_SECRET": {
+        "description": "同じアプリの「OAuth2 → Client Secret」。ログインの3つは、そろえて入れるか、どれも入れないか"
+      },
+      "SESSION_SECRET": {
+        "description": "トークンに署名する鍵。32文字以上の乱数（例：`openssl rand -base64 48`の出力）"
       }
     }
   }

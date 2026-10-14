@@ -6,6 +6,10 @@ import { ConfigError } from '../config';
 export type ErrorCode =
   | 'invalid-id'
   | 'invalid-request'
+  | 'invalid-grant'
+  | 'login-required'
+  | 'login-unavailable'
+  | 'blocked'
   | 'hash-mismatch'
   | 'origin-not-allowed'
   | 'not-found'
@@ -20,7 +24,7 @@ export type ErrorCode =
 
 export const fail = (
   c: Context,
-  status: 400 | 403 | 404 | 411 | 412 | 413 | 415 | 426 | 429 | 500,
+  status: 400 | 401 | 403 | 404 | 411 | 412 | 413 | 415 | 426 | 429 | 451 | 500 | 503,
   error: ErrorCode,
 ) => c.json({ error }, status);
 

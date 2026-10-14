@@ -10,7 +10,7 @@
  */
 
 /** 封筒の形を変えたら上げる。hello の版が違えば、サーバーは protocol-mismatch で断る */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * 部屋のサーバー自身のピア ID。クライアントの ID とぶつからない形にしてある。
@@ -37,10 +37,21 @@ export interface EventContext {
   sendFrom: string;
 }
 
+/**
+ * 部屋での役割。サーバーが決め、PeerCursor の role もサーバーが上書きする。
+ *
+ * - gm：部屋を作った人と、GM が gm にした人
+ * - pl：ログインして入った人（招待リンクや GM が変えたときを除く）
+ * - guest：ログインせずに入った人（見学）。自分のカーソルと、見学者も話せるタブへの発言しか書けない
+ */
+export const PEER_ROLES = ['gm', 'pl', 'guest'] as const;
+export type PeerRole = (typeof PEER_ROLES)[number];
+
 /** 部屋にいる人 */
 export interface Member {
   peerId: string;
   userId: string;
+  role: PeerRole;
 }
 
 // ---- クライアントからサーバーへ ----
@@ -54,6 +65,13 @@ export interface HelloMessage {
   userId: string;
   /** パスワードのある部屋に入るとき */
   password?: string;
+  /**
+   * ログインしているときのアクセストークン（POST /v1/auth/token で得たもの）。
+   * 付けなければ見学（guest）として入る。付けるなら userId はトークンの userId と同じにする
+   */
+  accessToken?: string;
+  /** 招待リンクに付いてきた招待。ログインして初めて入るときの役割になる */
+  invite?: string;
 }
 
 /** イベントの束を送る。to を付ければその人にだけ、付けなければ自分以外の全員に届く */
@@ -68,7 +86,13 @@ export interface TimeRequest {
   type: 'time';
 }
 
-export type ClientMessage = HelloMessage | SendMessage | TimeRequest;
+/** 招待を作ってもらう。GM だけが作れる */
+export interface InviteRequest {
+  type: 'invite';
+  role: PeerRole;
+}
+
+export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest;
 
 // ---- サーバーからクライアントへ ----
 
@@ -78,8 +102,11 @@ export interface WelcomeMessage {
   protocolVersion: number;
   /** 受け付けたピア ID */
   peerId: string;
+  /** サーバー自身のピア ID。ピア ID の形から推し量らず、この値を使う */
   authorityPeerId: string;
-  /** 自分以外の、いま部屋にいる人 */
+  /** サーバーが決めた自分の役割。自分の PeerCursor の role はこれにする */
+  role: PeerRole;
+  /** いま部屋にいる人。接続した本人とサーバーは入らない */
   members: Member[];
   /** サーバーの時刻（Unix ミリ秒） */
   serverTime: number;
@@ -110,6 +137,18 @@ export interface TimeMessage {
 }
 
 /**
+ * 招待。invite を招待リンクに載せる。GM でない人が頼んだときは invite と expiresAt が null。
+ * 招待は、まだこの部屋に入ったことのないログインした人の役割を決める（入ったことのある人は今の役割のまま）
+ */
+export interface InviteMessage {
+  type: 'invite';
+  role: PeerRole;
+  invite: string | null;
+  /** 招待が使えなくなる時刻（Unix ミリ秒） */
+  expiresAt: number | null;
+}
+
+/**
  * 接続を閉じる理由。サーバーはこれを送ってから、同じ code を reason にして閉じる。
  * それぞれが起きるときは fixtures/errors.json にある。
  *
@@ -121,6 +160,7 @@ export interface TimeMessage {
  * - bad-message：読めないメッセージを送った
  * - too-many-messages：短いあいだに送りすぎた
  * - replaced：同じピア ID で新しく接続した人がいるので、こちらを閉じる。つなぎ直さないこと
+ * - unauthorized：アクセストークンが無効か期限切れ、または userId がトークンと違う。トークンを更新してつなぎ直す
  */
 export const ERROR_CODES = [
   'protocol-mismatch',
@@ -131,6 +171,7 @@ export const ERROR_CODES = [
   'bad-message',
   'too-many-messages',
   'replaced',
+  'unauthorized',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -138,11 +179,18 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 export interface ErrorMessage {
   type: 'error';
   code: ErrorCode;
-  protocolVersion?: number;
+  /** サーバーの版。protocol-mismatch のときに、どの版に合わせればよいかがわかる */
+  protocolVersion: number;
 }
 
 export type ServerMessage =
-  WelcomeMessage | JoinMessage | LeaveMessage | DataMessage | TimeMessage | ErrorMessage;
+  | WelcomeMessage
+  | JoinMessage
+  | LeaveMessage
+  | DataMessage
+  | TimeMessage
+  | InviteMessage
+  | ErrorMessage;
 
 /** サーバーが閉じるときの WebSocket の close code */
 export const CLOSE_CODE = 4000;
@@ -177,6 +225,42 @@ export interface RoomListResponse {
   rooms: RoomSummary[];
 }
 
+/** GET /v1/auth/config。ログインに使える提供元。空なら、このサーバーではログインも部屋も使えない */
+export interface AuthConfigResponse {
+  providers: 'discord'[];
+}
+
+/**
+ * POST /v1/auth/token の本文。
+ *
+ * - login_code：ログインから戻ったときに URL のフラグメント（#login_code=…）に付いてきたコードと、
+ *   ログインを始めるときに code_challenge の元にした code_verifier を渡す
+ * - refresh_token：アクセストークンが切れる前に、リフレッシュトークンで新しい組に替える。
+ *   使ったリフレッシュトークンは使えなくなる。同じものをもう一度使うと、その系統のトークンをすべて無効にする
+ */
+export type TokenRequest =
+  | { grant_type: 'login_code'; code: string; code_verifier: string }
+  | { grant_type: 'refresh_token'; refresh_token: string };
+
+/** ログインしている人 */
+export interface Account {
+  /** ずっと同じユーザー ID。hello の userId にこれを使う */
+  userId: string;
+  name: string;
+  /** アバターの画像の URL。無ければ null */
+  avatarUrl: string | null;
+}
+
+/** POST /v1/auth/token の返事 */
+export interface TokenResponse {
+  /** WebSocket の hello と、Authorization: Bearer に使う */
+  accessToken: string;
+  /** アクセストークンが使える秒数 */
+  expiresIn: number;
+  refreshToken: string;
+  account: Account;
+}
+
 // ---- 同期 ----
 
 /**
@@ -194,6 +278,38 @@ export const SyncEvent = {
   REQUEST_CATALOG: 'REQUEST_CATALOG',
   FORGET_DELETED: 'FORGET_DELETED_OBJECTS',
 } as const;
+
+/**
+ * サーバーとのあいだだけで使うイベント。
+ *
+ * - AUTHORITATIVE（サーバーから）：data は ObjectContext。版にかかわらず置き換え、消した印も外す。
+ *   書く権限の無い変更を戻させるときと、サーバーが中身を直したものを送り主に渡すときに使う
+ * - WITHDRAW（サーバーから）：data は { identifier }。消した印を残さずに、手元から外す。
+ *   書く権限の無い人が作ったものを取り下げさせるときに使う
+ * - ROLE_REQUEST（サーバーへ）：data は { peerId, role }。GM が、部屋にいる人の役割を変える
+ * - ROLE_REJECTED（サーバーから）：data は { peerId, role, reason }。ROLE_REQUEST を断った
+ */
+export const AuthorityEvent = {
+  AUTHORITATIVE: 'AUTHORITATIVE_OBJECT',
+  WITHDRAW: 'WITHDRAW_GAME_OBJECT',
+  ROLE_REQUEST: 'ROLE_REQUEST',
+  ROLE_REJECTED: 'ROLE_REJECTED',
+} as const;
+
+/**
+ * ROLE_REQUEST を断った理由。
+ *
+ * - not-game-master：頼んだ人が GM でない
+ * - unknown-peer：その peerId の人が部屋にいない
+ * - not-logged-in：ログインしていない人は見学のまま
+ * - last-game-master：部屋の GM がいなくなる
+ */
+export type RoleRejectReason =
+  'not-game-master' | 'unknown-peer' | 'not-logged-in' | 'last-game-master';
+
+/** チャットの発言と、発言を入れるタブの種類。見学者が話せるのは guestCanSpeak のタブだけ */
+export const CHAT_MESSAGE_ALIAS = 'chat';
+export const CHAT_TAB_ALIAS = 'chat-tab';
 
 /**
  * 接続しているあいだだけ置くオブジェクトの種類。syncData.peerId の人が部屋にいるあいだだけ持ち、

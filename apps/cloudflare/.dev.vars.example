@@ -1,0 +1,6 @@
+# ログイン（Discord）と部屋を使うときに入れる。3つそろえて入れるか、どれも入れないか。
+# Discord のアプリ（https://discord.com/developers/applications）の「OAuth2」の Client ID と Client Secret
+DISCORD_CLIENT_ID=
+DISCORD_CLIENT_SECRET=
+# トークンに署名する鍵。32文字以上の乱数（例：openssl rand -base64 48）
+SESSION_SECRET=

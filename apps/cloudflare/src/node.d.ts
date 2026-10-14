@@ -1,4 +1,4 @@
-// nodejs_compat で使える node: のうち、部屋で使う同期の gzip と PBKDF2 だけの型。
+// nodejs_compat で使える node: のうち、同期で使う gzip・PBKDF2・HMAC だけの型。
 // @types/node を入れると workers-types と大域の型がぶつかるので、要るものだけ書く。
 declare module 'node:zlib' {
   interface ZlibOptions {
@@ -10,6 +10,12 @@ declare module 'node:zlib' {
 }
 
 declare module 'node:crypto' {
+  interface Hmac {
+    update(data: string): Hmac;
+    digest(): Uint8Array;
+  }
+  export function createHmac(algorithm: 'sha256', key: string): Hmac;
+  export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean;
   export function pbkdf2Sync(
     password: string,
     salt: Uint8Array,

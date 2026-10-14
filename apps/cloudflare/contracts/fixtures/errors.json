@@ -8,7 +8,7 @@
       "message": {
         "type": "error",
         "code": "protocol-mismatch",
-        "protocolVersion": 1
+        "protocolVersion": 2
       }
     },
     {
@@ -18,14 +18,18 @@
       "message": {
         "type": "error",
         "code": "room-not-found",
-        "protocolVersion": 1
+        "protocolVersion": 2
       }
     },
     {
       "code": "room-full",
       "when": "部屋にいる人が MAX_MEMBERS（32）に達している",
       "retry": true,
-      "message": { "type": "error", "code": "room-full", "protocolVersion": 1 }
+      "message": {
+        "type": "error",
+        "code": "room-full",
+        "protocolVersion": 2
+      }
     },
     {
       "code": "wrong-password",
@@ -34,7 +38,7 @@
       "message": {
         "type": "error",
         "code": "wrong-password",
-        "protocolVersion": 1
+        "protocolVersion": 2
       }
     },
     {
@@ -44,7 +48,7 @@
       "message": {
         "type": "error",
         "code": "hello-required",
-        "protocolVersion": 1
+        "protocolVersion": 2
       }
     },
     {
@@ -54,7 +58,7 @@
       "message": {
         "type": "error",
         "code": "bad-message",
-        "protocolVersion": 1
+        "protocolVersion": 2
       }
     },
     {
@@ -64,14 +68,28 @@
       "message": {
         "type": "error",
         "code": "too-many-messages",
-        "protocolVersion": 1
+        "protocolVersion": 2
       }
     },
     {
       "code": "replaced",
       "when": "同じピア ID で新しい接続が入った。古い方が受け取る。つなぎ直すと、新しい方を追い出してしまう",
       "retry": false,
-      "message": { "type": "error", "code": "replaced", "protocolVersion": 1 }
+      "message": {
+        "type": "error",
+        "code": "replaced",
+        "protocolVersion": 2
+      }
+    },
+    {
+      "code": "unauthorized",
+      "when": "hello の accessToken が無効か期限切れ、または userId がトークンの userId と違う。リフレッシュトークンで組を替えてから、つなぎ直す",
+      "retry": true,
+      "message": {
+        "type": "error",
+        "code": "unauthorized",
+        "protocolVersion": 2
+      }
     }
   ]
 }

@@ -3,13 +3,13 @@
   "client": {
     "hello": {
       "type": "hello",
-      "protocolVersion": 1,
+      "protocolVersion": 2,
       "peerId": "a1B2c3XyZq9W8e7r6-",
       "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b"
     },
     "helloWithPassword": {
       "type": "hello",
-      "protocolVersion": 1,
+      "protocolVersion": 2,
       "peerId": "a1B2c3Xy7q9W8e7r6-Pa55w0r",
       "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
       "password": "secret"
@@ -24,7 +24,13 @@
             "identifier": "3f1c9a52-8d0b-4e7f-a1c3-5b9d2e6f7a80",
             "majorVersion": 4,
             "minorVersion": 0.6180339887,
-            "syncData": { "location": { "name": "table", "x": 150, "y": 300 } }
+            "syncData": {
+              "location": {
+                "name": "table",
+                "x": 150,
+                "y": 300
+              }
+            }
           },
           "sendFrom": "a1B2c3XyZq9W8e7r6-"
         },
@@ -62,27 +68,86 @@
         }
       ]
     },
-    "time": { "type": "time" }
+    "time": {
+      "type": "time"
+    },
+    "helloLoggedIn": {
+      "type": "hello",
+      "protocolVersion": 2,
+      "peerId": "a1B2c3XyZq9W8e7r6-",
+      "userId": "8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+      "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+    },
+    "inviteRequest": {
+      "type": "invite",
+      "role": "pl"
+    },
+    "roleRequest": {
+      "type": "send",
+      "to": "@authority",
+      "events": [
+        {
+          "eventName": "ROLE_REQUEST",
+          "data": {
+            "peerId": "Zz9Yy8XyZq9W8e7r6-",
+            "role": "guest"
+          },
+          "sendFrom": "a1B2c3XyZq9W8e7r6-"
+        }
+      ]
+    }
   },
   "invalid": [
-    { "type": "send" },
-    { "type": "send", "events": {} },
-    { "type": "send", "events": [{ "data": 1 }] },
-    { "type": "send", "to": 1, "events": [] },
-    { "type": "bogus" },
+    {
+      "type": "send"
+    },
+    {
+      "type": "send",
+      "events": {}
+    },
+    {
+      "type": "send",
+      "events": [
+        {
+          "data": 1
+        }
+      ]
+    },
+    {
+      "type": "send",
+      "to": 1,
+      "events": []
+    },
+    {
+      "type": "bogus"
+    },
     "hello",
-    null
+    null,
+    {
+      "type": "invite",
+      "role": "owner"
+    },
+    {
+      "type": "hello",
+      "protocolVersion": 2,
+      "peerId": "a",
+      "userId": "u",
+      "accessToken": 1
+    }
   ],
   "server": {
     "welcome": {
       "type": "welcome",
-      "protocolVersion": 1,
+      "protocolVersion": 2,
       "peerId": "a1B2c3XyZq9W8e7r6-",
       "authorityPeerId": "@authority",
+      "role": "pl",
       "members": [
         {
           "peerId": "Zz9Yy8XyZq9W8e7r6-",
-          "userId": "0f9e8d7c-6b5a-4938-2716-0504f3e2d1c0"
+          "userId": "0f9e8d7c-6b5a-4938-2716-0504f3e2d1c0",
+          "role": "gm"
         }
       ],
       "serverTime": 1792000000000
@@ -91,10 +156,14 @@
       "type": "join",
       "member": {
         "peerId": "Zz9Yy8XyZq9W8e7r6-",
-        "userId": "0f9e8d7c-6b5a-4938-2716-0504f3e2d1c0"
+        "userId": "0f9e8d7c-6b5a-4938-2716-0504f3e2d1c0",
+        "role": "pl"
       }
     },
-    "leave": { "type": "leave", "peerId": "Zz9Yy8XyZq9W8e7r6-" },
+    "leave": {
+      "type": "leave",
+      "peerId": "Zz9Yy8XyZq9W8e7r6-"
+    },
     "data": {
       "type": "data",
       "from": "@authority",
@@ -106,11 +175,74 @@
         }
       ]
     },
-    "time": { "type": "time", "serverTime": 1792000000000 },
+    "time": {
+      "type": "time",
+      "serverTime": 1792000000000
+    },
     "error": {
       "type": "error",
       "code": "protocol-mismatch",
-      "protocolVersion": 1
+      "protocolVersion": 2
+    },
+    "invite": {
+      "type": "invite",
+      "role": "pl",
+      "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+      "expiresAt": 1794592000000
+    },
+    "inviteRefused": {
+      "type": "invite",
+      "role": "gm",
+      "invite": null,
+      "expiresAt": null
+    },
+    "authoritative": {
+      "type": "data",
+      "from": "@authority",
+      "events": [
+        {
+          "eventName": "AUTHORITATIVE_OBJECT",
+          "data": {
+            "aliasName": "PeerCursor",
+            "identifier": "cursor-1",
+            "majorVersion": 3,
+            "minorVersion": 0.5,
+            "syncData": {
+              "peerId": "a1B2c3XyZq9W8e7r6-",
+              "role": "guest"
+            }
+          },
+          "sendFrom": "@authority"
+        }
+      ]
+    },
+    "withdraw": {
+      "type": "data",
+      "from": "@authority",
+      "events": [
+        {
+          "eventName": "WITHDRAW_GAME_OBJECT",
+          "data": {
+            "identifier": "3f1c9a52-8d0b-4e7f-a1c3-5b9d2e6f7a80"
+          },
+          "sendFrom": "@authority"
+        }
+      ]
+    },
+    "roleRejected": {
+      "type": "data",
+      "from": "@authority",
+      "events": [
+        {
+          "eventName": "ROLE_REJECTED",
+          "data": {
+            "peerId": "Zz9Yy8XyZq9W8e7r6-",
+            "role": "guest",
+            "reason": "last-game-master"
+          },
+          "sendFrom": "@authority"
+        }
+      ]
     }
   }
 }
