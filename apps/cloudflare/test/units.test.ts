@@ -62,21 +62,23 @@ describe('sweepExpired', () => {
     return bucket as typeof bucket & R2Bucket;
   };
 
-  it('deletes the objects past their retention in one page after the start', async () => {
+  it('deletes the assets past their retention in one page after the start', async () => {
+    const [old, fresh, older] = ['a', 'b', 'c'].map((digit) => digit.repeat(64));
     const bucket = bucketHolding(
-      { key: 'old', uploaded: new Date(Date.now() - 31 * DAY_MS) },
-      { key: 'fresh', uploaded: new Date(Date.now() - DAY_MS) },
-      { key: 'older', uploaded: new Date(Date.now() - 90 * DAY_MS) },
+      { key: old, uploaded: new Date(Date.now() - 31 * DAY_MS) },
+      { key: fresh, uploaded: new Date(Date.now() - DAY_MS) },
+      { key: older, uploaded: new Date(Date.now() - 90 * DAY_MS) },
+      { key: `blocked/${'d'.repeat(64)}`, uploaded: new Date(Date.now() - 90 * DAY_MS) },
     );
 
     expect(await sweepExpired(bucket, 30 * 24 * 60 * 60, 'start')).toBe(2);
 
     expect(bucket.list).toHaveBeenCalledWith({ startAfter: 'start', limit: 1000 });
-    expect(bucket.delete).toHaveBeenCalledWith(['old', 'older']);
+    expect(bucket.delete).toHaveBeenCalledWith([old, older]);
   });
 
   it('deletes nothing when nothing has run out', async () => {
-    const bucket = bucketHolding({ key: 'fresh', uploaded: new Date() });
+    const bucket = bucketHolding({ key: 'f'.repeat(64), uploaded: new Date() });
 
     expect(await sweepExpired(bucket, 30 * 24 * 60 * 60, 'start')).toBe(0);
 

@@ -1,16 +1,15 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 
+import { bearerOf } from '../auth/session';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';
+import { ASSET_ID, blockedKeyOf } from './keys';
 import { objectHeaders, remainingSeconds, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
 import { randomStart, sweepExpired } from './sweep';
-
-/** アセットの名前。中身の SHA-256 を小文字の16進で書いたもの */
-const ASSET_ID = /^[0-9a-f]{64}$/;
 
 const MEGA_BYTE = 1024 * 1024;
 
@@ -129,6 +128,11 @@ assetRoutes.put('/:id', async (c) => {
   const length = declaredLengthOf(c);
   if (length === null) return fail(c, 411, 'length-required');
   if (length > MAX_ANY_BYTES) return fail(c, 413, 'too-large');
+
+  // ログインを置いた Worker では、ログインした人だけが置ける
+  const login = c.var.config.login;
+  if (login && !bearerOf(c, login)) return fail(c, 401, 'login-required');
+  if (await c.env.ASSETS.head(blockedKeyOf(id))) return fail(c, 451, 'blocked');
 
   // 置いてあるものは数えずに答える。部屋を読み込むと、上がっている画像もまとめて送られてくるため
   const existing = await c.env.ASSETS.head(id);

@@ -10,6 +10,7 @@ import {
   DAY_MS,
   OGG_HEAD,
   ORIGIN,
+  accessTokenFor,
   PNG_HEAD,
   call,
   fileOf,
@@ -97,6 +98,55 @@ describe('PUT /v1/assets/:id', () => {
     },
   );
 
+  it('asks for login before taking anything, when login is set up', async () => {
+    const { file, id } = await freshFile();
+
+    const none = await put(id, file, { Authorization: '' });
+    const expired = await put(id, file, { Authorization: `Bearer ${accessTokenFor('late', -1)}` });
+
+    for (const res of [none, expired]) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'login-required' });
+    }
+    expect(await env.ASSETS.head(id)).toBeNull();
+  });
+
+  it('takes uploads from anyone on a Worker without login', async () => {
+    const { file, id } = await freshFile();
+
+    const res = await app.fetch(
+      new Request(`${BASE}/${id}`, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          Origin: ORIGIN,
+          'Content-Length': String(file.byteLength),
+          'CF-Connecting-IP': freshIp(),
+        },
+      }),
+      {
+        ...env,
+        DISCORD_CLIENT_ID: undefined,
+        DISCORD_CLIENT_SECRET: undefined,
+        SESSION_SECRET: undefined,
+      },
+      createExecutionContext(),
+    );
+
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses again what was taken down, under its marker', async () => {
+    const { file, id } = await freshFile();
+    await env.ASSETS.put(`blocked/${id}`, new Uint8Array());
+
+    const res = await put(id, file);
+
+    expect(res.status).toBe(451);
+    expect(await res.json()).toEqual({ error: 'blocked' });
+    expect(await env.ASSETS.head(id)).toBeNull();
+  });
+
   it('turns away a file that is neither a picture nor a sound', async () => {
     const html = new TextEncoder().encode('<!DOCTYPE html><html><script>alert(1)</script></html>');
     const res = await put(await sha256Hex(html), html);
@@ -134,6 +184,7 @@ describe('PUT /v1/assets/:id', () => {
         Origin: ORIGIN,
         'Content-Length': '0',
         'CF-Connecting-IP': freshIp(),
+        Authorization: `Bearer ${accessTokenFor()}`,
       },
     });
     const res = await send(req);
@@ -193,6 +244,7 @@ describe('PUT /v1/assets/:id', () => {
           Origin: ORIGIN,
           'Content-Length': String(file.byteLength),
           'CF-Connecting-IP': freshIp(),
+          Authorization: `Bearer ${accessTokenFor()}`,
         },
       }),
       env,
@@ -270,6 +322,7 @@ describe('PUT /v1/assets/:id', () => {
             Origin: ORIGIN,
             'Content-Length': String(file.byteLength),
             'CF-Connecting-IP': ip,
+            Authorization: `Bearer ${accessTokenFor()}`,
           },
         }),
       );

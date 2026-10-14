@@ -1,3 +1,4 @@
+import { ASSET_ID } from './keys';
 import { remainingSeconds } from './response';
 
 /** 1回の掃除で見るオブジェクトの数。R2 の list と delete が一度に扱える上限 */
@@ -23,7 +24,9 @@ export const sweepExpired = async (
   start: string,
 ): Promise<number> => {
   const { objects } = await bucket.list({ startAfter: start, limit: SWEEP_PAGE_SIZE });
+  // 置かせないものの印（blocked/…）は消さない
   const expired = objects
+    .filter((object) => ASSET_ID.test(object.key))
     .filter((object) => remainingSeconds(object, retentionSeconds) <= 0)
     .map((object) => object.key);
   if (expired.length > 0) await bucket.delete(expired);
