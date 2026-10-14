@@ -24,7 +24,8 @@
     },
   ],
   "vars": {
-    // カンマ区切り。PUT はこの Origin からしか受けない
+    // カンマ区切り。PUT は、この Origin からしか受けない。
+    // CI のデプロイでは、同じ名前のシークレットで本番の Origin に置き換わる（README 参照）
     "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
     // 置いたものを残す日数。過ぎたものは 404 にし、アップロードのついでにバケットから消す
     "ASSET_RETENTION_DAYS": "30",

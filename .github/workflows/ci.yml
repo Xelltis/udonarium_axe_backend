@@ -151,6 +151,71 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # main に入ったものを、Cloudflare のジョブが通ってから Worker に出す。
+  # 出し先はリポジトリの Variable CLOUDFLARE_DEPLOY_ENVIRONMENTS に、GitHub Environment の名前の
+  # JSON 配列で書く（例: ["cloudflare-production", "cloudflare-public"]）。無ければ何もしない。
+  # Environment ごとに、次の Secret を置く。
+  #   - WORKER_NAME（Worker の名前。R2 のバケットは最初のデプロイで「<この名前>-assets」が作られる）
+  #   - ACCESS_CONTROL_ALLOW_ORIGIN（アプリを配信している Origin。カンマ区切り）
+  #   - CLOUDFLARE_API_TOKEN（初回は Workers Admin と R2 Storage Write・Read、2回目からは
+  #     そのWorkerだけの Workers Editor に絞る。main だけが使える Environment に置く）
+  #   - CLOUDFLARE_ACCOUNT_ID（リポジトリの Secret に置いてもよい）
+  # ACCESS_CONTROL_ALLOW_ORIGIN は Worker のシークレットとして、デプロイのたびにコードと同じ版で入れ直す。
+  deploy-cloudflare:
+    name: Deploy Cloudflare (${{ matrix.environment }})
+    needs: [cloudflare]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS) }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: deploy-cloudflare-${{ matrix.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloudflare
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/cloudflare/package.json
+          cache: npm
+          cache-dependency-path: apps/cloudflare/package-lock.json
+
+      - run: npm ci
+
+      # シークレットはランナーの一時ディレクトリに JSON で書き、--secrets-file でコードと一緒に送る。
+      # wrangler.jsonc の vars にある手元用の Origin（localhost）は、同じ名前のシークレットで置き換わる
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ secrets.WORKER_NAME }}
+          ACCESS_CONTROL_ALLOW_ORIGIN: ${{ secrets.ACCESS_CONTROL_ALLOW_ORIGIN }}
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          for name in WORKER_NAME ACCESS_CONTROL_ALLOW_ORIGIN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured for the $ENVIRONMENT environment"
+              exit 1
+            fi
+          done
+          secrets="$RUNNER_TEMP/worker-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          (umask 077 && jq -n '{ACCESS_CONTROL_ALLOW_ORIGIN: env.ACCESS_CONTROL_ALLOW_ORIGIN}' > "$secrets")
+          npx wrangler deploy --name "$WORKER_NAME" --secrets-file "$secrets"
+
   release:
     name: Release
     needs: [test, vercel, cloudflare]

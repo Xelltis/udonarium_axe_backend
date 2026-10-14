@@ -87,6 +87,32 @@ R2のバケットは最初のデプロイで「<Workerの名前>-assets」が作
 Workerを呼んだ回数そのものは、Workerの中では減らせません。
 読み出しを繰り返されるのが心配なら、カスタムドメインのゾーンにWAFのレート制限ルールを足してください。
 
+### mainからの自動デプロイ
+
+このリポジトリでは、mainに入った変更を、CIのCloudflareのジョブが通ったあとにデプロイします（`.github/workflows/ci.yml`の`deploy-cloudflare`）。
+出し先は、リポジトリのVariable`CLOUDFLARE_DEPLOY_ENVIRONMENTS`に、GitHubのEnvironmentの名前のJSON配列で書きます（例：`["cloudflare-production", "cloudflare-public"]`）。
+書かなければ何もしません。
+EnvironmentごとにWorkerが1つで、それぞれに次のSecretを入れておきます。
+
+| 名前                          | 中身                                                           |
+| ----------------------------- | -------------------------------------------------------------- |
+| `WORKER_NAME`                 | Workerの名前。R2のバケットは「<この名前>-assets」になる        |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` | アプリを配信しているOrigin。`wrangler.jsonc`の値の代わりに使う |
+| `CLOUDFLARE_API_TOKEN`        | デプロイに使うAPIトークン（権限は下を参照）                    |
+| `CLOUDFLARE_ACCOUNT_ID`       | CloudflareのアカウントID。リポジトリのSecretに置いても構わない |
+
+`ACCESS_CONTROL_ALLOW_ORIGIN`は、デプロイのたびにWorkerのシークレットとして入れ直します。
+値を変えたときは、mainのCIを走らせ直せば入れ替わります。
+
+APIトークンは、mainだけが使えるEnvironmentに置き、権限は次のように絞ります。
+
+| 時期                       | 権限                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| Workerを初めてデプロイする | Workers Admin（すべてのWorker）と、Workers R2 Storage Write・Read（バケットを作るため） |
+| 2回目から                  | Workers Editor（デプロイするWorkerだけ）                                                |
+
+2回目からは、デプロイ済みのWorkerからバケットの割り当てを引き継ぐので、R2の権限は要りません。
+
 ## 開発
 
 ```sh
