@@ -63,6 +63,13 @@ export const FLUSH_TALLY_MS = 60_000;
 export const RATE_WINDOW_MS = 10_000;
 export const MAX_FRAMES_PER_WINDOW = 2000;
 
+/**
+ * 人がいるあいだ、部屋を見回る間（ミリ秒）。Worker が落ちて接続が切れたときは、出ていく知らせが
+ * 来ないので、見回りで本当につながっている人を数え直し、一覧の人数を合わせ、だれもいなければ
+ * 消す時計を進め始める
+ */
+export const OCCUPIED_CHECK_MS = 60 * 60 * 1000;
+
 /** hello の前のものも含めて、1つの部屋が受ける WebSocket の数 */
 export const MAX_SOCKETS = MAX_MEMBERS * 2;
 
@@ -108,6 +115,8 @@ interface RoomRow extends Record<string, SqlStorageValue> {
   name: string;
   password_salt: ArrayBuffer | null;
   password_hash: ArrayBuffer | null;
+  /** 最後の1人が出た時刻。だれかいれば null */
+  emptied_at: number | null;
 }
 
 const seatOf = (ws: WebSocket): Seat | null => ws.deserializeAttachment() as Seat | null;
@@ -182,7 +191,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       password_salt BLOB,
       password_hash BLOB,
       host TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      emptied_at INTEGER
     )`);
     // ログインした人ごとの役割。部屋を作った人が GM になる
     sql.exec(`CREATE TABLE IF NOT EXISTS seats (
@@ -192,14 +202,16 @@ export class RoomDurableObject extends DurableObject<Env> {
     migrate(sql);
     sql.exec(`INSERT INTO seats (user_id, role) VALUES (?, 'gm')`, init.creatorUserId);
     sql.exec(
-      `INSERT INTO room (id, room_key, room_id, name, password_salt, password_hash, host, created_at)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO room
+         (id, room_key, room_id, name, password_salt, password_hash, host, created_at, emptied_at)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
       init.roomKey,
       init.roomId,
       init.name,
       password?.salt ?? null,
       password?.hash ?? null,
       init.host,
+      Date.now(),
       Date.now(),
     );
     // だれも入らなければ、入った人が出たときと同じく保持期間で消える
@@ -252,18 +264,37 @@ export class RoomDurableObject extends DurableObject<Env> {
     // 入ったあとの hello は何もしない
   }
 
-  override webSocketClose(ws: WebSocket): void {
+  override webSocketClose(ws: WebSocket, code: number, reason: string): void {
     this.drop(ws);
+    // 閉じてきたので、閉じ返して閉じる手順を終える。送れない番号（1005 など）なら 1000 で返す
+    try {
+      ws.close(code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000, reason);
+    } catch {
+      // もう閉じている
+    }
   }
 
   override webSocketError(ws: WebSocket): void {
     this.drop(ws);
   }
 
-  /** 最後の1人が出てから保持期間が過ぎた。部屋を一覧から外し、置いたものをすべて消す */
+  /**
+   * 部屋の時計。人がいれば見回り、一覧の人数を合わせて、また見回る。出ていくのを見届けないまま
+   * だれもいなくなっていたら（Worker が落ちたときなど）、そこから保持期間を数え始める。最後の1人が
+   * 出てから保持期間が過ぎていれば、部屋を一覧から外し、置いたものをすべて消す
+   */
   override async alarm(): Promise<void> {
-    if (this.seats().length > 0) return;
     const room = this.room();
+    if (room && this.seats().length > 0) {
+      await this.ctx.storage.setAlarm(Date.now() + OCCUPIED_CHECK_MS);
+      this.notifyLobby(room.room_key);
+      return;
+    }
+    if (room && room.emptied_at === null) {
+      this.markEmptied();
+      this.notifyLobby(room.room_key);
+      return;
+    }
     if (room) await this.lobby().remove(room.room_key);
     if (this.flushTimer !== null) clearTimeout(this.flushTimer);
     this.flushTimer = null;
@@ -361,7 +392,9 @@ export class RoomDurableObject extends DurableObject<Env> {
       serverTime: Date.now(),
     });
     this.post(ws, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents(seat) });
-    void this.ctx.storage.deleteAlarm();
+    // 人がいるあいだは消さずに見回る
+    this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');
+    void this.ctx.storage.setAlarm(Date.now() + OCCUPIED_CHECK_MS);
     if (previous) return;
     this.broadcast(ws, { type: 'join', member: memberOf(seat) });
     this.notifyLobby(seat.roomKey);
@@ -379,9 +412,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   private leave(seat: Seat): void {
     if (this.store.removeOwnedBy(seat.peerId).length > 0) this.scheduleFlush();
     this.broadcast(undefined, { type: 'leave', peerId: seat.peerId });
-    if (this.seats().length === 0) {
-      void this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
-    }
+    if (this.seats().length === 0) this.markEmptied();
     this.notifyLobby(seat.roomKey);
     this.record('leave', seat.role, (Date.now() - seat.joinedAt) / 1000);
   }
@@ -972,7 +1003,9 @@ export class RoomDurableObject extends DurableObject<Env> {
       .toArray();
     if (exists.length === 0) return null;
     return sql
-      .exec<RoomRow>('SELECT room_key, room_id, name, password_salt, password_hash, host FROM room')
+      .exec<RoomRow>(
+        'SELECT room_key, room_id, name, password_salt, password_hash, host, emptied_at FROM room',
+      )
       .one();
   }
 
@@ -989,6 +1022,12 @@ export class RoomDurableObject extends DurableObject<Env> {
       blobs: [room.host, event, detail],
       doubles: [value],
     });
+  }
+
+  /** だれもいなくなった。ここから保持期間を数える */
+  private markEmptied(): void {
+    this.ctx.storage.sql.exec('UPDATE room SET emptied_at = ?', Date.now());
+    void this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
   }
 
   private retentionMs(): number {

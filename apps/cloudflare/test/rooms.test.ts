@@ -18,7 +18,13 @@ import {
   SyncEvent,
 } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
-import { MAX_FRAMES_PER_WINDOW, MAX_SOCKETS, RATE_WINDOW_MS } from '../src/rooms/room';
+import { LOBBY_NAME } from '../src/rooms/lobby';
+import {
+  MAX_FRAMES_PER_WINDOW,
+  MAX_SOCKETS,
+  OCCUPIED_CHECK_MS,
+  RATE_WINDOW_MS,
+} from '../src/rooms/room';
 import type { RoomStore } from '../src/rooms/store';
 import { CHUNK_BYTES } from '../src/rooms/store';
 import { ORIGIN, freshIp } from './helpers';
@@ -233,6 +239,8 @@ describe('joining a room', () => {
 
     const left = await alice.client.next('leave');
     expect(left).toEqual({ type: 'leave', peerId: 'bob' });
+    // 閉じてきた人には閉じ返す
+    expect(await bob.client.closed).toEqual({ code: 1000, reason: 'bye' });
     expect(keysOf(left)).toEqual(keysOf(messages.server.leave));
     const rooms = await eventually(listRooms, (all) =>
       all.some((r) => r.roomKey === roomKey && r.members === 1),
@@ -386,6 +394,18 @@ describe('joining a room', () => {
     expect((await bob.client.next('error')).code).toBe('bad-message');
     expect(await alice.client.next('leave')).toEqual({ type: 'leave', peerId: 'bob' });
     await alice.client.expectQuiet();
+  });
+
+  it('closes back with the code it was closed with, or 1000 for a code it cannot send', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+
+    alice.client.ws.close(4000, 'later');
+    bob.client.ws.close();
+
+    expect(await alice.client.closed).toEqual({ code: 4000, reason: 'later' });
+    expect((await bob.client.closed).code).toBe(1000);
   });
 
   it('counts an error on a socket as leaving, and the close after it as nothing more', async () => {
@@ -862,24 +882,34 @@ describe('keeping the room', () => {
   });
 });
 
+/** 部屋が空になった時刻と、時計が鳴る時刻 */
+const clockOf = (roomKey: string) =>
+  runInDurableObject(stubOf(roomKey), async (_instance, state) => ({
+    emptiedAt: state.storage.sql
+      .exec<{ emptied_at: number | null }>('SELECT emptied_at FROM room')
+      .one().emptied_at,
+    alarm: await state.storage.getAlarm(),
+  }));
+
 describe('closing the room', () => {
   it('deletes the room once the last one has been gone for the retention', async () => {
     const roomKey = await createRoom();
     const { client } = await join(roomKey, 'alice');
     client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     await client.expectQuiet();
-    const waiting = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      state.storage.getAlarm(),
-    );
+    const occupied = await clockOf(roomKey);
 
     client.close();
-    await eventually(
-      () => runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm()),
-      (alarm) => alarm !== null,
+    const emptied = await eventually(
+      () => clockOf(roomKey),
+      (clock) => clock.emptiedAt !== null,
     );
     const ran = await runDurableObjectAlarm(stubOf(roomKey));
 
-    expect(waiting).toBeNull();
+    // 人がいるあいだの時計は見回り
+    expect(occupied.emptiedAt).toBeNull();
+    expect(occupied.alarm).toBeGreaterThan(Date.now() + OCCUPIED_CHECK_MS - 60_000);
+    expect(emptied.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
     expect(ran).toBe(true);
     expect((await listRooms()).some((room) => room.roomKey === roomKey)).toBe(false);
     expect((await upgrade(roomKey)).status).toBe(404);
@@ -895,7 +925,7 @@ describe('closing the room', () => {
     expect((await early.next('error')).code).toBe('room-not-found');
   });
 
-  it('keeps a room someone is in', async () => {
+  it('keeps a room someone is in, and looks again later', async () => {
     const roomKey = await createRoom();
     await join(roomKey, 'alice');
     await runInDurableObject(stubOf(roomKey), (_instance, state) =>
@@ -903,7 +933,29 @@ describe('closing the room', () => {
     );
 
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
-    expect((await listRooms()).some((room) => room.roomKey === roomKey)).toBe(true);
+    expect((await listRooms()).find((room) => room.roomKey === roomKey)?.members).toBe(1);
+    expect((await clockOf(roomKey)).alarm).toBeGreaterThan(Date.now() + OCCUPIED_CHECK_MS - 60_000);
+  });
+
+  it('counts afresh a room left without anyone seen going out, and deletes it after the retention', async () => {
+    // Worker が落ちて、出ていく知らせが来ないまま、つながっていた人がいなくなった部屋
+    const roomKey = await createRoom();
+    await runInDurableObject(stubOf(roomKey), (_instance, state) => {
+      state.storage.sql.exec('UPDATE room SET emptied_at = NULL');
+    });
+    await env.LOBBY.getByName(LOBBY_NAME).setMembers(roomKey, 2);
+
+    expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+    const counted = await eventually(listRooms, (all) =>
+      all.some((room) => room.roomKey === roomKey && room.members === 0),
+    );
+    const clock = await clockOf(roomKey);
+    expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+
+    expect(counted.some((room) => room.roomKey === roomKey)).toBe(true);
+    expect(clock.emptiedAt).not.toBeNull();
+    expect(clock.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
+    expect((await listRooms()).some((room) => room.roomKey === roomKey)).toBe(false);
   });
 
   it('cleans up a store that never became a room', async () => {
