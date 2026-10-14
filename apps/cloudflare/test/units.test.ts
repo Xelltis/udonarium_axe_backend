@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { setContentRange } from '../src/assets/response';
 import { ConfigError, parseConfig } from '../src/config';
 import { isAllowedOrigin } from '../src/http/origin';
 
@@ -21,6 +22,20 @@ describe('isAllowedOrigin', () => {
 
   it('lets every origin in with *', () => {
     expect(isAllowedOrigin('https://anywhere.example', ['*'])).toBe(true);
+  });
+});
+
+describe('setContentRange', () => {
+  it.each([
+    [{ offset: 10, length: 5 }, 'bytes 10-14/100', '5'],
+    [{ offset: 90 }, 'bytes 90-99/100', '10'],
+    [{ length: 20 }, 'bytes 0-19/100', '20'],
+    [{ suffix: 30 }, 'bytes 70-99/100', '30'],
+  ])('writes %o as %s', (range, contentRange, contentLength) => {
+    const headers = new Headers();
+    setContentRange(headers, range, 100);
+    expect(headers.get('Content-Range')).toBe(contentRange);
+    expect(headers.get('Content-Length')).toBe(contentLength);
   });
 });
 

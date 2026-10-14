@@ -150,17 +150,67 @@ describe('GET /v1/assets/:id', () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(file);
     expect(res.headers.get('Content-Type')).toBe('audio/ogg');
     expect(res.headers.get('Content-Length')).toBe('512');
-    expect(res.headers.get('ETag')).toBe(`"${id}"`);
+    expect(res.headers.get('ETag')).toBe((await env.ASSETS.head(id))?.httpEtag);
     expect(res.headers.get('Cache-Control')).toBe(`public, max-age=${WEEK_SECONDS}, immutable`);
+    expect(res.headers.get('Accept-Ranges')).toBe('bytes');
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(res.headers.get('Vary')).toBeNull();
   });
 
-  it('answers 304 to a request that already holds the asset', async () => {
-    const id = 'a'.repeat(64);
-    const res = await call(id, { headers: { 'If-None-Match': `"${id}"` } });
+  it('serves bytes stored without a type as plain octets', async () => {
+    const { file, id } = await freshFile();
+    await env.ASSETS.put(id, file);
+
+    const res = await call(id);
+
+    expect(res.headers.get('Content-Type')).toBe('application/octet-stream');
+  });
+
+  it.each([
+    ['its ETag', (etag: string) => etag],
+    ['its weak ETag', (etag: string) => `W/${etag}`],
+    ['a list holding its ETag', (etag: string) => `"other", ${etag}`],
+    ['*', () => '*'],
+  ])('answers 304 to a request holding %s', async (_name, ifNoneMatch) => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    const etag = (await env.ASSETS.head(id))?.httpEtag ?? '';
+
+    const res = await call(id, { headers: { 'If-None-Match': ifNoneMatch(etag) } });
+
     expect(res.status).toBe(304);
+    expect(await res.text()).toBe('');
+    expect(res.headers.get('ETag')).toBe(etag);
+    expect(res.headers.get('Cache-Control')).toBe(`public, max-age=${WEEK_SECONDS}, immutable`);
+  });
+
+  it('answers 404, not 304, when the asset the browser holds is gone', async () => {
+    const { id } = await freshFile();
+    const res = await call(id, { headers: { 'If-None-Match': `"${id}"` } });
+    expect(res.status).toBe(404);
+  });
+
+  it('answers 412 when the asset does not match If-Match', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+
+    const res = await call(id, { headers: { 'If-Match': '"other"' } });
+
+    expect(res.status).toBe(412);
+    expect(await res.json()).toEqual({ error: 'precondition-failed' });
+  });
+
+  it('answers a byte range with 206', async () => {
+    const { file, id } = await freshFile(OGG_HEAD, 100);
+    await put(id, file);
+
+    const res = await call(id, { headers: { Range: 'bytes=10-19' } });
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('Content-Range')).toBe('bytes 10-19/100');
+    expect(res.headers.get('Content-Length')).toBe('10');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(file.subarray(10, 20));
   });
 
   it('answers 404 for an asset that is not there and 400 for a bad name', async () => {
@@ -186,6 +236,24 @@ describe('HEAD /v1/assets/:id', () => {
     expect(present.headers.get('Content-Type')).toBe('image/png');
     expect(present.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(await present.text()).toBe('');
+  });
+
+  it('opens no stream from R2', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    const get = vi.spyOn(env.ASSETS, 'get');
+    const head = vi.spyOn(env.ASSETS, 'head');
+
+    await call(id, { method: 'HEAD' });
+
+    expect(get).not.toHaveBeenCalled();
+    expect(head).toHaveBeenCalledWith(id);
+  });
+
+  it('answers 404 to a browser holding an asset that is gone', async () => {
+    const { id } = await freshFile();
+    const res = await call(id, { method: 'HEAD', headers: { 'If-None-Match': `"${id}"` } });
+    expect(res.status).toBe(404);
   });
 });
 

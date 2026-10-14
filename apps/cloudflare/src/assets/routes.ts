@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
+import { objectHeaders, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
 
@@ -18,46 +20,42 @@ export const MAX_BYTES: Readonly<Record<AssetKind, number>> = {
 
 const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));
 
-/**
- * 配信のキャッシュ期間（7日）。中身は名前で決まるので古くならないが、
- * バケットの保持期間（30日）より長く CDN に残らないよう短めにする。
- */
-const CACHE_CONTROL = 'public, max-age=604800, immutable';
-
 const toHex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
-const objectHeaders = (id: string, object: R2Object): Headers => {
-  const headers = new Headers();
-  headers.set('Content-Type', object.httpMetadata?.contentType ?? 'application/octet-stream');
-  headers.set('Content-Length', String(object.size));
-  headers.set('ETag', `"${id}"`);
-  headers.set('Cache-Control', CACHE_CONTROL);
-  headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  return headers;
-};
-
 export const assetRoutes = new Hono<AppEnv>();
 
-assetRoutes.on('HEAD', '/:id', async (c) => {
-  const id = c.req.param('id');
-  if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
+/** HEAD は R2 の head で答え、中身のストリームを開かない */
+const headAsset = async (c: Context<AppEnv>, id: string) => {
   const object = await c.env.ASSETS.head(id);
-  if (!object) return c.body(null, 404);
-  return c.body(null, 200, Object.fromEntries(objectHeaders(id, object)));
-});
+  if (!object) return fail(c, 404, 'not-found');
+  return new Response(null, { status: 200, headers: objectHeaders(object) });
+};
 
+// Hono は HEAD も GET の経路に回し、返した本文を捨てる。
 assetRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
-  // 名前が中身のハッシュなので、ETag が合えば読まずに 304 を返せる
-  if (c.req.header('If-None-Match') === `"${id}"`) {
-    return c.body(null, 304, { ETag: `"${id}"`, 'Cache-Control': CACHE_CONTROL });
-  }
-  const object = await c.env.ASSETS.get(id);
+  if (c.req.method === 'HEAD') return headAsset(c, id);
+
+  // 条件付きリクエストと Range は R2 に任せる。条件が合わないと、R2 は本文の無いものを返す
+  const headers = c.req.raw.headers;
+  const object = await c.env.ASSETS.get(id, { onlyIf: headers, range: headers });
   if (!object) return fail(c, 404, 'not-found');
-  return c.body(object.body, 200, Object.fromEntries(objectHeaders(id, object)));
+
+  const responseHeaders = objectHeaders(object);
+  if (!('body' in object)) {
+    if (headers.has('If-Match') || headers.has('If-Unmodified-Since')) {
+      return fail(c, 412, 'precondition-failed');
+    }
+    responseHeaders.delete('Content-Length');
+    return new Response(null, { status: 304, headers: responseHeaders });
+  }
+  if (headers.has('Range') && object.range) {
+    setContentRange(responseHeaders, object.range, object.size);
+    return new Response(object.body, { status: 206, headers: responseHeaders });
+  }
+  return new Response(object.body, { status: 200, headers: responseHeaders });
 });
 
 assetRoutes.put('/:id', async (c) => {

@@ -29,18 +29,19 @@ SVGは中にスクリプトを書けるので受け付けません。
 
 本文は`{"error": "<コード>"}`の形です。
 
-| 状態 | コード               | 起きるとき                                   |
-| ---- | -------------------- | -------------------------------------------- |
-| 400  | `invalid-id`         | 名前が64文字の小文字16進でない               |
-| 400  | `hash-mismatch`      | 本文のハッシュが名前と合わない               |
-| 403  | `origin-not-allowed` | PUTのOriginが許可リストにない                |
-| 404  | `not-found`          | その名前の中身が置かれていない               |
-| 411  | `length-required`    | PUTに`Content-Length`がない                  |
-| 413  | `too-large`          | 種類ごとの上限を超えている                   |
-| 415  | `unsupported-type`   | 受け付ける画像でも音声でもない               |
-| 429  | `rate-limited`       | 同じIPからのアップロードが1分に100件を超えた |
-| 500  | `config-invalid`     | 環境変数が足りないか、形が違う               |
-| 500  | `internal-error`     | それ以外の失敗                               |
+| 状態 | コード                | 起きるとき                                       |
+| ---- | --------------------- | ------------------------------------------------ |
+| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                   |
+| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                   |
+| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                    |
+| 404  | `not-found`           | その名前の中身が置かれていない                   |
+| 411  | `length-required`     | PUTに`Content-Length`がない                      |
+| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない |
+| 413  | `too-large`           | 種類ごとの上限を超えている                       |
+| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                   |
+| 429  | `rate-limited`        | 同じIPからのアップロードが1分に100件を超えた     |
+| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                   |
+| 500  | `internal-error`      | それ以外の失敗                                   |
 
 `config-invalid`のときは、足りない設定の名前がWorkerのログに出ます。
 

@@ -9,6 +9,7 @@ export type ErrorCode =
   | 'origin-not-allowed'
   | 'not-found'
   | 'length-required'
+  | 'precondition-failed'
   | 'too-large'
   | 'unsupported-type'
   | 'rate-limited'
@@ -17,7 +18,7 @@ export type ErrorCode =
 
 export const fail = (
   c: Context,
-  status: 400 | 403 | 404 | 411 | 413 | 415 | 429 | 500,
+  status: 400 | 403 | 404 | 411 | 412 | 413 | 415 | 429 | 500,
   error: ErrorCode,
 ) => c.json({ error }, status);
 
