@@ -172,12 +172,13 @@ WebSocketにつなぎ替えます（`101`）。
 | `DELETE_GAME_OBJECT`      | 消して印を残し、宛先にかかわらずほかの全員に配る                                                                             |
 | `FORGET_DELETED_OBJECTS`  | 消した印を外し、ほかの全員に配る。見学者からのものは受けない                                                                 |
 | `ROLE_REQUEST`            | 宛先がサーバーか、宛先なしなら、役割を変える（→ [役割を変える](/cloudflare/login#役割を変える)）                             |
+| `ROLL_REQUEST`            | 宛先がサーバーか、宛先なしなら、ダイスを振って結果の発言を全員に配る（→ [サーバーで振るダイス](#サーバーで振るダイス)）      |
 | `SYNCHRONIZE_GAME_OBJECT` | 宛先がサーバーか、宛先なしなら、サーバーが答える。足りないものを取り寄せ、消したものは消させる                               |
 | `REQUEST_GAME_OBJECT`     | 宛先がサーバーか、宛先なしなら、サーバーが持っているものを返す                                                               |
 | `REQUEST_CATALOG`         | 宛先がサーバーか、宛先なしなら、サーバーのカタログを返す                                                                     |
 
 カタログは、1つのイベントに2048件ずつ入れます。
-宛先がほかの参加者になっている`SYNCHRONIZE_GAME_OBJECT`・`REQUEST_GAME_OBJECT`・`REQUEST_CATALOG`・`ROLE_REQUEST`は、読まずにその人へ届けます。
+宛先がほかの参加者になっている`SYNCHRONIZE_GAME_OBJECT`・`REQUEST_GAME_OBJECT`・`REQUEST_CATALOG`・`ROLE_REQUEST`・`ROLL_REQUEST`は、読まずにその人へ届けます。
 
 `PeerCursor`の`syncData.role`は、いつもサーバーが決めた役割で上書きします。
 送った役割と違っていたら、送り主には直したものを`AUTHORITATIVE_OBJECT`で返します。
@@ -191,6 +192,59 @@ WebSocketにつなぎ替えます（`101`）。
 | `AUTHORITATIVE_OBJECT` | オブジェクトの中身（`ObjectContext`） | 版にかかわらず置き換え、消した印も外す。書く権限の無い変更を戻すときと、サーバーが直したものを渡すときに使う |
 | `WITHDRAW_GAME_OBJECT` | `{ identifier }`                      | 消した印を残さずに、手元から外す。書く権限の無い人が作ったものを取り下げさせるときに使う                     |
 | `ROLE_REJECTED`        | `{ peerId, role, reason }`            | `ROLE_REQUEST`を断った。理由は[役割を変える](/cloudflare/login#役割を変える)にある                           |
+
+## サーバーで振るダイス
+
+チャットのダイスのコマンドは、サーバーがBCDiceで振ります。
+振った人の手元で振らないので、結果を書き換えて送ることはできません。
+
+Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用意し、まだ手元には置かずに、コマンドと一緒にサーバーへ送ります。
+
+```json
+{
+  "eventName": "ROLL_REQUEST",
+  "data": {
+    "message": {
+      "aliasName": "chat",
+      "identifier": "…",
+      "majorVersion": 1,
+      "minorVersion": 0.5,
+      "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
+    },
+    "command": "2d6+3",
+    "gameSystem": "SwordWorld2.5",
+    "speaker": "Kai",
+    "suffix": " [ゴブリン]"
+  }
+}
+```
+
+| フィールド   | 内容                                                                      |
+| ------------ | ------------------------------------------------------------------------- |
+| `message`    | 用意した結果の発言                                                        |
+| `command`    | 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい |
+| `gameSystem` | ゲームシステムのID。知らないものなら`DiceBot`で振る                       |
+| `speaker`    | 発言した人の名前                                                          |
+| `suffix`     | 結果の文面の後ろに付けるもの（対象のキャラの名前など）。省いてよい        |
+
+サーバーは振った結果で、発言の次の項目を埋め、新しい発言として全員に配ります（振った人にも届きます）。
+
+| 項目         | 入れるもの                                                           |
+| ------------ | -------------------------------------------------------------------- |
+| `value`      | 結果の文面（`DiceBot : (1D6) → 4`の形。Axeが自分で振ったときと同じ） |
+| `dicebot`    | 出目と成否のJSON                                                     |
+| `tag`        | `system`。シークレットダイスなら`system secret`                      |
+| `name`       | `<BCDice：名前>`。シークレットダイスなら`<Secret-BCDice：名前>`      |
+| `from`       | `System-BCDice`                                                      |
+| `originFrom` | 振った人の`userId`                                                   |
+| `serverRoll` | `true`                                                               |
+
+- コマンドでなければ、何も配りません。
+- 見学者は、見学者も話せるタブでだけ振れます。
+- サーバーが振った発言は、あとから`value`・`dicebot`・`tag`・`name`・`from`・`originFrom`を書き換えられません（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
+- `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。
+- ダイス表やリソースの操作は、これまでどおりAxeが手元で処理します。
+- BCDiceの版は、Axeと揃えます（いまは4.10.0）。
 
 ## 見学者が書けるもの
 

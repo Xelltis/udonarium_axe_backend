@@ -53,16 +53,17 @@ Axeを配信しているページのOriginを書きます。
 
 Workerが使うCloudflareの資源です。
 
-| 名前             | 種類           | 内容                                                                                  |
-| ---------------- | -------------- | ------------------------------------------------------------------------------------- |
-| `ASSETS`         | R2バケット     | 画像と音声の置き場。名前は書かず、最初のデプロイで「<Workerの名前>-assets」が作られる |
-| `ROOMS`          | Durable Object | 部屋ごとに1つ（`RoomDurableObject`）。名前は部屋の鍵                                  |
-| `LOBBY`          | Durable Object | 部屋の一覧（`LobbyDurableObject`）。Workerに1つ                                       |
-| `ACCOUNTS`       | Durable Object | ログインした人ごとに1つ（`AccountDurableObject`）。名前は`discord:<ID>`               |
-| `UPLOAD_LIMITER` | レート制限     | 新しく置くPUTを、送信元ごとに1分100件まで                                             |
-| `READ_LIMITER`   | レート制限     | R2を読むGETとHEADを、送信元ごとに1分600件まで                                         |
-| `ROOM_LIMITER`   | レート制限     | 部屋を作る・部屋に入るのを、送信元ごとに合わせて1分30回まで                           |
-| `AUTH_LIMITER`   | レート制限     | Discordから戻るのとトークンを発行するのを、送信元ごとに合わせて1分60回まで            |
+| 名前             | 種類             | 内容                                                                                                         |
+| ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `ASSETS`         | R2バケット       | 画像と音声の置き場。名前は書かず、最初のデプロイで「<Workerの名前>-assets」が作られる                        |
+| `ROOMS`          | Durable Object   | 部屋ごとに1つ（`RoomDurableObject`）。名前は部屋の鍵                                                         |
+| `LOBBY`          | Durable Object   | 部屋の一覧（`LobbyDurableObject`）。Workerに1つ                                                              |
+| `ACCOUNTS`       | Durable Object   | ログインした人ごとに1つ（`AccountDurableObject`）。名前は`discord:<ID>`                                      |
+| `UPLOAD_LIMITER` | レート制限       | 新しく置くPUTを、送信元ごとに1分100件まで                                                                    |
+| `READ_LIMITER`   | レート制限       | R2を読むGETとHEADを、送信元ごとに1分600件まで                                                                |
+| `ROOM_LIMITER`   | レート制限       | 部屋を作る・部屋に入るのを、送信元ごとに合わせて1分30回まで                                                  |
+| `AUTH_LIMITER`   | レート制限       | Discordから戻るのとトークンを発行するのを、送信元ごとに合わせて1分60回まで                                   |
+| `METRICS`        | Analytics Engine | 部屋で起きたことを書くデータセット`udonarium_axe_rooms`（→ [部屋の記録](/cloudflare/operations#部屋の記録)） |
 
 Durable Objectsは、SQLiteに状態を置く種類です。
 `wrangler.jsonc`の`migrations`に書いてあるので、最初のデプロイで作られます。

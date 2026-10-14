@@ -91,7 +91,35 @@ GMと参加者4人、画像150枚（平均250KB）とBGM・効果音を使う部
 - **Workersのダッシュボード**：リクエスト数、エラーの割合、CPU時間。`observability`を有効にしてあるので、ログもダッシュボードで見られます。
 - **R2のダッシュボード**：バケットの大きさと、Class A・Class Bの操作数。
 - **Durable Objectsのダッシュボード**：リクエスト数、動いていた時間（GB-s）、SQLiteの読み書きした行と大きさ。
+- **部屋の記録（Workers Analytics Engine）**：下の「部屋の記録」を見てください。
 - **Cloudflareの請求の通知**：思わぬ使われかたに早く気づけるよう、請求額の通知を設定しておくと安心です。
+
+## 部屋の記録
+
+部屋のサーバーは、次のことをWorkers Analytics Engineのデータセット`udonarium_axe_rooms`に書きます。
+データセットは最初に書いたときに作られるので、用意するものはありません。
+無料プランでは1日10万点まで書けます。書き込みの数は1分ごとにまとめて1点にするので、4時間の卓で書くのは300点ほどです。
+
+| `blob2`（出来事） | `blob3`（中身）  | `double1`（量）                                           |
+| ----------------- | ---------------- | --------------------------------------------------------- |
+| `join`            | 役割             | 部屋にいる人数                                            |
+| `leave`           | 役割             | つないでいた秒数                                          |
+| `refuse`          | 接続を閉じた理由 | 1                                                         |
+| `flush`           | （空）           | 1分のあいだに書いた変更の数（部屋が空になったときも書く） |
+| `roll`            | ゲームシステム   | 振るのにかかったミリ秒                                    |
+
+`index1`は部屋の鍵、`blob1`はWorkerのホスト名です。
+同じアカウントのWorkerは同じデータセットに書くので、`blob1`で分けて見ます。
+
+SQL APIで読むには、`Account Analytics Read`の権限を付けたAPIトークンを使います。
+
+```sh
+curl "https://api.cloudflare.com/client/v4/accounts/<アカウントID>/analytics_engine/sql" \
+  -H "Authorization: Bearer <APIトークン>" \
+  --data "SELECT blob2 AS event, blob3 AS detail, count() AS n FROM udonarium_axe_rooms
+          WHERE blob1 = 'assets.example.com' AND timestamp > NOW() - INTERVAL '1' DAY
+          GROUP BY event, detail ORDER BY n DESC"
+```
 
 ## 特定の画像を消したいとき
 
