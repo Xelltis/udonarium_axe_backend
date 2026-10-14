@@ -55,9 +55,12 @@ const tabOf = (identifier: string, guestCanSpeak: boolean) =>
     'chat-tab',
   );
 
-/** PL の alice と bob、見学者の carol がいる部屋。タブ main は見学者も話せる */
-const room = async () => {
-  const roomKey = await createRoom();
+/**
+ * PL の alice と bob、見学者の carol がいる部屋。タブ main は見学者も話せる。creator を
+ * 指定すれば、その人が GM になる
+ */
+const room = async (creator?: string) => {
+  const roomKey = await createRoom({}, creator);
   const alice = await join(roomKey, 'alice');
   const bob = await join(roomKey, 'bob');
   const carol = await join(roomKey, 'carol', { accessToken: null });
@@ -242,6 +245,73 @@ describe('a rolled result', () => {
 
     expect(attributes((await clients.alice.events())[0].data).bookmarkedAt).toBe(7);
     await clients.bob.expectQuiet();
+  });
+
+  /** alice がシークレットで振り、全員に届いた結果（alice には中身ごと） */
+  const secretIn = async (clients: Awaited<ReturnType<typeof room>>) => {
+    clients.alice.emit([rollRequest('rolled', 's1d1')]);
+    const [{ data }] = await clients.alice.events();
+    await clients.bob.events();
+    await clients.carol.events();
+    return data as Message;
+  };
+
+  it('can be disclosed by the one who rolled it, and then reaches everyone whole', async () => {
+    const clients = await room();
+    const original = await secretIn(clients);
+
+    const disclosed = edited(original, original.syncData.value, { tag: 'system', disclosedAt: 9 });
+    clients.alice.emit([{ eventName: SyncEvent.UPDATE, data: disclosed }]);
+
+    for (const client of [clients.bob, clients.carol]) {
+      expect((await client.events())[0].data).toEqual(disclosed);
+    }
+    await clients.alice.expectQuiet();
+  });
+
+  it('can be disclosed by the GM', async () => {
+    const clients = await room('bob');
+    const original = await secretIn(clients);
+
+    const disclosed = edited(original, original.syncData.value, { tag: 'system' });
+    clients.bob.emit([{ eventName: SyncEvent.UPDATE, data: disclosed }]);
+
+    expect((await clients.carol.events())[0].data).toEqual(disclosed);
+  });
+
+  it('cannot be disclosed by anyone else, nor have its tag changed in any other way', async () => {
+    const clients = await room();
+    const secret = await secretIn(clients);
+    const tagOf = async () => attributes((await clients.alice.events())[0].data).tag;
+
+    // bob の手元にあるのは伏せた形
+    clients.bob.emit([
+      { eventName: SyncEvent.UPDATE, data: edited(secret, '', { tag: 'system', dicebot: '' }) },
+    ]);
+    const byOther = await tagOf();
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: { ...edited(secret, secret.syncData.value, { tag: 'secret' }), majorVersion: 3 },
+      },
+    ]);
+
+    expect(byOther).toBe('system secret');
+    expect((await clients.bob.events())[0]).toMatchObject({
+      eventName: AuthorityEvent.AUTHORITATIVE,
+    });
+    expect(attributes((await clients.alice.events())[0].data).tag).toBe('system secret');
+  });
+
+  it('cannot have the tag of an open roll changed even by the one who rolled it', async () => {
+    const clients = await room();
+    const original = await rolledIn(clients);
+
+    clients.alice.emit([
+      { eventName: SyncEvent.UPDATE, data: edited(original, original.syncData.value, { tag: '' }) },
+    ]);
+
+    expect(attributes((await clients.bob.events())[0].data).tag).toBe('system');
   });
 
   it('is never claimed by a message the server did not roll', async () => {

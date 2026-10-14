@@ -128,6 +128,12 @@ type Reply = (eventName: string, data: unknown) => void;
 /** 受け取る人ごとの束に、イベントを1つ足す */
 type Push = (ws: WebSocket, event: EventContext) => void;
 
+/** シークレットの tag から secret の語を外したものか。Axe の公開（discloseMessage）が書き換える形 */
+const isDisclosureOf = (secretTag: unknown, tag: unknown): boolean => {
+  const words = String(secretTag).trim().split(/\s+/);
+  return words.includes('secret') && tag === words.filter((word) => word !== 'secret').join(' ');
+};
+
 /** サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value も） */
 const ROLLED_ATTRIBUTES = ['dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
 
@@ -551,7 +557,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       return this.refuseWrite(identifier, seat, reply);
     }
     if (aliasName === CHAT_MESSAGE_ALIAS) {
-      const kept = this.keepRolledFields(context);
+      const kept = this.keepRolledFields(context, seat);
       corrected = kept !== context;
       context = kept;
     }
@@ -667,10 +673,12 @@ export class RoomDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * サーバーが振った結果の発言は、結果と名前と送り主を書き換えさせない。サーバーが振っていない発言には、
-   * サーバーが振った印を付けさせない。直したら、直した中身を返す（直さなければ受けたまま）
+   * サーバーが振った結果の発言は、結果と名前と送り主を書き換えさせない。ただし振った人と GM は、
+   * シークレットを公開してよい（tag から secret の語を外すことだけ。Axe の discloseMessage と同じ）。
+   * サーバーが振っていない発言には、サーバーが振った印を付けさせない。直したら、直した中身を返す
+   * （直さなければ受けたまま）
    */
-  private keepRolledFields(context: ObjectContext): ObjectContext {
+  private keepRolledFields(context: ObjectContext, seat: Seat): ObjectContext {
     const stored = this.store.get(context.identifier);
     const attributes = attributesOf(context);
     if (stored === null || attributesOf(stored)[SERVER_ROLL_FIELD] !== true) {
@@ -685,7 +693,11 @@ export class RoomDurableObject extends DurableObject<Env> {
         },
       };
     }
-    const kept = attributesOf(stored);
+    const original = attributesOf(stored);
+    const disclosed =
+      (original.originFrom === seat.userId || seat.role === 'gm') &&
+      isDisclosureOf(original.tag, attributes.tag);
+    const kept = disclosed ? { ...original, tag: attributes.tag } : original;
     const changed =
       context.syncData.value !== stored.syncData.value ||
       ROLLED_ATTRIBUTES.some((field) => attributes[field] !== kept[field]);
