@@ -16,6 +16,8 @@ declare namespace Cloudflare {
     LOBBY: DurableObjectNamespace<import('./rooms/lobby').LobbyDurableObject>;
     /** ログインした人ごとに1つ。名前は `discord:<ID>` */
     ACCOUNTS: DurableObjectNamespace<import('./auth/account').AccountDurableObject>;
+    /** 部屋で起きたこと（出入り、閉じた理由、書き込み、ダイス）を書く Workers Analytics Engine */
+    METRICS: AnalyticsEngineDataset;
     /** 部屋を作る回数と、部屋につなぐ回数を送信元ごとに数えるレート制限 */
     ROOM_LIMITER: RateLimit;
     /** ログインとトークンの発行を送信元ごとに数えるレート制限 */

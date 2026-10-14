@@ -67,7 +67,12 @@ export interface RoomInit {
   password: string;
   /** 部屋を作った人のユーザー ID。この人が GM になる */
   creatorUserId: string;
+  /** 受けた Worker のホスト名。同じアカウントに置いた別の Worker と、記録を分けるのに使う */
+  host: string;
 }
+
+/** Workers Analytics Engine に書く出来事 */
+type RoomEvent = 'join' | 'leave' | 'refuse' | 'flush' | 'roll';
 
 /**
  * 接続ごとの情報。WebSocket に添えて置くので、Hibernation から起き直しても残る。
@@ -82,12 +87,15 @@ interface Seat {
   role: PeerRole;
   /** ログインして入った。ログインしていない人は見学のまま、役割を変えられない */
   account: boolean;
+  /** 入った時刻（Unix ミリ秒） */
+  joinedAt: number;
   /** サーバーが閉じた（断った、または同じピア ID の新しい接続に替わった） */
   closed?: boolean;
 }
 
 interface RoomRow extends Record<string, SqlStorageValue> {
   room_key: string;
+  host: string;
   room_id: string;
   name: string;
   password_salt: ArrayBuffer | null;
@@ -154,6 +162,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       name TEXT NOT NULL,
       password_salt BLOB,
       password_hash BLOB,
+      host TEXT NOT NULL,
       created_at INTEGER NOT NULL
     )`);
     // ログインした人ごとの役割。部屋を作った人が GM になる
@@ -164,13 +173,14 @@ export class RoomDurableObject extends DurableObject<Env> {
     migrate(sql);
     sql.exec(`INSERT INTO seats (user_id, role) VALUES (?, 'gm')`, init.creatorUserId);
     sql.exec(
-      `INSERT INTO room (id, room_key, room_id, name, password_salt, password_hash, created_at)
-       VALUES (1, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO room (id, room_key, room_id, name, password_salt, password_hash, host, created_at)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
       init.roomKey,
       init.roomId,
       init.name,
       password?.salt ?? null,
       password?.hash ?? null,
+      init.host,
       Date.now(),
     );
     // だれも入らなければ、入った人が出たときと同じく保持期間で消える
@@ -268,6 +278,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       roomKey: room.room_key,
       role: 'guest',
       account: false,
+      joinedAt: Date.now(),
     };
     if (hello.accessToken) {
       const secret = this.sessionSecret();
@@ -331,6 +342,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (previous) return;
     this.broadcast(ws, { type: 'join', member: memberOf(seat) });
     this.notifyLobby(seat.roomKey);
+    this.record('join', seat.role, this.seats().length);
   }
 
   private drop(ws: WebSocket): void {
@@ -348,6 +360,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       void this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
     }
     this.notifyLobby(seat.roomKey);
+    this.record('leave', seat.role, (Date.now() - seat.joinedAt) / 1000);
   }
 
   /** 理由を送ってから閉じる。入っていた人なら、出たことにする */
@@ -358,6 +371,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (code !== 'replaced') this.leave(seat);
     }
     this.post(ws, { type: 'error', code, protocolVersion: PROTOCOL_VERSION });
+    this.record('refuse', code, 1);
     try {
       ws.close(CLOSE_CODE, code);
     } catch {
@@ -573,7 +587,9 @@ export class RoomDurableObject extends DurableObject<Env> {
 
     this.rollQueue = this.rollQueue
       .then(async () => {
+        const started = Date.now();
         const rolled = await rollLine(request.gameSystem, request.command);
+        this.record('roll', request.gameSystem, Date.now() - started);
         // 振っているあいだに、同じ識別子のものが置かれていたら作らない
         const taken =
           this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
@@ -748,7 +764,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   private scheduleFlush(): void {
     this.flushTimer ??= setTimeout(() => {
       this.flushTimer = null;
-      this.store.flush();
+      this.record('flush', '', this.store.flush());
     }, FLUSH_DELAY_MS);
   }
 
@@ -760,8 +776,23 @@ export class RoomDurableObject extends DurableObject<Env> {
       .toArray();
     if (exists.length === 0) return null;
     return sql
-      .exec<RoomRow>('SELECT room_key, room_id, name, password_salt, password_hash FROM room')
+      .exec<RoomRow>('SELECT room_key, room_id, name, password_salt, password_hash, host FROM room')
       .one();
+  }
+
+  /**
+   * 部屋で起きたことを Workers Analytics Engine に1点書く。index は部屋の鍵、blob は Worker のホスト名・
+   * 出来事・その中身（役割、閉じた理由、ゲームシステム）、double はその量（人数、つないでいた秒、
+   * 書いた変更の数、振るのにかかったミリ秒）。部屋が消えたあとなら書かない
+   */
+  private record(event: RoomEvent, detail: string, value: number): void {
+    const room = this.room();
+    if (!room) return;
+    this.env.METRICS.writeDataPoint({
+      indexes: [room.room_key],
+      blobs: [room.host, event, detail],
+      doubles: [value],
+    });
   }
 
   private retentionMs(): number {

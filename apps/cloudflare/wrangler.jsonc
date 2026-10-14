@@ -17,6 +17,9 @@
       { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
     ],
   },
+  // 部屋で起きたことを書く。データセットは最初に書いたときに作られる。
+  // 同じアカウントの Worker で共有するので、書くときに Worker のホスト名を付けて分ける
+  "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "udonarium_axe_rooms" }],
   // 足すときは tag を増やす。いまある tag は書き換えない
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "LobbyDurableObject"] },

@@ -193,8 +193,9 @@ export class RoomStore {
     this.pending.set(identifier, { ...this.pending.get(identifier), ...write });
   }
 
-  /** まとめておいた変更を1つのトランザクションで書く */
-  flush(): void {
+  /** まとめておいた変更を1つのトランザクションで書く。書いた識別子の数を返す */
+  flush(): number {
+    const count = this.pending.size;
     const sql = this.storage.sql;
     this.storage.transactionSync(() => {
       for (const [identifier, write] of this.pending) {
@@ -218,6 +219,7 @@ export class RoomStore {
       }
     });
     this.pending.clear();
+    return count;
   }
 
   private writeObject(context: ObjectContext, owner: string | null): void {

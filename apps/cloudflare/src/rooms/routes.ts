@@ -55,6 +55,7 @@ roomRoutes.post('/', async (c) => {
     name: parsed.output.name,
     password: parsed.output.password ?? '',
     creatorUserId: claims.uid,
+    host: new URL(c.req.url).host,
   });
   return c.json<CreateRoomResponse>({ roomKey, roomId }, 201);
 });
