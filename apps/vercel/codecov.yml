@@ -1,0 +1,27 @@
+# https://docs.codecov.com/docs/codecov-yaml
+#
+# このリポジトリは vitest 側 (vitest.config.ts の coverage.thresholds) と
+# scripts/check-coverage.ts の二重で 100% を強制している。Codecov のステータスも
+# 同じ基準に揃え、threshold: 0% で一切の低下を許容しない。
+
+coverage:
+  status:
+    project:
+      default:
+        target: 100%
+        threshold: 0%
+    patch:
+      default:
+        target: 100%
+        threshold: 0%
+
+# vitest.config.ts の coverage.exclude と対応させる。
+# lcov 側にも出力されないが、レポーター設定が変わっても意図が崩れないよう明示する。
+ignore:
+  - 'src/**/types.ts'
+  - 'src/http/context.ts'
+
+comment:
+  layout: 'reach, diff, flags, files'
+  behavior: default
+  require_changes: true

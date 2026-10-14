@@ -1,0 +1,67 @@
+{
+  "name": "udonarium-backend-vercel",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "env": "vercel env pull",
+    "start": "vercel dev",
+    "deploy": "vercel",
+    "deploy:prod": "vercel --prod",
+    "test": "vitest --run --coverage",
+    "lint": "npx eslint .",
+    "typecheck": "tsc --noEmit",
+    "coverage:check": "tsx ./scripts/check-coverage.ts --threshold 100"
+  },
+  "dependencies": {
+    "@hono/valibot-validator": "^0.6.1",
+    "hono": "^4.13.3",
+    "valibot": "^1.4.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@skyway-sdk/token": "^2.1.5",
+    "@types/node": "^24.13.3",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.9.0",
+    "eslint-config-prettier": "^10.1.8",
+    "jiti": "^2.7.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vercel": "^59.3.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.11",
+    "zx": "^8.8.5"
+  },
+  "overrides": {
+    "path-to-regexp": "^8.3.0",
+    "undici": "^7.29.0",
+    "diff": "^8.0.3",
+    "tar": "^7.5.22",
+    "srvx": "^0.11.13",
+    "smol-toml": "^1.6.1",
+    "minimatch": "^10.2.5",
+    "brace-expansion": "^5.0.9",
+    "axios": "^1.19.0",
+    "form-data": "^4.0.6",
+    "fast-uri": "^3.1.5",
+    "ip-address": "^10.4.0",
+    "postcss": "^8.5.25",
+    "nanoid": "^3.3.18",
+    "esbuild": "^0.28.1",
+    "@tootallnate/once": "^3.0.1",
+    "@vercel/python-analysis": {
+      "js-yaml": "^4.3.1"
+    },
+    "@vercel/static-config": {
+      "ajv": "^8.20.0"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}
