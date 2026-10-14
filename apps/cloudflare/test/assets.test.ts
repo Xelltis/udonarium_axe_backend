@@ -1,4 +1,4 @@
-import { createExecutionContext, env } from 'cloudflare:test';
+import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MAX_BYTES } from '../src/assets/routes';
@@ -227,6 +227,32 @@ describe('GET /v1/assets/:id', () => {
     expect(res.headers.get('Content-Type')).toBe('application/octet-stream');
   });
 
+  it('keeps a copy in the data centre and serves it from there', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    const ctx = createExecutionContext();
+    const first = await app.fetch(new Request(`${BASE}/${id}`), env, ctx);
+    await first.arrayBuffer();
+    await waitOnExecutionContext(ctx);
+    // R2 から消しても、データセンターのキャッシュから返る。R2 の読み出しにも数えない
+    await env.ASSETS.delete(id);
+    const ip = freshIp();
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await call(id, { headers: { 'CF-Connecting-IP': ip } });
+      statuses.push(res.status);
+      await res.arrayBuffer();
+    }
+    const revalidated = await call(id, {
+      headers: { 'If-None-Match': first.headers.get('ETag') ?? '' },
+    });
+
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
+    expect(revalidated.status).toBe(304);
+    expect(revalidated.headers.get('Access-Control-Allow-Origin')).toBe('*');
+  });
+
   it.each([
     ['its ETag', (etag: string) => etag],
     ['its weak ETag', (etag: string) => `W/${etag}`],
@@ -273,6 +299,16 @@ describe('GET /v1/assets/:id', () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(file.subarray(10, 20));
   });
 
+  it('stops one address once it has read its share from R2', async () => {
+    const ip = freshIp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const { id } = await freshFile();
+      statuses.push((await call(id, { headers: { 'CF-Connecting-IP': ip } })).status);
+    }
+    expect(statuses).toEqual([404, 404, 404, 404, 404, 429]);
+  });
+
   it('answers 404 for an asset that is not there and 400 for a bad name', async () => {
     const { id } = await freshFile();
     const missing = await call(id);
@@ -314,6 +350,17 @@ describe('HEAD /v1/assets/:id', () => {
     const { id } = await freshFile();
     const res = await call(id, { method: 'HEAD', headers: { 'If-None-Match': `"${id}"` } });
     expect(res.status).toBe(404);
+  });
+
+  it('stops one address once it has asked R2 its share', async () => {
+    const ip = freshIp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const { id } = await freshFile();
+      const res = await call(id, { method: 'HEAD', headers: { 'CF-Connecting-IP': ip } });
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([404, 404, 404, 404, 404, 429]);
   });
 });
 

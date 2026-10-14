@@ -8,7 +8,10 @@ export default defineConfig({
       miniflare: {
         bindings: { ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example,http://localhost:4200' },
         // テストでは上限を小さくして、429 を数回のリクエストで確かめる
-        ratelimits: { UPLOAD_LIMITER: { namespace_id: '1001', simple: { limit: 5, period: 60 } } },
+        ratelimits: {
+          UPLOAD_LIMITER: { namespace_id: '1001', simple: { limit: 5, period: 60 } },
+          READ_LIMITER: { namespace_id: '1002', simple: { limit: 5, period: 60 } },
+        },
       },
     }),
   ],

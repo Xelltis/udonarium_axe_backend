@@ -37,23 +37,27 @@ GETの応答は`Cache-Control: public, max-age=…, immutable`で返します。
 保持期間（`ASSET_RETENTION_DAYS`）を過ぎたものは、バケットから消える前でも`404`を返します。
 アップロードした人が次に部屋を読み込んだとき、HEADが`404`になるので上げ直され、保持期間もそこから数え直します。
 
+同じデータセンターからの2回目以降のGETは、[Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/)から返し、R2を読みません。
+Cache APIは`*.workers.dev`では効かないので、本番はカスタムドメインに置いてください。
+R2を読むGETとHEADは、送信元ごとに1分600件までです。
+
 ### エラー
 
 本文は`{"error": "<コード>"}`の形です。
 
-| 状態 | コード                | 起きるとき                                               |
-| ---- | --------------------- | -------------------------------------------------------- |
-| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                           |
-| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                           |
-| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                            |
-| 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた       |
-| 411  | `length-required`     | PUTに`Content-Length`がない                              |
-| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない         |
-| 413  | `too-large`           | 種類ごとの上限を超えている                               |
-| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                           |
-| 429  | `rate-limited`        | 同じ送信元から新しく置くアップロードが1分に100件を超えた |
-| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                           |
-| 500  | `internal-error`      | それ以外の失敗                                           |
+| 状態 | コード                | 起きるとき                                            |
+| ---- | --------------------- | ----------------------------------------------------- |
+| 400  | `invalid-id`          | 名前が64文字の小文字16進でない                        |
+| 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                        |
+| 403  | `origin-not-allowed`  | PUTのOriginが許可リストにない                         |
+| 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた    |
+| 411  | `length-required`     | PUTに`Content-Length`がない                           |
+| 412  | `precondition-failed` | GETの`If-Match`か`If-Unmodified-Since`に合わない      |
+| 413  | `too-large`           | 種類ごとの上限を超えている                            |
+| 415  | `unsupported-type`    | 受け付ける画像でも音声でもない                        |
+| 429  | `rate-limited`        | アップロードかR2の読み出しが、1分あたりの上限を超えた |
+| 500  | `config-invalid`      | 環境変数が足りないか、形が違う                        |
+| 500  | `internal-error`      | それ以外の失敗                                        |
 
 `config-invalid`のときは、足りない設定の名前がWorkerのログに出ます。
 
@@ -85,7 +89,12 @@ Cloudflareのアカウントと、`npx wrangler login`でのログインが要�
    npm run deploy
    ```
 
+   キャッシュを効かせるため、Workerにはカスタムドメインを付けてください。
+
 アプリ側の`config.json`には、このWorkerのURLを`assets.url`として書きます。
+
+Workerを呼んだ回数そのものは、Workerの中では減らせません。
+読み出しを繰り返されるのが心配なら、カスタムドメインのゾーンにWAFのレート制限ルールを足してください。
 
 ## 開発
 
