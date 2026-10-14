@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
-import { networkOf } from '../http/network';
+import { networkOfRequest, withinLimits } from '../http/limits';
 import { objectHeaders, remainingSeconds, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
@@ -30,25 +30,6 @@ const R2_BAD_DIGEST = '(10037)';
  * アップロードに比例して掃除すれば、ライフサイクル規則を作らなくても増え続けない
  */
 const SWEEP_CHANCE = 1 / 20;
-
-const networkOfRequest = (c: Context<AppEnv>): string =>
-  networkOf(c.req.header('CF-Connecting-IP') ?? 'unknown');
-
-/**
- * すべての鍵でレート制限に収まっていれば true。どれか1つでも超えたら false。
- *
- * namespace_id は同じアカウントの Worker どうしで共有されるので、鍵の頭に受けたホスト名を付けて、
- * 同じアカウントに置いた別のインスタンスと数えるものを混ぜない。
- */
-const withinLimits = async (
-  c: Context<AppEnv>,
-  limiter: RateLimit,
-  keys: string[],
-): Promise<boolean> => {
-  const host = new URL(c.req.url).host;
-  const outcomes = await Promise.all(keys.map((key) => limiter.limit({ key: `${host}/${key}` })));
-  return outcomes.every(({ success }) => success);
-};
 
 /** Content-Length の値。無いか、0 以上の整数でなければ null */
 const declaredLengthOf = (c: Context<AppEnv>): number | null => {
