@@ -25,6 +25,15 @@ updates:
       - dependencies
     open-pull-requests-limit: 10
 
+  # apps/cloudflare も lockfile を持つ独立した npm プロジェクト
+  - package-ecosystem: npm
+    directory: /apps/cloudflare
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    open-pull-requests-limit: 10
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
