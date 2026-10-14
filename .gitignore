@@ -7,3 +7,5 @@ node_modules/
 coverage-report/
 coverage.xml
 junit.xml
+docs/.vitepress/cache/
+docs/.vitepress/dist/

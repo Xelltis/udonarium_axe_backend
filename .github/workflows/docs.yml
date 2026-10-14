@@ -1,0 +1,73 @@
+name: Docs
+
+# docs/ の VitePress サイトをビルドし、main では GitHub Pages へ配信する。
+# Pull Request ではビルドが通るか（存在しないページへのリンクが無いか）だけを確かめる。
+# 配信には、リポジトリの Settings → Pages → Source を "GitHub Actions" にしておくこと。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # 「最終更新」の日付をコミットの履歴から取るので、履歴をすべて取ってくる
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run docs:build
+
+      - uses: actions/configure-pages@v6
+        if: github.event_name != 'pull_request'
+
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

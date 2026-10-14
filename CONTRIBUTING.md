@@ -74,6 +74,14 @@ npm run typecheck
 npm test
 ```
 
+ドキュメント（`docs/`、VitePress）はリポジトリのルートで扱います。
+
+```sh
+npm install
+npm run docs:dev     # http://localhost:5173/udonarium_axe_backend/
+npm run docs:build   # 存在しないページへのリンクがあると失敗する
+```
+
 ## コーディング規約
 
 - **PHP 8.3 との互換性を維持する** — `apps/php/src/` および `apps/php/index.php` では PHP 8.4 以降でのみ利用可能な機能（プロパティフック等）は使用しないでください
