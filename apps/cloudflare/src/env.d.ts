@@ -10,6 +10,14 @@ declare namespace Cloudflare {
     ACCESS_CONTROL_ALLOW_ORIGIN: string;
     /** 置いたものを残す日数。過ぎたものは 404 にし、アップロードのついでにバケットから消す */
     ASSET_RETENTION_DAYS: string;
+    /** 部屋ごとに1つ。名前は部屋の鍵（roomKey） */
+    ROOMS: DurableObjectNamespace<import('./rooms/room').RoomDurableObject>;
+    /** 部屋の一覧。Worker ごとに1つ */
+    LOBBY: DurableObjectNamespace<import('./rooms/lobby').LobbyDurableObject>;
+    /** 部屋を作る回数と、部屋につなぐ回数を送信元ごとに数えるレート制限 */
+    ROOM_LIMITER: RateLimit;
+    /** 最後の1人が出てから部屋を消すまでの時間 */
+    ROOM_RETENTION_HOURS: string;
   }
 }
 

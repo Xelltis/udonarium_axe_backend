@@ -93,12 +93,14 @@ describe('parseConfig', () => {
   const valid = {
     ACCESS_CONTROL_ALLOW_ORIGIN: ' https://a.example, ,https://b.example ',
     ASSET_RETENTION_DAYS: '30',
+    ROOM_RETENTION_HOURS: '24',
   };
 
   it('reads the settings', () => {
     expect(parseConfig(valid)).toEqual({
       allowedOrigins: ['https://a.example', 'https://b.example'],
       retentionSeconds: 30 * 24 * 60 * 60,
+      roomRetentionSeconds: 24 * 60 * 60,
     });
   });
 
@@ -107,6 +109,8 @@ describe('parseConfig', () => {
     ['a retention that is not a number', { ASSET_RETENTION_DAYS: 'thirty' }],
     ['a retention under a day', { ASSET_RETENTION_DAYS: '0' }],
     ['a retention that is not whole days', { ASSET_RETENTION_DAYS: '1.5' }],
+    ['no room retention', { ROOM_RETENTION_HOURS: undefined }],
+    ['a room retention under an hour', { ROOM_RETENTION_HOURS: '0' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
   });

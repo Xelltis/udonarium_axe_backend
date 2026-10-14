@@ -11,6 +11,7 @@ export default defineConfig({
         ratelimits: {
           UPLOAD_LIMITER: { namespace_id: '1001', simple: { limit: 5, period: 60 } },
           READ_LIMITER: { namespace_id: '1002', simple: { limit: 5, period: 60 } },
+          ROOM_LIMITER: { namespace_id: '1003', simple: { limit: 5, period: 60 } },
         },
       },
     }),
@@ -21,7 +22,7 @@ export default defineConfig({
       // workerd の中では V8 のカバレッジを取れないので istanbul を使う
       provider: 'istanbul',
       reporter: ['text', 'lcovonly'],
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.ts', 'contracts/**/*.ts'],
       exclude: ['src/**/*.d.ts', 'src/http/context.ts'],
       thresholds: {
         lines: 100,

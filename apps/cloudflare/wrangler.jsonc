@@ -3,10 +3,22 @@
   "name": "udonarium-axe-backend",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-15",
+  // 部屋のフレームの gzip に node:zlib を使う
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   // 画像と音声を SHA-256 の名前で置く。バケット名は書かず、最初のデプロイで「<Worker 名>-assets」を
   // 作らせる。同じアカウントに何台置いても、Worker ごとに別のバケットになる
   "r2_buckets": [{ "binding": "ASSETS" }],
+  // 部屋ごとに1つの Durable Object と、部屋の一覧を持つ Durable Object。どちらも SQLite に置く
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomDurableObject" },
+      { "name": "LOBBY", "class_name": "LobbyDurableObject" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "LobbyDurableObject"] },
+  ],
   // namespace_id は同じアカウントの Worker で共有されるが、鍵に受けたホスト名を付けて Worker ごとに数える
   "ratelimits": [
     // 新しく置くアップロードを、送信元（IPv6 は /64）ごとに数える。
@@ -22,6 +34,12 @@
       "namespace_id": "1002",
       "simple": { "limit": 600, "period": 60 },
     },
+    // 部屋を作る回数と、部屋につなぐ回数を送信元ごとに数える
+    {
+      "name": "ROOM_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 30, "period": 60 },
+    },
   ],
   "vars": {
     // カンマ区切り。PUT は、この Origin からしか受けない。
@@ -29,5 +47,7 @@
     "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
     // 置いたものを残す日数。過ぎたものは 404 にし、アップロードのついでにバケットから消す
     "ASSET_RETENTION_DAYS": "30",
+    // 最後の1人が出てから部屋を消すまでの時間
+    "ROOM_RETENTION_HOURS": "24",
   },
 }

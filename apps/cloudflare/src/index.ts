@@ -4,8 +4,12 @@ import type { MiddlewareHandler } from 'hono';
 import { assetRoutes } from './assets/routes';
 import { parseConfig } from './config';
 import type { AppEnv } from './http/context';
-import { assetCors } from './http/cors';
+import { assetCors, roomCors } from './http/cors';
 import { onError } from './http/errors';
+import { roomRoutes } from './rooms/routes';
+
+export { LobbyDurableObject } from './rooms/lobby';
+export { RoomDurableObject } from './rooms/room';
 
 /** 環境変数を確かめてから先へ進める。足りなければ ConfigError で 500 になる */
 const configLoader: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -20,5 +24,8 @@ app.get('/', (c) => c.json({ message: 'Hello udonarium-axe-backend!' }));
 app.use('/v1/*', configLoader);
 app.use('/v1/assets/*', assetCors());
 app.route('/v1/assets', assetRoutes);
+app.use('/v1/rooms', roomCors());
+app.use('/v1/rooms/*', roomCors());
+app.route('/v1/rooms', roomRoutes);
 
 export default app;

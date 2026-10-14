@@ -26,6 +26,26 @@ const WRITE_METHODS = new Set(['PUT']);
 const intendedMethodOf = (c: Context): string | undefined =>
   c.req.method === 'OPTIONS' ? c.req.header('Access-Control-Request-Method') : c.req.method;
 
+// 部屋の作成と一覧の Origin も roomCors で確かめ済み
+const roomHeaders = cors({
+  origin: (origin) => origin,
+  allowMethods: ['GET', 'POST'],
+  allowHeaders: ['Content-Type'],
+  maxAge: MAX_AGE_SECONDS,
+});
+
+/**
+ * 部屋のものは、一覧も含めて、許可した Origin からしか受けない。WebSocket の接続も同じ。
+ * WebSocket の応答（101）にはヘッダーを足せないので、CORS のヘッダーは付けない。
+ */
+export const roomCors = (): MiddlewareHandler<AppEnv> => async (c, next) => {
+  if (!isAllowedOrigin(c.req.header('Origin'), c.var.config.allowedOrigins)) {
+    return fail(c, 403, 'origin-not-allowed');
+  }
+  if (c.req.header('Upgrade')) return next();
+  return roomHeaders(c, next);
+};
+
 /**
  * 書き込みは許可した Origin からしか受けない。プリフライトも含めて 403 で断る。
  * 読み出しとそのプリフライトは、どのページからでも通す。
