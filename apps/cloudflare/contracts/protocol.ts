@@ -288,13 +288,43 @@ export const SyncEvent = {
  *   書く権限の無い人が作ったものを取り下げさせるときに使う
  * - ROLE_REQUEST（サーバーへ）：data は { peerId, role }。GM が、部屋にいる人の役割を変える
  * - ROLE_REJECTED（サーバーから）：data は { peerId, role, reason }。ROLE_REQUEST を断った
+ * - ROLL_REQUEST（サーバーへ）：data は RollRequest。サーバーが BCDice で振り、結果の発言を全員に配る。
+ *   コマンドでなければ何もしない
  */
 export const AuthorityEvent = {
   AUTHORITATIVE: 'AUTHORITATIVE_OBJECT',
   WITHDRAW: 'WITHDRAW_GAME_OBJECT',
   ROLE_REQUEST: 'ROLE_REQUEST',
   ROLE_REJECTED: 'ROLE_REJECTED',
+  ROLL_REQUEST: 'ROLL_REQUEST',
 } as const;
+
+/**
+ * ダイスを振ってもらう。Axe は、自分で振るときと同じ形で結果の発言（alias 'chat'）を用意して送る。
+ * サーバーは振った結果で value（文面）・dicebot・tag・name を埋め、from を `System-BCDice`、
+ * originFrom を頼んだ人の userId に、serverRoll を true にして、新しい発言として配る。
+ * 頼んだ人の手元には、まだ置かないこと（サーバーから届く）
+ */
+export interface RollRequest {
+  message: ObjectContext;
+  /** 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい */
+  command: string;
+  /** ゲームシステムの ID。知らないものなら DiceBot で振る */
+  gameSystem: string;
+  /** 発言した人の名前。結果の名前は `<BCDice：名前>`（シークレットなら `<Secret-BCDice：名前>`） */
+  speaker: string;
+  /** 結果の文面の後ろに付けるもの（対象のキャラの名前など） */
+  suffix?: string;
+}
+
+/** サーバーが振った結果の発言の from */
+export const DICE_BOT_SENDER = 'System-BCDice';
+
+/**
+ * サーバーが振った結果の発言にだけ true が入る syncData の項目。クライアントが送ってきた発言からは消す。
+ * Axe はこれを見て、サーバーで振った結果だとわかるように見せられる
+ */
+export const SERVER_ROLL_FIELD = 'serverRoll';
 
 /**
  * ROLE_REQUEST を断った理由。

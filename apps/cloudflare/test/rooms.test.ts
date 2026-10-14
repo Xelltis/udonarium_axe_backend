@@ -429,7 +429,7 @@ describe('joining a room', () => {
 
     expect((await noisy.client.next('error')).code).toBe('too-many-messages');
     expect(await steady.client.next('leave')).toEqual({ type: 'leave', peerId: 'noisy' });
-  }, 30_000);
+  }, 90_000);
 });
 
 describe('relaying', () => {

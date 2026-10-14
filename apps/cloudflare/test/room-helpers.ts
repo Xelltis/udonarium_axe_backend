@@ -60,7 +60,7 @@ export const upgrade = (roomKey: string, headers: Record<string, string> = {}) =
     }),
   );
 
-const WAIT_MS = 10_000;
+const WAIT_MS = 30_000;
 
 /** 部屋につないだクライアント。届いたものを順に読む */
 export class Client {

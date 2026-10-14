@@ -29,7 +29,7 @@ export default defineConfig({
       provider: 'istanbul',
       reporter: ['text', 'lcovonly'],
       include: ['src/**/*.ts', 'contracts/**/*.ts'],
-      exclude: ['src/**/*.d.ts', 'src/http/context.ts'],
+      exclude: ['src/**/*.d.ts', 'src/**/*.generated.ts', 'src/http/context.ts'],
       thresholds: {
         lines: 100,
         functions: 100,

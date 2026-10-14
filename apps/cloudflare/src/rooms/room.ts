@@ -8,11 +8,13 @@ import {
   CHAT_MESSAGE_ALIAS,
   CHAT_TAB_ALIAS,
   CLOSE_CODE,
+  DICE_BOT_SENDER,
   MAX_MEMBERS,
   PEER_CURSOR_ALIAS,
   PING,
   PONG,
   PROTOCOL_VERSION,
+  SERVER_ROLL_FIELD,
   SyncEvent,
   judgeUpdate,
 } from '../../contracts/protocol';
@@ -26,6 +28,7 @@ import type {
 } from '../../contracts/protocol';
 import { INVITE_SECONDS, readToken, signToken } from '../auth/tokens';
 import { parseConfig } from '../config';
+import { rollLine } from '../dice/roll';
 import { decodeFrame, encodeFrame } from './codec';
 import { LOBBY_NAME } from './lobby';
 import {
@@ -37,6 +40,7 @@ import {
   objectContextSchema,
   requestSchema,
   roleRequestSchema,
+  rollRequestSchema,
 } from './messages';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
@@ -105,6 +109,9 @@ const fromAuthority = (eventName: string, data: unknown): EventContext => ({
 
 type Reply = (eventName: string, data: unknown) => void;
 
+/** サーバーが振った結果の発言で、書き換えさせない項目 */
+const ROLLED_FIELDS = ['value', 'dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
+
 /**
  * 1つの部屋。部屋にいる人の WebSocket を受け、イベントを中継しながら、部屋の状態を持つ。
  *
@@ -119,6 +126,8 @@ export class RoomDurableObject extends DurableObject<Env> {
   private storeCache: RoomStore | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lobbyQueue: Promise<void> = Promise.resolve();
+  /** 頼まれた順に振る。システムを初めて読み込むときだけ待つ */
+  private rollQueue: Promise<void> = Promise.resolve();
   /** 送ってきたフレームの数。窓の始まりと、そこからの数 */
   private readonly rates = new WeakMap<WebSocket, { start: number; count: number }>();
   /** 切れたと知らされたもの */
@@ -425,6 +434,10 @@ export class RoomDurableObject extends DurableObject<Env> {
           if (forAuthority) this.changeRole(data, seat, reply);
           else toAddressee();
           break;
+        case AuthorityEvent.ROLL_REQUEST:
+          if (forAuthority) this.requestRoll(data, seat);
+          else toAddressee();
+          break;
         case SyncEvent.CATALOG:
           if (forAuthority) this.answerCatalog(data, reply);
           else toAddressee();
@@ -482,6 +495,11 @@ export class RoomDurableObject extends DurableObject<Env> {
     } else if (seat.role === 'guest' && !this.guestMayWrite(context, seat)) {
       return this.refuseWrite(identifier, reply);
     }
+    if (aliasName === CHAT_MESSAGE_ALIAS) {
+      const kept = this.keepRolledFields(context);
+      corrected = kept !== context;
+      context = kept;
+    }
 
     const verdict = judgeUpdate(
       this.store.entryOf(identifier),
@@ -518,6 +536,73 @@ export class RoomDurableObject extends DurableObject<Env> {
       stored.syncData.from === seat.userId ||
       stored.syncData.originFrom === seat.userId
     );
+  }
+
+  /**
+   * サーバーが振った結果の発言は、結果と名前と送り主を書き換えさせない。サーバーが振っていない発言には、
+   * サーバーが振った印を付けさせない。直したら、直した中身を返す（直さなければ受けたまま）
+   */
+  private keepRolledFields(context: ObjectContext): ObjectContext {
+    const stored = this.store.get(context.identifier);
+    const rolled = stored?.syncData[SERVER_ROLL_FIELD] === true;
+    if (!rolled && context.syncData[SERVER_ROLL_FIELD] === undefined) return context;
+    const syncData = rolled
+      ? { ...context.syncData }
+      : Object.fromEntries(
+          Object.entries(context.syncData).filter(([field]) => field !== SERVER_ROLL_FIELD),
+        );
+    if (rolled) {
+      for (const field of ROLLED_FIELDS)
+        syncData[field] = (stored as ObjectContext).syncData[field];
+    }
+    const changed = ROLLED_FIELDS.some((field) => syncData[field] !== context.syncData[field]);
+    return changed ? { ...context, syncData } : context;
+  }
+
+  /**
+   * ダイスを振り、結果の発言を作って配る。頼まれた順に振り、システムを初めて使うときだけ読み込みを待つ。
+   * コマンドでなければ何もしない。見学者は、自分が発言できるタブでだけ振れる
+   */
+  private requestRoll(data: unknown, seat: Seat): void {
+    const parsed = safeParse(rollRequestSchema, data);
+    if (!parsed.success) return;
+    const request = parsed.output;
+    const { message } = request;
+    if (message.aliasName !== CHAT_MESSAGE_ALIAS) return;
+    if (seat.role === 'guest' && !this.guestMayWrite(message, seat)) return;
+
+    this.rollQueue = this.rollQueue
+      .then(async () => {
+        const rolled = await rollLine(request.gameSystem, request.command);
+        // 振っているあいだに、同じ識別子のものが置かれていたら作らない
+        const taken =
+          this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
+        if (!rolled || taken) return;
+        const result: ObjectContext = {
+          ...message,
+          syncData: {
+            ...message.syncData,
+            value: `${rolled.text}${request.suffix ?? ''}`,
+            dicebot: rolled.dicebot,
+            tag: rolled.secret ? 'system secret' : 'system',
+            name: rolled.secret
+              ? `<Secret-BCDice：${request.speaker}>`
+              : `<BCDice：${request.speaker}>`,
+            from: DICE_BOT_SENDER,
+            originFrom: seat.userId,
+            [SERVER_ROLL_FIELD]: true,
+          },
+        };
+        this.store.put(result, null);
+        this.scheduleFlush();
+        this.broadcast(undefined, {
+          type: 'data',
+          from: AUTHORITY_PEER_ID,
+          events: [fromAuthority(SyncEvent.UPDATE, result)],
+        });
+      })
+      .catch((err: unknown) => console.error('Roll failed:', err));
+    this.ctx.waitUntil(this.rollQueue);
   }
 
   /**

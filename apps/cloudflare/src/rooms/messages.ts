@@ -80,3 +80,13 @@ export const catalogSchema = array(
 export const requestSchema = identifierSchema;
 
 export const forgetSchema = object({ identifiers: nullish(array(identifierSchema)) });
+
+const textSchema = pipe(string(), maxLength(4000));
+
+export const rollRequestSchema = object({
+  message: objectContextSchema,
+  command: textSchema,
+  gameSystem: pipe(string(), maxLength(128)),
+  speaker: textSchema,
+  suffix: nullish(textSchema),
+});
