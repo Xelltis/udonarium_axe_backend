@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AuthorityEvent, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
+import { FLUSH_TALLY_MS } from '../src/rooms/room';
 import { connect, contextOf, createRoom, eventually, join, stubOf } from './room-helpers';
 
 /** 部屋が Analytics Engine に書いたものを手元に集める */
@@ -41,6 +42,8 @@ describe('room metrics', () => {
     await guest.client.events();
     await guest.client.events();
     guest.client.send({ type: 'send', events: {} });
+    // 部屋が空になると、まとめておいた書き込みの数を記録する
+    alice.client.close();
     await eventually(
       async () => points.length,
       (count) => count >= 6,
@@ -63,6 +66,23 @@ describe('room metrics', () => {
     );
     const flush = points.find((point) => point.blobs?.[1] === 'flush');
     expect(flush?.doubles?.[0]).toBe(2);
+  });
+
+  it('writes the number of changes once a minute while people play', async () => {
+    const roomKey = await createRoom();
+    const points = await recordPoints(roomKey);
+    const alice = await join(roomKey, 'alice');
+    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
+      (instance as unknown as { flushTally: { count: number; since: number } }).flushTally = {
+        count: 3,
+        since: Date.now() - FLUSH_TALLY_MS,
+      };
+    });
+
+    alice.client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
+    await eventually(async () => summary(points).some(([event]) => event === 'flush'), Boolean);
+
+    expect(points.find((point) => point.blobs?.[1] === 'flush')?.doubles).toEqual([4]);
   });
 
   it('writes nothing once the room is gone', async () => {

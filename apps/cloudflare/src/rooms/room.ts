@@ -51,6 +51,9 @@ import { RoomStore, migrate } from './store';
  */
 export const FLUSH_DELAY_MS = 1000;
 
+/** 書いた変更の数を、Analytics Engine にまとめて書く間（ミリ秒）。1秒ごとに書くと点が多すぎる */
+export const FLUSH_TALLY_MS = 60_000;
+
 /** 1つの接続が RATE_WINDOW_MS のあいだに送れるフレームの数。超えたら切る */
 export const RATE_WINDOW_MS = 10_000;
 export const MAX_FRAMES_PER_WINDOW = 2000;
@@ -134,6 +137,8 @@ export class RoomDurableObject extends DurableObject<Env> {
   private storeCache: RoomStore | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lobbyQueue: Promise<void> = Promise.resolve();
+  /** まだ記録していない、書いた変更の数と、数え始めた時刻 */
+  private flushTally = { count: 0, since: 0 };
   /** 頼まれた順に振る。システムを初めて読み込むときだけ待つ */
   private rollQueue: Promise<void> = Promise.resolve();
   /** 送ってきたフレームの数。窓の始まりと、そこからの数 */
@@ -764,7 +769,13 @@ export class RoomDurableObject extends DurableObject<Env> {
   private scheduleFlush(): void {
     this.flushTimer ??= setTimeout(() => {
       this.flushTimer = null;
-      this.record('flush', '', this.store.flush());
+      const now = Date.now();
+      if (this.flushTally.count === 0) this.flushTally.since = now;
+      this.flushTally.count += this.store.flush();
+      if (now - this.flushTally.since >= FLUSH_TALLY_MS || this.seats().length === 0) {
+        this.record('flush', '', this.flushTally.count);
+        this.flushTally = { count: 0, since: now };
+      }
     }, FLUSH_DELAY_MS);
   }
 
