@@ -451,7 +451,13 @@ export const AUTHORITY_ONLY_EVENTS: readonly string[] = [
  * サーバーは振った結果で syncData.value（文面）と、attributes の dicebot・tag・name を埋め、
  * attributes の from を `System-BCDice`、originFrom を頼んだ人の userId に、serverRoll を true にして、
  * 新しい発言として配る。
- * 頼んだ人の手元には、まだ置かないこと（サーバーから届く）
+ * 頼んだ人の手元には、まだ置かないこと（サーバーから届く）。
+ *
+ * 発言は、タブの一覧（CHAT_TAB_LIST_IDENTIFIER）の直下のタブに置く。そうでなければ振らない（invalid）。
+ * 版は MAX_VERSION_STEP まで。attributes の timestamp は、サーバーの時刻より10分以上前なら、10分前へ
+ * 寄せる（先の時刻は寄せない）。並びの位置は majorIndex を 0、minorIndex を 0 以上 1 未満にする。
+ * stamp・attachmentImageIdentifiers・replyTo・quoteOf・fixd は既定の値に戻し、editHistory・disclosedAt・
+ * pseudoDeletedAt・afterWhisper* は外す
  */
 export interface RollRequest {
   message: ObjectContext;
@@ -462,7 +468,7 @@ export interface RollRequest {
   /** 発言した人の名前。結果の名前は `<BCDice：名前>`（シークレットなら `<Secret-BCDice：名前>`） */
   speaker: string;
   /**
-   * 結果の文面の後ろに付ける、対象のキャラの名前。` [名前]` の形で、名前は改行を含まず
+   * 結果の文面の後ろに付ける、対象のキャラの名前。` [名前]` の形で、名前は改行と角括弧と `→` を含まず
    * MAX_ROLL_TARGET_NAME_LENGTH 文字まで。違う形なら、サーバーは振らない（ROLL_REJECTED の invalid）
    */
   suffix?: string;
@@ -486,7 +492,7 @@ export const MAX_ROLLS_PER_WINDOW = 20;
 /**
  * ROLL_REQUEST を振らなかった理由。
  *
- * - invalid：頼み方の形が違う（結果の発言の形、suffix の形、大きすぎるもの）
+ * - invalid：頼み方の形が違う（結果の発言の形、置くタブ、版、suffix の形、大きすぎるもの）
  * - not-allowed：見学者が、見学者の話せないタブで振ろうとした
  * - rate-limited：短いあいだに頼みすぎた（MAX_ROLLS_PER_WINDOW）
  * - busy：部屋で振るのを待っているダイスが多すぎる
