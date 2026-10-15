@@ -520,8 +520,12 @@ export class RoomDurableObject extends DurableObject<Env> {
       account: false,
       joinedAt: Date.now(),
     };
-    if (!hello.accessToken && hello.userId.startsWith(ACCOUNT_USER_ID_PREFIX)) {
-      // ログインした人のユーザー ID は、トークン無しには名乗らせない（その人に見えるものが見えてしまう）
+    if (
+      !hello.accessToken &&
+      (hello.userId.startsWith(ACCOUNT_USER_ID_PREFIX) || this.isAccountUser(hello.userId))
+    ) {
+      // ログインした人のユーザー ID は、トークン無しには名乗らせない（その人に見えるものが見えてしまう）。
+      // 頭の付かない前の形のアカウントもあるので、この部屋に入ったことのあるアカウントも見る
       return this.refuse(ws, 'unauthorized');
     }
     // 発言の送り主に使う名前（ダイスボットなど）は名乗らせない。サーバーが振った発言の送り主と
@@ -531,27 +535,52 @@ export class RoomDurableObject extends DurableObject<Env> {
       const secret = this.sessionSecret();
       const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
       if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(ws, 'unauthorized');
-      seat.role = this.roleOf(hello.userId, hello.invite ?? null, room.room_key, secret);
+      const { role, known } = this.roleOf(
+        hello.userId,
+        hello.invite ?? null,
+        room.room_key,
+        secret,
+      );
+      seat.role = role;
       seat.account = true;
       seat.expiresAt = claims.exp * 1000;
+      // 役割を覚えるのは、席に着けたときだけ。断られた人の招待は、次に入るときにも効く
+      if (this.seat(ws, seat) && !known) {
+        this.ctx.storage.sql.exec(
+          'INSERT INTO seats (user_id, role) VALUES (?, ?)',
+          hello.userId,
+          role,
+        );
+      }
+      return;
     }
     this.seat(ws, seat);
   }
 
+  /** この部屋に、ログインして入ったことのある人か */
+  private isAccountUser(userId: string): boolean {
+    return (
+      this.ctx.storage.sql.exec('SELECT 1 FROM seats WHERE user_id = ?', userId).toArray().length >
+      0
+    );
+  }
+
   /**
    * ログインした人の役割。前に入ったことがあればそのときの役割、初めてなら招待の役割、
-   * 招待が無いか、この部屋のものでなければ PL
+   * 招待が無いか、この部屋のものでなければ PL。known は、前に入ったことがあるか
    */
-  private roleOf(userId: string, invite: string | null, roomKey: string, secret: string): PeerRole {
-    const sql = this.ctx.storage.sql;
-    const known = sql
+  private roleOf(
+    userId: string,
+    invite: string | null,
+    roomKey: string,
+    secret: string,
+  ): { role: PeerRole; known: boolean } {
+    const known = this.ctx.storage.sql
       .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
       .toArray()[0];
-    if (known) return known.role;
+    if (known) return { role: known.role, known: true };
     const invited = invite ? readToken(invite, 'invite', secret) : null;
-    const role = invited?.room === roomKey ? invited.role : 'pl';
-    sql.exec('INSERT INTO seats (user_id, role) VALUES (?, ?)', userId, role);
-    return role;
+    return { role: invited?.room === roomKey ? invited.role : 'pl', known: false };
   }
 
   /**
@@ -602,12 +631,26 @@ export class RoomDurableObject extends DurableObject<Env> {
     ws.serializeAttachment({ ...seat, expiresAt: claims.exp * 1000 });
   }
 
-  private seat(ws: WebSocket, seat: Seat): void {
-    const others = this.seats(ws);
-    const previous = others.find((other) => other.seat.peerId === seat.peerId);
-    // ほかの人のピア ID を名乗るものは入れない。入れると、その人を追い出して成り代われてしまう
-    if (previous && !isSamePerson(previous.seat, seat)) return this.refuse(ws, 'bad-message');
-    if (!previous && others.length >= MAX_MEMBERS) return this.refuse(ws, 'room-full');
+  /** 席に着ける。着けたら true、断ったら false */
+  private seat(ws: WebSocket, seat: Seat): boolean {
+    let others = this.seats(ws);
+    let previous = others.find((other) => other.seat.peerId === seat.peerId);
+    if (previous && !isSamePerson(previous.seat, seat)) {
+      // ほかの人のピア ID を名乗るものは入れない。入れると、その人を追い出して成り代われてしまう。
+      // ただし、ログインした人のピア ID を見学が先に取っていたら、見学のほうを外す。ピア ID は
+      // ユーザー ID から作るので、ログインした人のピア ID を持てるのはその人だけ
+      if (previous.seat.account || !seat.account) {
+        this.refuse(ws, 'bad-message');
+        return false;
+      }
+      this.refuse(previous.ws, 'bad-message');
+      others = this.seats(ws);
+      previous = undefined;
+    }
+    if (!previous && others.length >= MAX_MEMBERS) {
+      this.refuse(ws, 'room-full');
+      return false;
+    }
     // 同じ人がつなぎ直した。古い方は、もう切れているのに残っているもの
     if (previous) this.refuse(previous.ws, 'replaced');
 
@@ -626,10 +669,11 @@ export class RoomDurableObject extends DurableObject<Env> {
     // 人がいるあいだは消さずに見回る
     this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');
     void this.ctx.storage.setAlarm(Date.now() + OCCUPIED_CHECK_MS);
-    if (previous) return;
+    if (previous) return true;
     this.broadcast(ws, { type: 'join', member: memberOf(seat) });
     this.notifyLobby(seat.roomKey);
     this.record('join', seat.role, this.seats().length);
+    return true;
   }
 
   private drop(ws: WebSocket): void {

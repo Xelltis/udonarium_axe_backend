@@ -249,6 +249,44 @@ describe('the cursor role', () => {
   });
 });
 
+describe('who may sit where', () => {
+  it('keeps a guest from going by the user id of someone who came in logged in', async () => {
+    const { roomKey } = await table();
+
+    const impostor = await connect(roomKey);
+    impostor.hello('mallory', { userId: 'user-pl', accessToken: null });
+
+    expect((await impostor.next('error')).code).toBe('unauthorized');
+  });
+
+  it('puts out a guest sitting in the seat of someone logged in once they come', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    const squatter = await join(roomKey, 'pl', { userId: 'guest-x', accessToken: null });
+    await gm.client.next('join');
+
+    const owner = await join(roomKey, 'pl');
+
+    expect((await squatter.client.next('error')).code).toBe('bad-message');
+    expect(owner.welcome.role).toBe('pl');
+    expect(await gm.client.next('leave')).toEqual({ type: 'leave', peerId: 'pl' });
+    expect((await gm.client.next('join')).member.userId).toBe('user-pl');
+  });
+
+  it('lets an invitation work for one who was turned away before getting a seat', async () => {
+    const { roomKey, gm } = await table();
+    const first = await connect(roomKey);
+    first.hello('pl', { userId: 'user-dave', accessToken: accessTokenFor('user-dave') });
+    expect((await first.next('error')).code).toBe('bad-message');
+
+    gm.send({ type: 'invite', role: 'gm' });
+    const { invite } = await gm.next('invite');
+    const again = await join(roomKey, 'dave', { invite });
+
+    expect(again.welcome.role).toBe('gm');
+  });
+});
+
 describe('whose cursor a seat may write', () => {
   it('lets a player write only its own cursor, as the user it came in as', async () => {
     const { gm, pl, guest } = await table();
