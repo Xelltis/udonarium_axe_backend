@@ -769,6 +769,40 @@ describe('the state of the room', () => {
       await bob.expectQuiet();
     });
 
+    it('takes away the cursor of a page its peer has come back from', async () => {
+      const { roomKey, alice, bob } = await twoInRoom();
+      bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);
+      await alice.events();
+
+      const again = await join(roomKey, 'bob');
+
+      expect(await alice.events()).toEqual([
+        {
+          eventName: SyncEvent.DELETE,
+          data: { aliasName: 'PeerCursor', identifier: 'cursor-bob' },
+          sendFrom: AUTHORITY_PEER_ID,
+        },
+      ]);
+      expect(again.catalog[0].data).toEqual([]);
+    });
+
+    it('clears away the cursor of someone who went without a word', async () => {
+      const { roomKey, alice } = await twoInRoom();
+      await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) => {
+        (instance as unknown as { store: RoomStore }).store.put(cursorOf('ghost'), 'ghost');
+        return state.storage.setAlarm(Date.now() + 60_000);
+      });
+
+      expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+      expect(await alice.events()).toEqual([
+        {
+          eventName: SyncEvent.DELETE,
+          data: { aliasName: 'PeerCursor', identifier: 'cursor-ghost' },
+          sendFrom: AUTHORITY_PEER_ID,
+        },
+      ]);
+    });
+
     it('leaves no tombstone for a cursor, so its peer can bring it back', async () => {
       const { roomKey, alice, bob } = await twoInRoom();
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);

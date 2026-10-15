@@ -270,6 +270,13 @@ export class RoomStore {
     return [...this.index].filter(([, entry]) => entry.owner === peerId).map(([id]) => id);
   }
 
+  /** その人のあいだだけ置いているものを持っている人のピア ID */
+  owners(): string[] {
+    const owners = new Set<string>();
+    for (const entry of this.index.values()) if (entry.owner !== null) owners.add(entry.owner);
+    return [...owners];
+  }
+
   /** その人が出たので、その人のあいだだけ置いていたものを消す。消した識別子を返す */
   removeOwnedBy(peerId: string): string[] {
     const owned = this.ownedBy(peerId);

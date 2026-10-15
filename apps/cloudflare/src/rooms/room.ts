@@ -462,6 +462,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     const room = this.room();
     if (room && this.seats().length > 0) {
+      this.dropCursors(this.removeStrayCursors());
       await this.ctx.storage.setAlarm(Date.now() + OCCUPIED_CHECK_MS);
       this.notifyLobby(room.room_key);
       return;
@@ -651,10 +652,16 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.refuse(ws, 'room-full');
       return false;
     }
-    // 同じ人がつなぎ直した。古い方は、もう切れているのに残っているもの
-    if (previous) this.refuse(previous.ws, 'replaced');
+    if (previous) {
+      // 同じ人がつなぎ直した。古い方は、もう切れているのに残っているもの。読み直したページの
+      // カーソルは別の識別子になるので、古い方のカーソルは消してほかの人にも消させる
+      this.refuse(previous.ws, 'replaced');
+      this.dropCursors(this.store.removeOwnedBy(seat.peerId), ws);
+    }
 
     ws.serializeAttachment(seat);
+    // Worker が落ちて、出ていく知らせの来なかった人のカーソルが残っていれば、ここで片付ける
+    this.dropCursors(this.removeStrayCursors(), ws);
     this.post(ws, {
       type: 'welcome',
       protocolVersion: PROTOCOL_VERSION,
@@ -674,6 +681,25 @@ export class RoomDurableObject extends DurableObject<Env> {
     this.notifyLobby(seat.roomKey);
     this.record('join', seat.role, this.seats().length);
     return true;
+  }
+
+  /** 部屋にいない人のカーソルを消す。消した識別子を返す */
+  private removeStrayCursors(): string[] {
+    const here = new Set(this.seats().map(({ seat }) => seat.peerId));
+    return this.store
+      .owners()
+      .filter((owner) => !here.has(owner))
+      .flatMap((owner) => this.store.removeOwnedBy(owner));
+  }
+
+  /** 消したカーソルを、持っている人に消させる。exclude（入ってきたばかりの人）は持っていない */
+  private dropCursors(identifiers: string[], exclude?: WebSocket): void {
+    if (identifiers.length === 0) return;
+    this.scheduleFlush();
+    const events = identifiers.map((identifier) =>
+      fromAuthority(SyncEvent.DELETE, { aliasName: PEER_CURSOR_ALIAS, identifier }),
+    );
+    this.broadcast(exclude, { type: 'data', from: AUTHORITY_PEER_ID, events });
   }
 
   private drop(ws: WebSocket): void {
