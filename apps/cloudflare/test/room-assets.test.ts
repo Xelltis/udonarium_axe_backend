@@ -160,6 +160,32 @@ describe('a room’s assets when the room goes', () => {
     expect(await env.ASSETS.head(roomAssetKey(other, kept))).not.toBeNull();
   });
 
+  it('take nothing left behind by an upload still under way as the room was deleted', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    // 部屋に置けると答えたあと、中身を置ききる前に部屋を削除する
+    const put = env.ASSETS.put.bind(env.ASSETS);
+    vi.spyOn(env.ASSETS, 'put').mockImplementation(async (...args: Parameters<R2Bucket['put']>) => {
+      const deleted = await exports.default.fetch(
+        new Request(`${ROOMS}/${roomKey}`, {
+          method: 'DELETE',
+          headers: {
+            Origin: ORIGIN,
+            'CF-Connecting-IP': freshIp(),
+            Authorization: `Bearer ${accessTokenFor('user-gm')}`,
+          },
+        }),
+      );
+      expect(deleted.status).toBe(204);
+      return put(...args);
+    });
+
+    const { res, id } = await tryPut(roomKey, gm.welcome.assetToken);
+
+    expect(res.status).toBe(404);
+    expect(await env.ASSETS.head(roomAssetKey(roomKey, id))).toBeNull();
+  });
+
   it('go with the room once it has stood empty past its retention', async () => {
     const roomKey = await createRoom();
     const { client, welcome } = await join(roomKey, 'alice');

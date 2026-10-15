@@ -178,7 +178,8 @@ export const putRoomAsset = async (c: Context<AppEnv>) => {
   if (await c.env.ASSETS.head(key)) return c.json({ id, status: 'exists' }, 200);
 
   // トークンは15分使えるので、いまも部屋があり、その人が置ける役割かを部屋に尋ねる
-  const allowed = await c.env.ROOMS.getByName(roomKey).canUpload(claims.uid);
+  const room = c.env.ROOMS.getByName(roomKey);
+  const allowed = await room.canUpload(claims.uid);
   if (allowed === 'room-not-found') return fail(c, 404, 'room-not-found');
   if (allowed === 'not-a-player') return fail(c, 403, 'not-a-player');
 
@@ -211,6 +212,11 @@ export const putRoomAsset = async (c: Context<AppEnv>) => {
       return fail(c, 400, 'hash-mismatch');
     }
     throw err;
+  }
+  // 中身を流しているあいだに部屋が削除されていたら、削除が見落とした分を消す
+  if ((await room.canUpload(claims.uid)) === 'room-not-found') {
+    await c.env.ASSETS.delete(key);
+    return fail(c, 404, 'room-not-found');
   }
   if (Math.random() < SWEEP_CHANCE) {
     const lobby = c.env.LOBBY.getByName(LOBBY_NAME);
