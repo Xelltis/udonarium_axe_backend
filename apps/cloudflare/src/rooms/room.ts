@@ -841,14 +841,19 @@ export class RoomDurableObject extends DurableObject<Env> {
     // 版の違いで取り直せるように
     let corrected = seen === 'masked';
     if (aliasName === PEER_CURSOR_ALIAS) {
-      owner = String(context.syncData.peerId);
-      // 出ていった人のカーソルは置かない。クライアントは leave を受けて自分で片付ける
-      const ownerSeat = this.seats().find((other) => other.seat.peerId === owner)?.seat;
-      if (!ownerSeat) return;
-      if (seat.role === 'guest' && owner !== seat.peerId)
-        return this.refuseWrite(identifier, seat, reply);
-      if (context.syncData.role !== ownerSeat.role) {
-        context = { ...context, syncData: { ...context.syncData, role: ownerSeat.role } };
+      // カーソルを書けるのは、その人だけ。ほかの人のユーザー ID を書き込めば、その人あての秘話や
+      // 配られるカードが、書いた人に向いてしまう
+      const named = String(context.syncData.peerId);
+      if (existing ? existing.owner !== seat.peerId : named !== seat.peerId) {
+        if (existing || this.seats().some((other) => other.seat.peerId === named))
+          return this.refuseWrite(identifier, seat, reply);
+        // 出ていった人のカーソルは置かない。クライアントは leave を受けて自分で片付ける
+        return;
+      }
+      owner = seat.peerId;
+      const fixed = { peerId: seat.peerId, userId: seat.userId, role: seat.role };
+      if (Object.entries(fixed).some(([field, value]) => context.syncData[field] !== value)) {
+        context = { ...context, syncData: { ...context.syncData, ...fixed } };
         corrected = true;
       }
     } else if (seat.role === 'guest' && !this.guestMayWrite(context, seat)) {
@@ -1127,7 +1132,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (!entry && this.store.isDeleted(identifier)) return;
     if (this.kindOf(identifier, seat) === 'hidden') return;
     const owner = entry?.owner ?? null;
-    if (seat.role === 'guest' && owner !== seat.peerId)
+    // その人のあいだだけ置くもの（カーソル）は、その人だけが消せる
+    if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)
       return this.refuseWrite(identifier, seat, reply);
 
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
@@ -1135,7 +1141,9 @@ export class RoomDurableObject extends DurableObject<Env> {
     const seen = new Map(
       others.map(({ ws, seat: other }) => [ws, doomed.map((id) => this.kindOf(id, other))]),
     );
-    const cursor = aliasName === PEER_CURSOR_ALIAS || owner !== null;
+    // 印を残すかは、置いてあるものの種類で決める。送られてきた種類を信じると、カーソルを名乗って
+    // 何でも印を残さずに消せ、古い写しを持つ人から戻ってきてしまう
+    const cursor = entry ? entry.alias === PEER_CURSOR_ALIAS : aliasName === PEER_CURSOR_ALIAS;
     for (const id of doomed) this.store.delete(id, !cursor);
     for (const { ws } of others) {
       doomed.forEach((id, index) => {

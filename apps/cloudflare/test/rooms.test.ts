@@ -734,7 +734,7 @@ describe('the state of the room', () => {
         `cursor-${peerId}`,
         majorVersion,
         0.5,
-        { peerId, name: peerId, role: 'pl' },
+        { peerId, userId: `user-${peerId}`, name: peerId, role: 'pl' },
         'PeerCursor',
       );
 
@@ -774,13 +774,13 @@ describe('the state of the room', () => {
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);
       await alice.events();
 
-      alice.emit([
+      bob.emit([
         { eventName: SyncEvent.DELETE, data: { aliasName: '', identifier: 'cursor-bob' } },
       ]);
       alice.emit([
         { eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'cursor-x' } },
       ]);
-      await bob.events();
+      await alice.events();
       await bob.events();
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob', 2) }]);
 

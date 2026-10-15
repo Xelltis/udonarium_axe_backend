@@ -18,7 +18,13 @@ afterEach(() => {
 });
 
 const cursorOf = (peerId: string, role: string, majorVersion = 1) =>
-  contextOf(`cursor-${peerId}`, majorVersion, 0.5, { peerId, name: peerId, role }, 'PeerCursor');
+  contextOf(
+    `cursor-${peerId}`,
+    majorVersion,
+    0.5,
+    { peerId, userId: `user-${peerId}`, name: peerId, role },
+    'PeerCursor',
+  );
 
 // タブも発言も ObjectNode なので、SyncVar は attributes に入る
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
@@ -240,6 +246,63 @@ describe('the cursor role', () => {
     for (const other of [gm, guest]) {
       expect((await other.events())[0].data).toEqual(cursorOf('pl', 'pl'));
     }
+  });
+});
+
+describe('whose cursor a seat may write', () => {
+  it('lets a player write only its own cursor, as the user it came in as', async () => {
+    const { gm, pl, guest } = await table();
+    gm.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('gm', 'gm') }]);
+    await pl.events();
+    await guest.events();
+
+    pl.emit([
+      // ほかの人のカーソルに、自分のユーザー ID を書き込もうとする
+      {
+        eventName: SyncEvent.UPDATE,
+        data: {
+          ...cursorOf('gm', 'gm', 2),
+          syncData: { ...cursorOf('gm', 'gm').syncData, userId: 'user-pl' },
+        },
+      },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'cursor-gm' } },
+      // 自分のカーソルでも、ほかの人を名乗らせない
+      {
+        eventName: SyncEvent.UPDATE,
+        data: {
+          ...cursorOf('pl', 'pl'),
+          syncData: { ...cursorOf('pl', 'pl').syncData, userId: 'user-gm' },
+        },
+      },
+    ]);
+
+    const putBack = { sendFrom: AUTHORITY_PEER_ID, eventName: AuthorityEvent.AUTHORITATIVE };
+    expect(await pl.events()).toEqual([
+      { ...putBack, data: cursorOf('gm', 'gm') },
+      { ...putBack, data: cursorOf('gm', 'gm') },
+      { ...putBack, data: cursorOf('pl', 'pl') },
+    ]);
+    expect((await gm.events()).map((event) => event.data)).toEqual([cursorOf('pl', 'pl')]);
+  });
+
+  it('keeps a tombstone for whatever is deleted under the name of a cursor', async () => {
+    const { gm, pl } = await table();
+    gm.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
+    await pl.events();
+
+    pl.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'piece' } },
+    ]);
+    await gm.events();
+    gm.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
+
+    expect(await gm.events()).toEqual([
+      {
+        eventName: SyncEvent.DELETE,
+        data: { aliasName: 'character', identifier: 'piece' },
+        sendFrom: AUTHORITY_PEER_ID,
+      },
+    ]);
   });
 });
 
