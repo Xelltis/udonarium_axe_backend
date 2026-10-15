@@ -303,6 +303,36 @@ describe('a rolled result', () => {
     expect(attributes(kept)).toMatchObject({ to: '', timestamp: 1 });
   });
 
+  it('stays out of any tab when it was rolled in none', async () => {
+    const clients = await room();
+    const loose = rollRequest('loose', '1d1');
+    const syncData = Object.fromEntries(
+      Object.entries(loose.data.message.syncData).filter(([field]) => field !== 'parentIdentifier'),
+    );
+    clients.alice.emit([
+      { ...loose, data: { ...loose.data, message: { ...loose.data.message, syncData } } },
+    ]);
+    const [{ data }] = await clients.alice.events();
+    const rolled = data as Message;
+
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: {
+          ...edited(rolled, rolled.syncData.value, {}),
+          syncData: {
+            ...edited(rolled, rolled.syncData.value, {}).syncData,
+            parentIdentifier: 'main',
+          },
+        },
+      },
+    ]);
+
+    const [back] = await clients.alice.events();
+    expect(back.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
+    expect((back.data as Message).syncData).not.toHaveProperty('parentIdentifier');
+  });
+
   it('is taken away or marked deleted only by the GM', async () => {
     const clients = await room('bob');
     const original = await rolledIn(clients);
