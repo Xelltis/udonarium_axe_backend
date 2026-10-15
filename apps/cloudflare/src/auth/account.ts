@@ -143,11 +143,14 @@ export class AccountDurableObject extends DurableObject<Env> {
 
   /**
    * リフレッシュトークンを使い、同じ系統の新しいものに替える。
-   * もう使ったものがまた来たら、盗まれたとみなして、その系統をすべて無効にする
+   * もう使ったものがまた来たら、盗まれたとみなして、その系統をすべて無効にする。
+   *
+   * ハッシュは先に作り、行を探してから使ったことにするまでのあいだには await を挟まない。挟むと、
+   * 同じトークンで同時に来た2つが、どちらもまだ使っていないものとして通ってしまう
    */
   async refresh(token: Secret): Promise<Session | null> {
     const sql = this.ctx.storage.sql;
-    const row = await this.findRefreshToken(token);
+    const row = this.findRefreshToken(token, await sha256(token.secret));
     if (!row) return null;
     if (row.used === 1) {
       sql.exec('DELETE FROM refresh_tokens WHERE family = ?', row.family);
@@ -159,7 +162,7 @@ export class AccountDurableObject extends DurableObject<Env> {
 
   /** ログアウトした。そのリフレッシュトークンの系統をすべて無効にする */
   async signOut(token: Secret): Promise<void> {
-    const row = await this.findRefreshToken(token);
+    const row = this.findRefreshToken(token, await sha256(token.secret));
     if (row) this.ctx.storage.sql.exec('DELETE FROM refresh_tokens WHERE family = ?', row.family);
   }
 
@@ -177,7 +180,8 @@ export class AccountDurableObject extends DurableObject<Env> {
     this.migrate();
   }
 
-  private async findRefreshToken(token: Secret): Promise<{ family: string; used: number } | null> {
+  /** hash は token.secret の SHA-256（base64url） */
+  private findRefreshToken(token: Secret, hash: string): { family: string; used: number } | null {
     const row = this.ctx.storage.sql
       .exec<{ family: string; hash: string; expires_at: number; used: number }>(
         'SELECT family, hash, expires_at, used FROM refresh_tokens WHERE id = ?',
@@ -185,7 +189,7 @@ export class AccountDurableObject extends DurableObject<Env> {
       )
       .toArray()[0];
     if (!row || row.expires_at <= nowSeconds()) return null;
-    return sameText(await sha256(token.secret), row.hash) ? row : null;
+    return sameText(hash, row.hash) ? row : null;
   }
 
   /** 新しいリフレッシュトークンを作る。コードやトークンがあるなら、人の情報も必ずある */

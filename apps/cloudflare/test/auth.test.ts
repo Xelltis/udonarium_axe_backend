@@ -268,6 +268,18 @@ describe('POST /v1/auth/token', () => {
     expect(afterTheft.status).toBe(400);
   });
 
+  it('takes a refresh token sent twice at once only once, and drops the whole line', async () => {
+    const tokens = await logIn({ id: '15', username: 'kei' });
+
+    const answers = await Promise.all([refresh(tokens.refreshToken), refresh(tokens.refreshToken)]);
+    const statuses = answers.map((res) => res.status).sort();
+    const winner = answers.find((res) => res.status === 200) as Response;
+    const next = await winner.json<TokenResponse>();
+
+    expect(statuses).toEqual([200, 400]);
+    expect((await refresh(next.refreshToken)).status).toBe(400);
+  });
+
   it('turns away a refresh token whose secret is wrong', async () => {
     const tokens = await logIn({ id: '14', username: 'nao' });
     expect((await refresh(`${tokens.refreshToken.slice(0, -2)}xx`)).status).toBe(400);
