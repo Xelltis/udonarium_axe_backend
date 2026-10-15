@@ -353,6 +353,20 @@ describe('POST /v1/auth/logout', () => {
 
     expect([unknown.status, unreadable.status, stranger.status]).toEqual([204, 400, 204]);
   });
+
+  it('stops one address once it has asked too often, since each key wakes an account', async () => {
+    const ip = freshIp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await callApi('/v1/auth/logout', {
+        method: 'POST',
+        body: { refresh_token: 'whatever' },
+        headers: { 'CF-Connecting-IP': ip },
+      });
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([204, 204, 204, 204, 204, 429]);
+  });
 });
 
 describe('/v1/account', () => {

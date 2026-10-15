@@ -314,3 +314,14 @@ group('masking', () => {
     expect(viewFor(die, 'masked')?.syncData.attributes).toEqual({ face: '' });
   });
 });
+
+group('a line said by nobody', () => {
+  it('is not taken as said by a viewer whose user id is empty', () => {
+    const entry: ViewEntry = describe(
+      context('chat', 'w', { attributes: { to: 'u-someone', from: 'u-sender' } }),
+    );
+    const lookup: Lookup = (id) => (id === 'w' ? entry : null);
+
+    expect(viewKind('w', { userId: '', role: 'pl' }, lookup)).toBe('hidden');
+  });
+});

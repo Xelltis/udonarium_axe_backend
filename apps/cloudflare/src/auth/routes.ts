@@ -138,6 +138,11 @@ authRoutes.post(
 authRoutes.post(
   '/logout',
   withLogin(async (c) => {
+    // 鍵から Durable Object を起こすので、トークンと同じく数を絞る。絞らないと、でたらめな鍵で
+    // いくらでもアカウントの Durable Object を作らせられる
+    if (!(await withinLimits(c, c.env.AUTH_LIMITER, [networkOfRequest(c)]))) {
+      return fail(c, 429, 'rate-limited');
+    }
     const parsed = safeParse(logoutSchema, await c.req.json().catch(() => null));
     if (!parsed.success) return fail(c, 400, 'invalid-request');
     const handle = unpackSecret(parsed.output.refresh_token);

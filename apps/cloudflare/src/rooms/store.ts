@@ -9,6 +9,10 @@ import type { View, ViewEntry } from './visibility';
  */
 export const CHUNK_BYTES = 1024 * 1024;
 
+/** 消した印をこれより多くは置かない。超えたら古いものから PRUNED_TOMBSTONES まで減らす */
+export const MAX_TOMBSTONES = 100_000;
+export const PRUNED_TOMBSTONES = 80_000;
+
 /** 版・持ち主・親・見え方の手がかりだけの、メモリに置く索引 */
 export interface StoredEntry extends ViewEntry {
   alias: string;
@@ -64,7 +68,10 @@ export class RoomStore {
   private tombstones: Set<string> | null = null;
   private readonly pending = new Map<string, PendingWrite>();
 
-  constructor(private readonly storage: DurableObjectStorage) {}
+  constructor(
+    private readonly storage: DurableObjectStorage,
+    private readonly tombstoneLimits = { most: MAX_TOMBSTONES, prunedTo: PRUNED_TOMBSTONES },
+  ) {}
 
   private get index(): Map<string, StoredEntry> {
     return this.load();
@@ -165,6 +172,11 @@ export class RoomStore {
         .map((row) => row.identifier),
     );
     return this.tombstones;
+  }
+
+  /** 持っているものの数 */
+  get size(): number {
+    return this.index.size;
   }
 
   entryOf(identifier: string): StoredEntry | null {
@@ -273,33 +285,71 @@ export class RoomStore {
     this.pending.set(identifier, { ...this.pending.get(identifier), ...write });
   }
 
-  /** まとめておいた変更を1つのトランザクションで書く。書いた識別子の数を返す */
+  /**
+   * まとめておいた変更を1つのトランザクションで書く。書いた識別子の数を返す。
+   *
+   * 1つでも書けないもの（SQLite の1行の上限を超えたものなど）があると、トランザクションごと戻る。
+   * そのときは1つずつ書き直し、書けないものだけを捨てる。捨てないと、次からも同じところで止まり、
+   * 何も残らなくなる
+   */
   flush(): number {
     const count = this.pending.size;
-    const sql = this.storage.sql;
-    this.storage.transactionSync(() => {
+    try {
+      this.storage.transactionSync(() => {
+        for (const [identifier, write] of this.pending) this.writePending(identifier, write);
+      });
+    } catch {
       for (const [identifier, write] of this.pending) {
-        if (write.context !== undefined) {
-          sql.exec('DELETE FROM object_chunks WHERE identifier = ?', identifier);
-          if (write.context === null) {
-            sql.exec('DELETE FROM objects WHERE identifier = ?', identifier);
-          } else {
-            this.writeObject(write.context, write.owner ?? null);
-          }
-        }
-        if (write.tombstone === true) {
-          sql.exec(
-            'INSERT OR REPLACE INTO tombstones (identifier, deleted_at) VALUES (?, ?)',
-            identifier,
-            Date.now(),
-          );
-        } else if (write.tombstone === false) {
-          sql.exec('DELETE FROM tombstones WHERE identifier = ?', identifier);
+        try {
+          this.storage.transactionSync(() => this.writePending(identifier, write));
+        } catch (err) {
+          console.error('Could not keep an object:', identifier, err);
         }
       }
-    });
+    }
     this.pending.clear();
+    this.pruneTombstones();
     return count;
+  }
+
+  private writePending(identifier: string, write: PendingWrite): void {
+    const sql = this.storage.sql;
+    if (write.context !== undefined) {
+      sql.exec('DELETE FROM object_chunks WHERE identifier = ?', identifier);
+      if (write.context === null) {
+        sql.exec('DELETE FROM objects WHERE identifier = ?', identifier);
+      } else {
+        this.writeObject(write.context, write.owner ?? null);
+      }
+    }
+    if (write.tombstone === true) {
+      sql.exec(
+        'INSERT OR REPLACE INTO tombstones (identifier, deleted_at) VALUES (?, ?)',
+        identifier,
+        Date.now(),
+      );
+    } else if (write.tombstone === false) {
+      sql.exec('DELETE FROM tombstones WHERE identifier = ?', identifier);
+    }
+  }
+
+  /**
+   * 消した印が MAX_TOMBSTONES を超えたら、古いものから PRUNED_TOMBSTONES まで減らす。
+   * 印はいつまでも残るので、減らさないと、消すたびに増え続ける
+   */
+  private pruneTombstones(): void {
+    if (!this.tombstones || this.tombstones.size <= this.tombstoneLimits.most) return;
+    const sql = this.storage.sql;
+    const oldest = sql
+      .exec<{ identifier: string }>(
+        'SELECT identifier FROM tombstones ORDER BY deleted_at LIMIT ?',
+        this.tombstones.size - this.tombstoneLimits.prunedTo,
+      )
+      .toArray();
+    for (const { identifier } of oldest) {
+      sql.exec('DELETE FROM tombstones WHERE identifier = ?', identifier);
+      this.tombstones.delete(identifier);
+    }
   }
 
   private writeObject(context: ObjectContext, owner: string | null): void {

@@ -117,9 +117,12 @@ export const describe = (context: ObjectContext): ViewEntry => {
 
 const isGameMaster = (viewer: Viewer) => viewer.role === 'gm';
 
-/** 発言を送ったのがその人か。ダイスの結果は、振った人（originFrom）が送ったものとして扱う */
+/**
+ * 発言を送ったのがその人か。ダイスの結果は、振った人（originFrom）が送ったものとして扱う。
+ * 空の送り主は、だれの発言でもない（originFrom の無い発言と、空のユーザー ID を一致させない）
+ */
 const sentBy = (view: { from: string; originFrom: string }, viewer: Viewer) =>
-  view.from === viewer.userId || view.originFrom === viewer.userId;
+  viewer.userId !== '' && (view.from === viewer.userId || view.originFrom === viewer.userId);
 
 /** カードの表が見えるか。GM はいつも見える（Axe の GM 用の一覧は、裏向きのカードの表も出す） */
 const seesFace = (view: { front: boolean; owner: string; hand: string }, viewer: Viewer) =>

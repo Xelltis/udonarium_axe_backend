@@ -282,24 +282,21 @@ describe('a rolled result', () => {
   it('cannot be disclosed by anyone else, nor have its tag changed in any other way', async () => {
     const clients = await room();
     const secret = await secretIn(clients);
-    const tagOf = async () => attributes((await clients.alice.events())[0].data).tag;
-
-    // bob の手元にあるのは伏せた形
+    // bob の手元にあるのは伏せた形。振っていない人の公開は、まるごと断る
     clients.bob.emit([
       { eventName: SyncEvent.UPDATE, data: edited(secret, '', { tag: 'system', dicebot: '' }) },
     ]);
-    const byOther = await tagOf();
+    expect((await clients.bob.events())[0]).toMatchObject({
+      eventName: AuthorityEvent.AUTHORITATIVE,
+    });
+    await clients.alice.expectQuiet();
+
     clients.alice.emit([
       {
         eventName: SyncEvent.UPDATE,
         data: { ...edited(secret, secret.syncData.value, { tag: 'secret' }), majorVersion: 3 },
       },
     ]);
-
-    expect(byOther).toBe('system secret');
-    expect((await clients.bob.events())[0]).toMatchObject({
-      eventName: AuthorityEvent.AUTHORITATIVE,
-    });
     expect(attributes((await clients.alice.events())[0].data).tag).toBe('system secret');
   });
 

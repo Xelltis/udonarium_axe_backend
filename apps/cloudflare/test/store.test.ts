@@ -1,5 +1,5 @@
 import { env, runInDurableObject } from 'cloudflare:test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { RoomStore, migrate } from '../src/rooms/store';
 import { contextOf } from './room-helpers';
@@ -41,5 +41,46 @@ describe('the room store', () => {
       return [...before, store.dependentsOf('m'), store.dependentsOf('a')];
     });
     expect(found).toEqual([['b'], ['r'], [], [], []]);
+  });
+
+  it('keeps what it can when one object cannot be written, rather than stopping', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const kept = await withStore('store-bad-write', (store, storage) => {
+      const write = (store as unknown as { writeObject: (context: unknown) => void }).writeObject;
+      vi.spyOn(
+        store as unknown as { writeObject: (context: { identifier: string }) => void },
+        'writeObject',
+      ).mockImplementation(function (this: unknown, context: { identifier: string }) {
+        if (context.identifier === 'bad') throw new Error('row too big');
+        return write.call(this, context);
+      });
+      store.put(contextOf('good', 1, 0.5), null);
+      store.put(contextOf('bad', 1, 0.5), null);
+      store.flush();
+      return storage.sql
+        .exec<{ identifier: string }>('SELECT identifier FROM objects')
+        .toArray()
+        .map((row) => row.identifier);
+    });
+    expect(kept).toEqual(['good']);
+    expect(error).toHaveBeenCalled();
+  });
+
+  it('forgets the oldest marks of what was deleted once there are too many', async () => {
+    const left = await runInDurableObject(
+      env.ROOMS.getByName('store-prune'),
+      (_instance, state) => {
+        migrate(state.storage.sql);
+        const store = new RoomStore(state.storage, { most: 3, prunedTo: 2 });
+        let now = 1000;
+        vi.spyOn(Date, 'now').mockImplementation(() => (now += 10));
+        for (const identifier of ['a', 'b', 'c', 'd']) {
+          store.delete(identifier, true);
+          store.flush();
+        }
+        return ['a', 'b', 'c', 'd'].filter((identifier) => store.isDeleted(identifier));
+      },
+    );
+    expect(left).toEqual(['c', 'd']);
   });
 });

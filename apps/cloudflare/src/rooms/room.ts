@@ -47,8 +47,8 @@ import { attributesOf, withAttributes } from './objects';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
 import type { StoredEntry } from './store';
-import { unmasked, viewFor, viewKind } from './visibility';
-import type { Lookup, ViewKind, Viewer } from './visibility';
+import { describe, unmasked, viewFor, viewKind } from './visibility';
+import type { Lookup, View, ViewKind, Viewer } from './visibility';
 
 /**
  * 変更をまとめて書くまでの間（ミリ秒）。待っているあいだは Hibernation に入らないので、
@@ -72,6 +72,24 @@ export const OCCUPIED_CHECK_MS = 60 * 60 * 1000;
 
 /** hello の前のものも含めて、1つの部屋が受ける WebSocket の数 */
 export const MAX_SOCKETS = MAX_MEMBERS * 2;
+
+/** つないでから hello を送るまでに待つ時間（ミリ秒）。過ぎたものは、新しい接続が来たときに閉じる */
+export const HELLO_TIMEOUT_MS = 10_000;
+
+/** 1つの接続が RATE_WINDOW_MS のあいだに送れるイベントの数。1つのフレームに多くのイベントを詰めても数える */
+export const MAX_EVENTS_PER_WINDOW = 20_000;
+
+/** 1つの接続が RATE_WINDOW_MS のあいだに頼めるダイスの数。超えたものは振らない */
+export const MAX_ROLLS_PER_WINDOW = 20;
+
+/** 部屋全体で振るのを待てるダイスの数。超えたものは振らない */
+export const MAX_PENDING_ROLLS = 64;
+
+/** 1つの部屋に置けるオブジェクトの数。超える新しいものは受けない */
+export const MAX_OBJECTS = 200_000;
+
+/** 見え方の手がかり（親の識別子と、宛先などの中身）の大きさの上限。超えるものは受けない */
+export const MAX_VIEW_BYTES = 16 * 1024;
 
 /** 部屋を作るときに Worker から渡すもの */
 export interface RoomInit {
@@ -123,6 +141,13 @@ const seatOf = (ws: WebSocket): Seat | null => ws.deserializeAttachment() as Sea
 
 const memberOf = (seat: Seat) => ({ peerId: seat.peerId, userId: seat.userId, role: seat.role });
 
+/**
+ * 同じ人の席か。ピア ID が同じでも、ユーザー ID とログインの有無まで同じでなければ別人とみなす。
+ * ログインした人のユーザー ID はトークンで確かめてあるので、ほかの人には名乗れない
+ */
+const isSamePerson = (a: Seat, b: Seat): boolean =>
+  a.userId === b.userId && a.account === b.account;
+
 const isHello = (value: unknown): value is { protocolVersion?: unknown } =>
   typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'hello';
 
@@ -142,6 +167,53 @@ const isDisclosureOf = (secretTag: unknown, tag: unknown): boolean => {
   const words = String(secretTag).trim().split(/\s+/);
   return words.includes('secret') && tag === words.filter((word) => word !== 'secret').join(' ');
 };
+
+/** 見え方の手がかりが、索引と SQLite の1行に置ける大きさか */
+const fitsIndex = (context: ObjectContext): boolean => {
+  const { parent, view } = describe(context);
+  return parent.length <= 256 && JSON.stringify(view).length <= MAX_VIEW_BYTES;
+};
+
+/**
+ * GM でない人が、見え方を決めるところをそう変えてよいか。Axe の画面が許すことだけを許す。
+ *
+ * - メモの公開の範囲は、持ち主だけが変えられる。持ち主は、持ち主か、持ち主のいないものを自分にする人が変えられる
+ * - ダイスの持ち主も同じ
+ * - カードの持ち主（覗いている人）は、自分にするか、空にするだけ
+ * - 発言の宛先と、シークレットを外すことは、送り主だけ（ダイスの結果は振った人）
+ */
+const mayChangeView = (before: View | null, after: View | null, seat: Seat): boolean => {
+  if (!before || !after || before.kind !== after.kind) return true;
+  const ownerMove = (from: string, to: string) =>
+    from === to || from === seat.userId || (from === '' && to === seat.userId);
+  switch (before.kind) {
+    case 'note': {
+      const next = after as typeof before;
+      const disclosureSame =
+        before.mode === next.mode && JSON.stringify(before.users) === JSON.stringify(next.users);
+      return (
+        (disclosureSame || before.owner === seat.userId) && ownerMove(before.owner, next.owner)
+      );
+    }
+    case 'die':
+      return ownerMove(before.owner, (after as typeof before).owner);
+    case 'card': {
+      const next = after as typeof before;
+      return next.owner === before.owner || next.owner === '' || next.owner === seat.userId;
+    }
+    case 'chat': {
+      const next = after as typeof before;
+      const sender = before.from === seat.userId || before.originFrom === seat.userId;
+      const toSame = JSON.stringify(before.to) === JSON.stringify(next.to);
+      return (toSame && (next.secret || !before.secret)) || sender;
+    }
+    default:
+      return true;
+  }
+};
+
+/** 人の名乗れないユーザー ID。Axe が発言の送り主に使う名前 */
+const RESERVED_USER_IDS: ReadonlySet<string> = new Set([DICE_BOT_SENDER, 'System']);
 
 /** サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value も） */
 const ROLLED_ATTRIBUTES = ['dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
@@ -164,10 +236,19 @@ export class RoomDurableObject extends DurableObject<Env> {
   private flushTally = { count: 0, since: 0 };
   /** 頼まれた順に振る。システムを初めて読み込むときだけ待つ */
   private rollQueue: Promise<void> = Promise.resolve();
-  /** 送ってきたフレームの数。窓の始まりと、そこからの数 */
-  private readonly rates = new WeakMap<WebSocket, { start: number; count: number }>();
+  /** 送ってきたフレーム・イベント・ダイスの数。窓の始まりと、そこからの数 */
+  private readonly rates = new WeakMap<
+    WebSocket,
+    { start: number; count: number; events: number; rolls: number }
+  >();
   /** 切れたと知らされたもの */
   private readonly gone = new WeakSet<WebSocket>();
+  /** 断って閉じたもの。hello の前に断ったものは席が無いので、ここで覚える */
+  private readonly refused = new WeakSet<WebSocket>();
+  /** hello の前の接続を受けた時刻。Hibernation で消えたら、待ちすぎたものとみなす */
+  private readonly connectedAt = new WeakMap<WebSocket, number>();
+  /** 振るのを待っているダイスの数 */
+  private pendingRolls = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -228,19 +309,37 @@ export class RoomDurableObject extends DurableObject<Env> {
   /** WebSocket の接続を受ける。Worker が Origin とレート制限を確かめてから回してくる */
   override async fetch(): Promise<Response> {
     if (!this.room()) return Response.json({ error: 'room-not-found' }, { status: 404 });
-    if (this.ctx.getWebSockets().length >= MAX_SOCKETS) {
+    this.closeSilentSockets();
+    const open = this.ctx
+      .getWebSockets()
+      .filter((ws) => !this.gone.has(ws) && !this.refused.has(ws));
+    if (open.length >= MAX_SOCKETS) {
       return Response.json({ error: 'room-full' }, { status: 503 });
     }
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
+    this.connectedAt.set(server, Date.now());
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /**
+   * hello を送らないまま HELLO_TIMEOUT_MS を過ぎた接続を閉じる。閉じないと、hello を送らない接続で
+   * 部屋を満員にできてしまう
+   */
+  private closeSilentSockets(): void {
+    const now = Date.now();
+    for (const ws of this.ctx.getWebSockets()) {
+      if (seatOf(ws) || this.gone.has(ws) || this.refused.has(ws)) continue;
+      const at = this.connectedAt.get(ws);
+      if (at === undefined || now - at > HELLO_TIMEOUT_MS) this.refuse(ws, 'hello-required');
+    }
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     // PING には自動で答えるので、ここに来るテキストは使わない
     if (typeof message === 'string') return;
     const seat = seatOf(ws);
-    if (seat?.closed) return;
+    if (seat?.closed || this.refused.has(ws)) return;
     if (!this.withinRate(ws)) return this.refuse(ws, 'too-many-messages');
 
     let decoded: unknown;
@@ -255,6 +354,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (!parsed.success) return this.refuse(ws, 'bad-message');
     const received = parsed.output;
     if (received.type === 'send') {
+      if (!this.withinEvents(ws, received.events.length))
+        return this.refuse(ws, 'too-many-messages');
       this.relay(ws, seat, received.to ?? undefined, received.events);
     } else if (received.type === 'time') {
       this.post(ws, { type: 'time', serverTime: Date.now() });
@@ -334,6 +435,9 @@ export class RoomDurableObject extends DurableObject<Env> {
       // ログインした人のユーザー ID は、トークン無しには名乗らせない（その人に見えるものが見えてしまう）
       return this.refuse(ws, 'unauthorized');
     }
+    // 発言の送り主に使う名前（ダイスボットなど）は名乗らせない。サーバーが振った発言の送り主と
+    // みなされ、シークレットや秘話が見えてしまう
+    if (RESERVED_USER_IDS.has(hello.userId)) return this.refuse(ws, 'bad-message');
     if (hello.accessToken) {
       const secret = this.sessionSecret();
       const claims = readToken(hello.accessToken, 'access', secret);
@@ -377,6 +481,8 @@ export class RoomDurableObject extends DurableObject<Env> {
   private seat(ws: WebSocket, seat: Seat): void {
     const others = this.seats(ws);
     const previous = others.find((other) => other.seat.peerId === seat.peerId);
+    // ほかの人のピア ID を名乗るものは入れない。入れると、その人を追い出して成り代われてしまう
+    if (previous && !isSamePerson(previous.seat, seat)) return this.refuse(ws, 'bad-message');
     if (!previous && others.length >= MAX_MEMBERS) return this.refuse(ws, 'room-full');
     // 同じ人がつなぎ直した。古い方は、もう切れているのに残っているもの
     if (previous) this.refuse(previous.ws, 'replaced');
@@ -420,6 +526,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   /** 理由を送ってから閉じる。入っていた人なら、出たことにする */
   private refuse(ws: WebSocket, code: ErrorCode): void {
     const seat = seatOf(ws);
+    this.refused.add(ws);
     if (seat && !seat.closed) {
       ws.serializeAttachment({ ...seat, closed: true });
       if (code !== 'replaced') this.leave(seat);
@@ -441,15 +548,34 @@ export class RoomDurableObject extends DurableObject<Env> {
     });
   }
 
-  private withinRate(ws: WebSocket): boolean {
+  private rateOf(ws: WebSocket): { start: number; count: number; events: number; rolls: number } {
     const now = Date.now();
-    const rate = this.rates.get(ws);
+    let rate = this.rates.get(ws);
     if (!rate || now - rate.start >= RATE_WINDOW_MS) {
-      this.rates.set(ws, { start: now, count: 1 });
-      return true;
+      rate = { start: now, count: 0, events: 0, rolls: 0 };
+      this.rates.set(ws, rate);
     }
+    return rate;
+  }
+
+  private withinRate(ws: WebSocket): boolean {
+    const rate = this.rateOf(ws);
     rate.count += 1;
     return rate.count <= MAX_FRAMES_PER_WINDOW;
+  }
+
+  /** 送ってきたイベントの数が上限のうちか。1つのフレームに詰めたものも1つずつ数える */
+  private withinEvents(ws: WebSocket, count: number): boolean {
+    const rate = this.rateOf(ws);
+    rate.events += count;
+    return rate.events <= MAX_EVENTS_PER_WINDOW;
+  }
+
+  /** ダイスを頼める数のうちか */
+  private withinRolls(ws: WebSocket): boolean {
+    const rate = this.rateOf(ws);
+    rate.rolls += 1;
+    return rate.rolls <= MAX_ROLLS_PER_WINDOW;
   }
 
   // ---- 中継と同期 ----
@@ -511,7 +637,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           else toAddressee();
           break;
         case AuthorityEvent.ROLL_REQUEST:
-          if (forAuthority) this.requestRoll(data, seat);
+          if (forAuthority) this.requestRoll(data, seat, sender);
           else toAddressee();
           break;
         case SyncEvent.CATALOG:
@@ -567,9 +693,22 @@ export class RoomDurableObject extends DurableObject<Env> {
     const { identifier, aliasName } = context;
     const reply: Reply = (eventName, data) => push(sender, fromAuthority(eventName, data));
 
+    // 置いてあるものの種類は変えさせない。カーソルを名乗って、ほかのものを上書きさせないため
+    const existing = this.store.entryOf(identifier);
+    if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
+    // 大きすぎる見え方の手がかりは、索引にも SQLite の1行にも置けない。新しいものは数も絞る
+    if (!fitsIndex(context) || (!existing && this.store.size >= MAX_OBJECTS))
+      return this.refuseWrite(identifier, seat, reply);
+
     const seen = this.kindOf(identifier, seat);
     if (seen === 'hidden') return reply(AuthorityEvent.WITHDRAW, { identifier });
     if (seen === 'masked') context = unmasked(context, this.store.get(identifier) as ObjectContext);
+    if (
+      existing &&
+      seat.role !== 'gm' &&
+      !mayChangeView(existing.view, describe(context).view, seat)
+    )
+      return this.refuseWrite(identifier, seat, reply);
 
     let owner: string | null = null;
     let corrected = false;
@@ -744,16 +883,21 @@ export class RoomDurableObject extends DurableObject<Env> {
    * コマンドでなければ何もしない。見学者は、自分が発言できるタブでだけ振れる。
    * 結果は見てよい人へ見てよい形で配る（秘話の宛先、シークレットなら伏せた形）
    */
-  private requestRoll(data: unknown, seat: Seat): void {
+  private requestRoll(data: unknown, seat: Seat, sender: WebSocket): void {
     const parsed = safeParse(rollRequestSchema, data);
     if (!parsed.success) return;
     const request = parsed.output;
     const { message } = request;
     if (message.aliasName !== CHAT_MESSAGE_ALIAS) return;
     if (seat.role === 'guest' && !this.guestMayWrite(message, seat)) return;
+    // 振るのは重いので、頼める数を絞る。超えたものは振らない
+    if (!this.withinRolls(sender) || this.pendingRolls >= MAX_PENDING_ROLLS) return;
 
+    this.pendingRolls += 1;
     this.rollQueue = this.rollQueue
       .then(async () => {
+        // 1つ振るごとに、ほかのメッセージに順番を譲る
+        await new Promise((resolve) => setTimeout(resolve, 0));
         const started = Date.now();
         const rolled = await rollLine(request.gameSystem, request.command);
         this.record('roll', request.gameSystem, Date.now() - started);
@@ -791,7 +935,10 @@ export class RoomDurableObject extends DurableObject<Env> {
           }
         }
       })
-      .catch((err: unknown) => console.error('Roll failed:', err));
+      .catch((err: unknown) => console.error('Roll failed:', err))
+      .finally(() => {
+        this.pendingRolls -= 1;
+      });
     this.ctx.waitUntil(this.rollQueue);
   }
 

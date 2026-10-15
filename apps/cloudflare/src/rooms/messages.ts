@@ -37,7 +37,7 @@ export const helloSchema = object({
   type: literal('hello'),
   protocolVersion: number(),
   peerId: peerIdSchema,
-  userId: pipe(string(), maxLength(128)),
+  userId: pipe(string(), minLength(1), maxLength(128)),
   password: nullish(pipe(string(), maxLength(MAX_PASSWORD_LENGTH))),
   accessToken: nullish(string()),
   invite: nullish(string()),
