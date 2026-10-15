@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { safeParse } from 'valibot';
 
@@ -39,6 +40,21 @@ describe('the message contract', () => {
     'turns away %s',
     (_name, message) => {
       expect(safeParse(clientMessageSchema, message).success).toBe(false);
+    },
+  );
+
+  it.each(['hello', 'helloWithPassword', 'helloLoggedIn'] as const)(
+    'gives %s the peer id Axe makes from its user id, which the room server holds it to',
+    (name) => {
+      const { peerId, userId } = messages.client[name];
+      const digest = protocol.toBase62(
+        new Uint8Array(createHash('sha256').update(userId).digest()),
+      );
+
+      expect(peerId).toMatch(protocol.ROOM_PEER_ID_PATTERN);
+      expect(peerId.slice(0, protocol.PEER_ID_USER_DIGEST_LENGTH)).toBe(
+        digest.slice(0, protocol.PEER_ID_USER_DIGEST_LENGTH),
+      );
     },
   );
 
