@@ -108,7 +108,7 @@ DiscordのアクセストークンはWorkerのどこにも置かず、その人�
 | `GET`    | `/v1/login/discord`          | ログインを始める（ページとして開く。`redirect_uri`と`code_challenge`）            |
 | `GET`    | `/v1/login/discord/callback` | Discordから戻ってくる（Discordのアプリに登録するURL）                             |
 | `POST`   | `/v1/auth/token`             | コードかリフレッシュトークンを、トークンの組に替える                              |
-| `POST`   | `/v1/auth/logout`            | ログアウト。そのリフレッシュトークンの系統を無効にする                            |
+| `POST`   | `/v1/auth/logout`            | ログアウト。そのリフレッシュトークンの系統を無効にする（`AUTH_LIMITER`で数える）  |
 | `GET`    | `/v1/account`                | ログインしている人（`Authorization: Bearer`）                                     |
 | `DELETE` | `/v1/account`                | アカウントを消す（`Authorization: Bearer`）                                       |
 

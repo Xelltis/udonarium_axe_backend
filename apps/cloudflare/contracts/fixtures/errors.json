@@ -63,7 +63,7 @@
     },
     {
       "code": "too-many-messages",
-      "when": "10秒のあいだに 2000 を超えるフレームを送った",
+      "when": "10秒のあいだに 2000 を超えるフレームか、20000 を超えるイベントを送った",
       "retry": true,
       "message": {
         "type": "error",

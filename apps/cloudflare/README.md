@@ -19,8 +19,10 @@ SkyWay版の配信は、これからも残ります。
 | `HEAD`   | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットが置かれているかを返す                     |
 | `GET`    | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットの中身を返す                               |
 | `PUT`    | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットを置く（GMとPLだけ）                       |
+| `GET`    | `/v1/rooms/:roomKey/assets`         | 部屋のアセットの一覧（置いたときの名前つき）             |
 | `GET`    | `/v1/auth/config`                   | ログインに使える提供元                                   |
 | `GET`    | `/v1/login/discord`                 | ログインを始める（ページとして開く）                     |
+| `GET`    | `/v1/login/discord/callback`        | Discordから戻ってくる（Discordのアプリに登録するURL）    |
 | `POST`   | `/v1/auth/token`                    | ログインのコードやリフレッシュトークンをトークンに替える |
 | `POST`   | `/v1/auth/logout`                   | ログアウト                                               |
 | `GET`    | `/v1/account`                       | ログインしている人                                       |
@@ -103,7 +105,7 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 | 413  | `too-large`            | 種類ごとの上限を超えている                                         |
 | 415  | `unsupported-type`     | 受け付ける画像でも音声でもない                                     |
 | 426  | `upgrade-required`     | 部屋に入るURLを、WebSocketでなく開いた                             |
-| 429  | `rate-limited`         | アップロード、R2の読み出し、部屋を作る・入るのどれかが上限を超えた |
+| 429  | `rate-limited`         | アップロード、R2の読み出しと一覧、部屋を作る・削除する・入る、ログインのどれかが上限を超えた |
 | 451  | `blocked`              | 運営する人が、その名前のものを置かせないようにした                 |
 | 500  | `config-invalid`       | 環境変数が足りないか、形が違う                                     |
 | 500  | `internal-error`       | それ以外の失敗                                                     |
@@ -117,7 +119,7 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 サーバーは参加者から見て、全部を持っているもう1人のピア（`@authority`）としてふるまいます。
 
 - カタログの交換はこのピアとだけ行います。入ってきた人が持っている新しいものは取り寄せ、サーバーの方が新しいものは入ってきた人が取りに来ます。
-- `UPDATE_GAME_OBJECT`と`DELETE_GAME_OBJECT`は、版を比べて（新しい方を勝たせる）から、ほかの全員に配ります。古い版を送った人には、持っている方を送り返します。消したものは印を残し、生き返らせません。
+- `UPDATE_GAME_OBJECT`と`DELETE_GAME_OBJECT`は、版を比べて（新しい方を勝たせる）から、ほかの全員に配ります。古い版を送った人には、持っている方を送り返します。消したものは印を残し、印があるあいだは生き返らせません（印は10万件を超えると、古いものから8万件まで減らします）。
 - 参加者ごとのカーソル（`PeerCursor`）は、その人がいるあいだだけ持ちます。
 - 送り主（`sendFrom`）はサーバーが上書きし、送り主には返しません。
 - 接続の情報はWebSocketに添え、卓の状態はSQLiteに置くので、Hibernationで眠っても戻ります。書き込みはオブジェクトごとに1秒ぶんまとめ、1MiBを超えるものは行を分けて置きます。
@@ -131,7 +133,7 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 見え方が変わると、`AUTHORITATIVE_OBJECT`で渡すか`WITHDRAW_GAME_OBJECT`で外させます。
 チャットのダイスは、サーバーがBCDiceで振ります（`ROLL_REQUEST`）。
 部屋のパスワードはPBKDF2のハッシュにして置き、`hello`で受けたものと照らします。
-部屋を作る・入るのは、許可したOriginから、送信元ごとに合わせて1分30回までです。
+部屋を作る・削除する・入るのは、許可したOriginから、送信元ごとに合わせて1分30回までです。部屋の一覧は、R2の読み出しと合わせて1分600回までです。
 1つの部屋に入れるのは32人、1つの接続から送れるのは10秒に2000フレームまでです。
 
 やりとりの形（封筒、エラーのコード）と、Axeと同じ判定になるかを確かめるフィクスチャは[contracts/](contracts)にあります。
@@ -203,8 +205,11 @@ EnvironmentごとにWorkerが1つで、それぞれに次のSecretを入れて�
 | `ACCESS_CONTROL_ALLOW_ORIGIN` | アプリを配信しているOrigin。`wrangler.jsonc`の値の代わりに使う |
 | `CLOUDFLARE_API_TOKEN`        | デプロイに使うAPIトークン（権限は下を参照）                    |
 | `CLOUDFLARE_ACCOUNT_ID`       | CloudflareのアカウントID。リポジトリのSecretに置いても構わない |
+| `DISCORD_CLIENT_ID`           | ログインに使うDiscordのアプリのClient ID                       |
+| `DISCORD_CLIENT_SECRET`       | 同じアプリのClient Secret                                      |
+| `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数                         |
 
-`ACCESS_CONTROL_ALLOW_ORIGIN`は、デプロイのたびにWorkerのシークレットとして入れ直します。
+`ACCESS_CONTROL_ALLOW_ORIGIN`とログインの3つ（`DISCORD_CLIENT_ID`・`DISCORD_CLIENT_SECRET`・`SESSION_SECRET`）は、デプロイのたびにWorkerのシークレットとして入れ直します。
 値を変えたときは、mainのCIを走らせ直せば入れ替わります。
 
 APIトークンは、mainだけが使えるEnvironmentに置き、権限は次のように絞ります。

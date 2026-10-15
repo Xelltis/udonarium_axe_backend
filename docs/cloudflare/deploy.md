@@ -59,7 +59,7 @@ CloudflareのCache APIは`*.workers.dev`では効かないので、そのまま�
 
 ::: warning cookieを使わないホスト名にする
 Axeやログインの画面とは別の、このWorkerのためだけのホスト名にしてください。
-置かれたSVGを直接開いても、そのホスト名のcookieを読ませないためです。
+置かれたSVGが万一文書として開かれても、そのホスト名のcookieを読ませないためです。
 詳しくは[安全のしくみ](/cloudflare/security#svgはサンドボックスに入れて配る)にあります。
 :::
 
