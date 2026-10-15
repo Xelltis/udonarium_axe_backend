@@ -402,10 +402,10 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   private wiping = false;
   /**
-   * 接続ごとに、親を待っているあいだにカタログで外させたもの。書いた本人でも、もう持っていないので、
-   * 親が来て見えるようになったら渡す
+   * ユーザー ID ごとに、親を待っているあいだにカタログで外させたもの。書いた本人でも、もう持っていないので、
+   * 親が来て見えるようになったら渡す。つなぎ直しても同じ人なので、接続ではなくユーザー ID で持つ
    */
-  private withdrawnPending = new WeakMap<WebSocket, Set<string>>();
+  private withdrawnPending = new Map<string, Set<string>>();
   /** 席ごとに、消させなかったものとその子孫と、それをいつまで消させないか */
   private keptFromDeleting = new Map<string, { ids: Set<string>; until: number }>();
 
@@ -1059,7 +1059,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           else toAddressee();
           break;
         case SyncEvent.CATALOG:
-          if (forAuthority) this.answerCatalog(data, seat, sender, reply);
+          if (forAuthority) this.answerCatalog(data, seat, reply);
           else toAddressee();
           break;
         case SyncEvent.REQUEST:
@@ -1278,9 +1278,14 @@ export class RoomDurableObject extends DurableObject<Env> {
     for (const { ws, seat } of seats) {
       for (const identifier of identifiers) {
         const then = viewKind(identifier, seat, was);
-        const withdrawn = then === 'pending' && this.withdrawnPending.get(ws)?.delete(identifier);
+        const now = viewKind(identifier, seat, this.store.lookup);
+        const withdrawn =
+          then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
         if (ws === writer && then === 'pending' && !withdrawn) continue;
-        this.resend(ws, identifier, then, viewKind(identifier, seat, this.store.lookup), push);
+        this.resend(ws, identifier, then, now, push);
+        // 親がもう1段届いていないうちは、まだ渡していないので覚えておく
+        if (withdrawn && now !== 'pending')
+          this.withdrawnPending.get(seat.userId)?.delete(identifier);
       }
     }
   }
@@ -1645,7 +1650,7 @@ export class RoomDurableObject extends DurableObject<Env> {
    * 消したものは消させ、その人から見えないものは手元から外させる。
    * サーバーの方が新しいものは、クライアントがサーバーのカタログを見て取りに来る
    */
-  private answerCatalog(data: unknown, seat: Seat, sender: WebSocket, reply: Reply): void {
+  private answerCatalog(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(catalogSchema, data);
     if (!parsed.success) return;
     for (const { identifier, version } of parsed.output) {
@@ -1658,8 +1663,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (kind === 'hidden' || (kind === 'pending' && seat.role !== 'gm')) {
         reply(AuthorityEvent.WITHDRAW, { identifier });
         if (kind === 'pending') {
-          const withdrawn = this.withdrawnPending.get(sender) ?? new Set<string>();
-          this.withdrawnPending.set(sender, withdrawn.add(identifier));
+          const withdrawn = this.withdrawnPending.get(seat.userId) ?? new Set<string>();
+          this.withdrawnPending.set(seat.userId, withdrawn.add(identifier));
         }
         continue;
       }

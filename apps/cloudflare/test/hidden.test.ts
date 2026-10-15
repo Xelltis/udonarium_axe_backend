@@ -511,6 +511,20 @@ describe('writes that would uncover what is kept back', () => {
     expect(ids(await t.alice.events())).toEqual([['AUTHORITATIVE_OBJECT', 'kid']]);
   });
 
+  it('hands it back too when the parent is two steps away, and after the writer reconnects', async () => {
+    const t = await table();
+    t.alice.emit([update(contextOf('kid', 1, 0.5, { parentIdentifier: 'mid' }))]);
+    t.alice.emit([{ eventName: SyncEvent.CATALOG, data: [{ identifier: 'kid', version: 1.5 }] }]);
+    expect(ids(await t.alice.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'kid']]);
+
+    t.alice.emit([update(contextOf('mid', 1, 0.5, { parentIdentifier: 'top' }))]);
+    await t.alice.expectQuiet();
+    const again = (await join(t.roomKey, 'alice')).client;
+    again.emit([update(contextOf('top', 1, 0.5, {}))]);
+
+    expect(ids(await again.events())).toEqual([['AUTHORITATIVE_OBJECT', 'kid']]);
+  });
+
   it('refuses a player claiming a memo kept to the GM, and lets one claim an open memo', async () => {
     const t = await table();
     await place(t, [memoOf('closed', 'gm'), memoOf('open', '')]);
