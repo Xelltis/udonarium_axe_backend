@@ -378,7 +378,7 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 - 頼んだ結果に付いてきた飾りと印は持ち込みません。`stamp`・`attachmentImageIdentifiers`・`replyTo`・`quoteOf`は空に、`fixd`は`false`にし、`editHistory`・`disclosedAt`・`pseudoDeletedAt`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`は外します。
 - サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`disclosedAt`（並びの時刻）・`editHistory`・`fixd`・`stamp`・`attachmentImageIdentifiers`・`replyTo`・`quoteOf`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません。`syncData`の直下にある並びの位置（`majorIndex`・`minorIndex`）も同じです（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
 - ただし、振った人（`originFrom`の人）とGMは、シークレットを公開できます。`tag`から`secret`の語を外すこと（`system secret`を`system`に）と、そのときに末尾へ移すこと（`disclosedAt`と`minorIndex`。`disclosedAt`は10分以上前なら10分前へ寄せ、`minorIndex`は0以上1未満だけを受ける）だけを受け付けます。公開すると、伏せて届けていた人にも結果の全体が届きます。
-- 消したことにする印（`pseudoDeletedAt`）を付けられるのはGMだけで、結果の発言そのものを消せるのもGMだけです。結果の入ったタブを消せるのもGMだけで、ほかの人が消そうとすると、その人に見えていたものを`AUTHORITATIVE_OBJECT`で返します。
+- 消したことにする印（`pseudoDeletedAt`）を付けられるのはGMだけで、結果の発言そのものを消せるのもGMだけです。結果の入ったタブを消せるのもGMだけで、ほかの人が消そうとすると、その人に見えていたものを`AUTHORITATIVE_OBJECT`で返します。そのあと10秒のあいだは、同じ人がそのタブの中の行を消そうとしても消させません。Axeはタブを消すとき、続けて中の行を1つずつ消すからです。
 - `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。
 - ダイス表やリソースの操作は、これまでどおりAxeが手元で処理します。
 - BCDiceの版は、Axeと揃えます（いまは4.10.0）。

@@ -598,6 +598,64 @@ describe('a rolled result', () => {
     await clients.bob.expectQuiet();
   });
 
+  it('keeps the lines of a tab it would not let go, though they are deleted one by one after it', async () => {
+    const clients = await room();
+    // bob が carol にだけ宛てて振った結果は、alice には見えない
+    const whisper = rollRequest('whispered', '1d1');
+    clients.bob.emit([
+      {
+        ...whisper,
+        data: {
+          ...whisper.data,
+          message: {
+            ...whisper.data.message,
+            syncData: {
+              ...whisper.data.message.syncData,
+              attributes: { ...attributes(whisper.data.message), to: 'user-carol' },
+            },
+          },
+        },
+      },
+    ]);
+    await clients.bob.events();
+    await clients.carol.events();
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: contextOf(
+          'plain',
+          1,
+          0.5,
+          { parentIdentifier: 'main', value: 'hi', attributes: {} },
+          'chat',
+        ),
+      },
+    ]);
+    await clients.bob.events();
+    await clients.carol.events();
+
+    // Axe はタブに続けて、中の行を1つずつ消す。行は別の束で来ることもある
+    clients.alice.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
+    ]);
+    const back = await clients.alice.events();
+    clients.alice.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
+    ]);
+    back.push(...(await clients.alice.events()));
+
+    expect(back.map((event) => [event.eventName, (event.data as Message).identifier])).toEqual(
+      expect.arrayContaining([
+        [AuthorityEvent.AUTHORITATIVE, 'main'],
+        [AuthorityEvent.AUTHORITATIVE, 'plain'],
+      ]),
+    );
+    expect(back.map((event) => (event.data as Message).identifier)).not.toContain('whispered');
+    await clients.bob.expectQuiet();
+    await clients.carol.expectQuiet();
+  });
+
   it('is rolled once for a request sent twice before either is rolled', async () => {
     const clients = await room();
 

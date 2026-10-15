@@ -117,6 +117,12 @@ const notLongAgo = (timestamp: unknown): number => {
 const indexFraction = (value: unknown): number =>
   typeof value === 'number' && value >= 0 && value < 1 ? value : 0;
 
+/**
+ * 消させなかったものの子孫を、そのあとも消させない時間（ミリ秒）。Axe はタブを消すとき、タブに続けて
+ * 中の行を1つずつ消すので、タブを消させなかったあとに中の行だけが消えないように
+ */
+const KEEP_FROM_DELETING_MS = 10_000;
+
 /** 部屋を消しきれなかったとき、もう一度消しにくるまでの時間（ミリ秒） */
 export const WIPE_RETRY_MS = 60_000;
 
@@ -395,6 +401,8 @@ export class RoomDurableObject extends DurableObject<Env> {
    * 消し終われば部屋の行も無くなるので、メモリだけに置けばよい
    */
   private wiping = false;
+  /** 席ごとに、消させなかったものとその子孫と、それをいつまで消させないか */
+  private keptFromDeleting = new Map<string, { ids: Set<string>; until: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -1504,13 +1512,21 @@ export class RoomDurableObject extends DurableObject<Env> {
     // その人のあいだだけ置くもの（カーソル）は、その人だけが消せる
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)
       return this.refuseWrite(identifier, seat, reply);
+    const kept = this.keptFromDeleting.get(seat.peerId);
+    if (kept && kept.until > Date.now() && kept.ids.has(identifier)) {
+      if (delivered(this.kindOf(identifier, seat))) this.refuseWrite(identifier, seat, reply);
+      return;
+    }
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
     // サーバーが振った結果は、GM のほかには消させない。タブごと消すのも同じ。送り主の手元からは消えて
-    // いるので、見えるものを全部返す
+    // いるので、見えるものを全部返す。続けて送られてくる中の行も、しばらく消させない
     if (seat.role !== 'gm' && doomed.some((id) => this.isServerRoll(id))) {
       for (const id of doomed) {
         if (delivered(this.kindOf(id, seat))) this.refuseWrite(id, seat, reply);
       }
+      const ids = kept && kept.until > Date.now() ? kept.ids : new Set<string>();
+      for (const id of doomed) ids.add(id);
+      this.keptFromDeleting.set(seat.peerId, { ids, until: Date.now() + KEEP_FROM_DELETING_MS });
       return;
     }
     const others = this.seats(sender);
