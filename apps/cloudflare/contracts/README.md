@@ -3,12 +3,16 @@
 サーバー版の部屋（`src/rooms`）とUdonarium Axeのあいだのプロトコルです。
 このディレクトリはサーバー側が持ち主で、Axeは同じ内容を写して使います。npmには出しません。
 
-| ファイル                 | 中身                                                           |
-| ------------------------ | -------------------------------------------------------------- |
-| `protocol.ts`            | 封筒の型、定数、エラーのコード、LWWの判定（`judgeUpdate`）     |
-| `fixtures/lww.json`      | `judgeUpdate`の期待値。両側のテストが同じものを読む            |
-| `fixtures/messages.json` | 封筒の例。サーバーが受け付けるもの・断るもの・送るもの         |
-| `fixtures/errors.json`   | 接続を閉じる理由。コードごとに、起きるときとサーバーが送るもの |
+| ファイル                   | 中身                                                               |
+| -------------------------- | ------------------------------------------------------------------ |
+| `protocol.ts`              | 封筒の型、定数、エラーのコード、LWWの判定（`judgeUpdate`）         |
+| `fixtures/lww.json`        | `judgeUpdate`の期待値。両側のテストが同じものを読む                |
+| `fixtures/messages.json`   | 封筒の例。サーバーが受け付けるもの・断るもの・送るもの             |
+| `fixtures/errors.json`     | 接続を閉じる理由。コードごとに、起きるときとサーバーが送るもの     |
+| `fixtures/visibility.json` | 見え方の期待値。置いたものが、GM・持ち主・PL・見学からどう見えるか |
+| `fixtures/events.json`     | サーバーとのあいだだけで使うイベントの例と、断る理由のすべて       |
+| `fixtures/http.json`       | HTTPの要求と返事の例。サーバーのテストが、実際の返事と形を比べる   |
+| `fixtures/limits.json`     | 両側で揃える上限と期間                                             |
 
 `protocol.ts`の`PROTOCOL_VERSION`を上げたら、Axe側の写しも同じ版に揃えます。
 版が違うと、サーバーは`hello`を`protocol-mismatch`で断ります。

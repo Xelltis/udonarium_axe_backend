@@ -2,13 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { safeParse } from 'valibot';
 
 import errors from '../contracts/fixtures/errors.json';
+import events from '../contracts/fixtures/events.json';
+import limits from '../contracts/fixtures/limits.json';
 import lww from '../contracts/fixtures/lww.json';
 import messages from '../contracts/fixtures/messages.json';
 import visibility from '../contracts/fixtures/visibility.json';
-import { CLOSE_CODE, ERROR_CODES, PROTOCOL_VERSION, judgeUpdate } from '../contracts/protocol';
+import * as protocol from '../contracts/protocol';
+import {
+  AUTHORITY_ONLY_EVENTS,
+  CLOSE_CODE,
+  ERROR_CODES,
+  PROTOCOL_VERSION,
+  ROLE_REJECT_REASONS,
+  ROLL_REJECT_REASONS,
+  judgeUpdate,
+} from '../contracts/protocol';
 import type { UpdateVerdict } from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
-import { clientMessageSchema } from '../src/rooms/messages';
+import * as tokens from '../src/auth/tokens';
+import { clientMessageSchema, roleRequestSchema, rollRequestSchema } from '../src/rooms/messages';
 import { describe as describeObject, viewKind } from '../src/rooms/visibility';
 import type { ViewEntry, Viewer } from '../src/rooms/visibility';
 
@@ -33,6 +45,39 @@ describe('the message contract', () => {
   it('speaks the version the examples are written in', () => {
     expect(messages.client.hello.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(messages.server.welcome.protocolVersion).toBe(PROTOCOL_VERSION);
+  });
+});
+
+describe('the event contract', () => {
+  it('names the events only the server sends, and every reason it gives', () => {
+    expect(events.authorityOnly).toEqual([...AUTHORITY_ONLY_EVENTS]);
+    expect(events.roleRejectReasons).toEqual([...ROLE_REJECT_REASONS]);
+    expect(events.rollRejectReasons).toEqual([...ROLL_REJECT_REASONS]);
+    expect(ROLE_REJECT_REASONS).toContain(events.roleRejected.reason);
+    expect(ROLL_REJECT_REASONS).toContain(events.rollRejected.reason);
+  });
+
+  it.each(Object.entries(events.rollRequests))('rolls the request %s', (_name, request) => {
+    expect(safeParse(rollRequestSchema, request).success).toBe(true);
+  });
+
+  it.each(events.invalidRollRequests.map((request) => [request.suffix, request]))(
+    'turns away a request with the target %j',
+    (_name, request) => {
+      expect(safeParse(rollRequestSchema, request).success).toBe(false);
+    },
+  );
+
+  it('takes the role request', () => {
+    expect(safeParse(roleRequestSchema, events.roleRequest).success).toBe(true);
+  });
+});
+
+describe('the limit contract', () => {
+  it('holds the limits both sides keep', () => {
+    const kept = { ...protocol, ...tokens } as unknown as Record<string, unknown>;
+    const values = Object.entries(limits).filter(([name]) => name !== 'description');
+    for (const [name, value] of values) expect([name, kept[name]]).toEqual([name, value]);
   });
 });
 

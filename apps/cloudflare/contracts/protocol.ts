@@ -436,8 +436,15 @@ export const MAX_ROLLS_PER_WINDOW = 20;
  * - not-a-command：BCDice のコマンドとして振れなかった（Axe が手元で振っても何も出ないもの）
  * - failed：振るあいだにサーバーで失敗した
  */
-export type RollRejectReason =
-  'invalid' | 'not-allowed' | 'rate-limited' | 'busy' | 'not-a-command' | 'failed';
+export const ROLL_REJECT_REASONS = [
+  'invalid',
+  'not-allowed',
+  'rate-limited',
+  'busy',
+  'not-a-command',
+  'failed',
+] as const;
+export type RollRejectReason = (typeof ROLL_REJECT_REASONS)[number];
 
 /** サーバーが振った結果の発言の from */
 export const DICE_BOT_SENDER = 'System-BCDice';
@@ -456,8 +463,13 @@ export const SERVER_ROLL_FIELD = 'serverRoll';
  * - not-logged-in：ログインしていない人は見学のまま
  * - last-game-master：部屋の GM がいなくなる
  */
-export type RoleRejectReason =
-  'not-game-master' | 'unknown-peer' | 'not-logged-in' | 'last-game-master';
+export const ROLE_REJECT_REASONS = [
+  'not-game-master',
+  'unknown-peer',
+  'not-logged-in',
+  'last-game-master',
+] as const;
+export type RoleRejectReason = (typeof ROLE_REJECT_REASONS)[number];
 
 /**
  * 見てはいけない人に届けないもの、伏せて届けるもの。期待値は fixtures/visibility.json にある。
