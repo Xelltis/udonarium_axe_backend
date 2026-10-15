@@ -4,6 +4,7 @@ import {
   finite,
   literal,
   maxLength,
+  maxValue,
   minLength,
   nullish,
   number,
@@ -17,6 +18,7 @@ import {
 } from 'valibot';
 
 import {
+  MAX_OBJECT_VERSION,
   MAX_PASSWORD_LENGTH,
   MAX_ROLL_COMMAND_LENGTH,
   MAX_ROLL_TARGET_NAME_LENGTH,
@@ -69,8 +71,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const objectContextSchema = object({
   aliasName: pipe(string(), maxLength(128)),
   identifier: identifierSchema,
-  majorVersion: pipe(number(), finite()),
-  minorVersion: pipe(number(), finite()),
+  // 大きすぎる版は、あとから +1 しても変わらず、だれも書き換えられなくなる
+  majorVersion: pipe(number(), finite(), maxValue(MAX_OBJECT_VERSION)),
+  minorVersion: pipe(number(), finite(), maxValue(MAX_OBJECT_VERSION)),
   // 中身は読まないので、写さずにそのまま持つ
   syncData: custom<Record<string, unknown>>(isRecord),
 });

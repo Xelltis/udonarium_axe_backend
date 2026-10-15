@@ -62,6 +62,12 @@ export const ACCOUNT_USER_ID_PREFIX = 'acct_';
  */
 export const ROOM_PEER_ID_PATTERN = /^(\w{6})\w{3}\w{8}-(?:\w{7})?$/;
 
+/**
+ * オブジェクトの版（majorVersion と minorVersion）の上限。これより大きい版の UPDATE は受けない。
+ * 版は書くたびに 1 足すので、大きすぎると足しても変わらず、だれも書き換えられなくなる
+ */
+export const MAX_OBJECT_VERSION = 2 ** 50;
+
 /** Axe のチャットのタブをまとめる親の識別子。タブはこの直下に置く */
 export const CHAT_TAB_LIST_IDENTIFIER = 'ChatTabList';
 

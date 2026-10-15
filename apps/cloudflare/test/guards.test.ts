@@ -2,7 +2,13 @@ import { runInDurableObject } from 'cloudflare:test';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthorityEvent, MAX_ROLLS_PER_WINDOW, SyncEvent, toBase62 } from '../contracts/protocol';
+import {
+  AuthorityEvent,
+  MAX_OBJECT_VERSION,
+  MAX_ROLLS_PER_WINDOW,
+  SyncEvent,
+  toBase62,
+} from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
 import { MAX_EVENTS_PER_MESSAGE } from '../src/rooms/messages';
 import {
@@ -49,6 +55,19 @@ const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
 /** Axe が部屋に入るときの形のピア ID。頭はユーザー ID のダイジェスト */
 const roomPeerIdOf = (userId: string) =>
   `${toBase62(new Uint8Array(createHash('sha256').update(userId).digest())).slice(0, 6)}abcRoomName-`;
+
+describe('versions', () => {
+  it('takes no version so large that adding one would no longer change it', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+    await alice.client.next('join');
+
+    alice.client.emit([update(contextOf('frozen', MAX_OBJECT_VERSION * 2, 0.5))]);
+
+    await bob.client.expectQuiet();
+  });
+});
 
 describe('who a seat is', () => {
   it('keeps out the Axe peer id of somebody else, made from their user id, while they are away', async () => {
