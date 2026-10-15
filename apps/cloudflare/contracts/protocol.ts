@@ -344,8 +344,9 @@ export const SyncEvent = {
  *   書く権限の無い人が作ったものを取り下げさせるときに使う
  * - ROLE_REQUEST（サーバーへ）：data は { peerId, role }。GM が、部屋にいる人の役割を変える
  * - ROLE_REJECTED（サーバーから）：data は { peerId, role, reason }。ROLE_REQUEST を断った
- * - ROLL_REQUEST（サーバーへ）：data は RollRequest。サーバーが BCDice で振り、結果の発言を全員に配る。
- *   コマンドでなければ何もしない
+ * - ROLL_REQUEST（サーバーへ）：data は RollRequest。サーバーが BCDice で振り、結果の発言を全員に配る
+ * - ROLL_REJECTED（サーバーから）：data は { identifier, reason }。ROLL_REQUEST を振らなかった。
+ *   identifier は頼まれた結果の発言の識別子
  */
 export const AuthorityEvent = {
   AUTHORITATIVE: 'AUTHORITATIVE_OBJECT',
@@ -353,6 +354,7 @@ export const AuthorityEvent = {
   ROLE_REQUEST: 'ROLE_REQUEST',
   ROLE_REJECTED: 'ROLE_REJECTED',
   ROLL_REQUEST: 'ROLL_REQUEST',
+  ROLL_REJECTED: 'ROLL_REJECTED',
 } as const;
 
 /**
@@ -370,9 +372,34 @@ export interface RollRequest {
   gameSystem: string;
   /** 発言した人の名前。結果の名前は `<BCDice：名前>`（シークレットなら `<Secret-BCDice：名前>`） */
   speaker: string;
-  /** 結果の文面の後ろに付けるもの（対象のキャラの名前など） */
+  /**
+   * 結果の文面の後ろに付ける、対象のキャラの名前。` [名前]` の形で、名前は改行を含まず
+   * MAX_ROLL_TARGET_NAME_LENGTH 文字まで。違う形なら、サーバーは振らない（ROLL_REJECTED の invalid）
+   */
   suffix?: string;
 }
+
+/** ROLL_REQUEST の command の最長（文字数）。これより長い行は、Axe が手元で振る */
+export const MAX_ROLL_COMMAND_LENGTH = 4000;
+
+/** RollRequest の suffix に入れる名前の最長（文字数） */
+export const MAX_ROLL_TARGET_NAME_LENGTH = 128;
+
+/** 1つの接続が10秒のあいだに頼めるダイスの数。超えたものは rate-limited で断る */
+export const MAX_ROLLS_PER_WINDOW = 20;
+
+/**
+ * ROLL_REQUEST を振らなかった理由。
+ *
+ * - invalid：頼み方の形が違う（結果の発言の形、suffix の形、大きすぎるもの）
+ * - not-allowed：見学者が、見学者の話せないタブで振ろうとした
+ * - rate-limited：短いあいだに頼みすぎた（MAX_ROLLS_PER_WINDOW）
+ * - busy：部屋で振るのを待っているダイスが多すぎる
+ * - not-a-command：BCDice のコマンドとして振れなかった（Axe が手元で振っても何も出ないもの）
+ * - failed：振るあいだにサーバーで失敗した
+ */
+export type RollRejectReason =
+  'invalid' | 'not-allowed' | 'rate-limited' | 'busy' | 'not-a-command' | 'failed';
 
 /** サーバーが振った結果の発言の from */
 export const DICE_BOT_SENDER = 'System-BCDice';

@@ -130,6 +130,13 @@ describe('rolling on the server', () => {
     const [event] = await alice.events();
     expect((event.data as { identifier: string }).identifier).toBe('in-main');
     expect(attributes(event.data).originFrom).toBe('user-carol');
+    expect(await carol.events()).toEqual([
+      {
+        eventName: AuthorityEvent.ROLL_REJECTED,
+        data: { identifier: 'in-players', reason: 'not-allowed' },
+        sendFrom: AUTHORITY_PEER_ID,
+      },
+    ]);
   });
 
   it('rolls nothing for a line that is not a command, a message that is not chat, or one already there', async () => {
@@ -153,6 +160,32 @@ describe('rolling on the server', () => {
 
     const [event] = await bob.events();
     expect((event.data as { identifier: string }).identifier).toBe('marker');
+    // 振らなかったものは、頼んだ人に理由を返す。もう届いているものには何も返さない
+    const told: unknown[] = [];
+    for (;;) {
+      const [answer] = await alice.events();
+      if (answer.eventName !== AuthorityEvent.ROLL_REJECTED) break;
+      told.push(answer.data);
+    }
+    expect(told).toEqual([
+      { identifier: 'odd', reason: 'invalid' },
+      { identifier: 'chatter', reason: 'not-a-command' },
+    ]);
+  });
+
+  it('rolls nothing with a target that is not a single bracketed name', async () => {
+    const { alice } = await room();
+
+    alice.emit([
+      rollRequest('added', '1d1', { suffix: '\n→ 成功' }),
+      rollRequest('long', '1d1', { suffix: ` [${'x'.repeat(200)}]` }),
+    ]);
+
+    const told = [...(await alice.events()), ...(await alice.events())].map((event) => event.data);
+    expect(told).toEqual([
+      { identifier: 'added', reason: 'invalid' },
+      { identifier: 'long', reason: 'invalid' },
+    ]);
   });
 
   it('relays a roll request meant for another peer', async () => {
@@ -187,6 +220,11 @@ describe('rolling on the server', () => {
     expect(failure).toHaveBeenCalledWith('Roll failed:', expect.any(Error));
     const [event] = await bob.events();
     expect((event.data as { identifier: string }).identifier).toBe('after');
+    expect((await alice.events())[0]).toEqual({
+      eventName: AuthorityEvent.ROLL_REJECTED,
+      data: { identifier: 'broken', reason: 'failed' },
+      sendFrom: AUTHORITY_PEER_ID,
+    });
   });
 });
 
@@ -230,6 +268,64 @@ describe('a rolled result', () => {
       { eventName: AuthorityEvent.AUTHORITATIVE, data: kept, sendFrom: AUTHORITY_PEER_ID },
     ]);
     expect((await clients.alice.events())[0].data).toEqual(kept);
+  });
+
+  it('keeps its addressees, its time and its tab, even from the one who rolled it', async () => {
+    const clients = await room();
+    const original = await rolledIn(clients);
+
+    // 自分だけに宛て直し、時刻を戻し、ほかのタブへ移そうとする
+    const moved = edited(original, original.syncData.value, { to: 'user-alice', timestamp: 0 });
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: { ...moved, syncData: { ...moved.syncData, parentIdentifier: 'players' } },
+      },
+    ]);
+
+    const [back] = await clients.alice.events();
+    expect(back.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
+    const kept = back.data as Message;
+    expect(kept.syncData.parentIdentifier).toBe('main');
+    expect(attributes(kept)).toMatchObject({ to: '', timestamp: 1 });
+  });
+
+  it('is taken away or marked deleted only by the GM', async () => {
+    const clients = await room('bob');
+    const original = await rolledIn(clients);
+    await clients.carol.events();
+
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: edited(original, original.syncData.value, { pseudoDeletedAt: 5 }),
+      },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'rolled' } },
+    ]);
+    const refused = await clients.alice.events();
+    expect(refused.map((event) => event.eventName)).toEqual([
+      AuthorityEvent.AUTHORITATIVE,
+      AuthorityEvent.AUTHORITATIVE,
+    ]);
+    expect(attributes(refused[0].data).pseudoDeletedAt).toBeUndefined();
+    // 直した中身は受けるので、ほかの人には印の無いまま届き、消されはしない
+    const corrected = await clients.carol.events();
+    expect(corrected.map((event) => event.eventName)).toEqual([SyncEvent.UPDATE]);
+    expect(attributes(corrected[0].data).pseudoDeletedAt).toBeUndefined();
+
+    clients.bob.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: {
+          ...edited(original, original.syncData.value, { pseudoDeletedAt: 6 }),
+          majorVersion: 3,
+        },
+      },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'rolled' } },
+    ]);
+    const seen = await clients.carol.events();
+    expect(attributes(seen[0].data).pseudoDeletedAt).toBe(6);
+    expect(seen[1].eventName).toBe(SyncEvent.DELETE);
   });
 
   it('can be edited as before when the client sends the result back unchanged', async () => {

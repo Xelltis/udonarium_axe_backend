@@ -16,7 +16,12 @@ import {
   variant,
 } from 'valibot';
 
-import { MAX_PASSWORD_LENGTH, PEER_ROLES } from '../../contracts/protocol';
+import {
+  MAX_PASSWORD_LENGTH,
+  MAX_ROLL_COMMAND_LENGTH,
+  MAX_ROLL_TARGET_NAME_LENGTH,
+  PEER_ROLES,
+} from '../../contracts/protocol';
 
 // クライアントの MessagePack は undefined を nil にするので、省けるものは null も受ける
 
@@ -83,12 +88,15 @@ export const requestSchema = identifierSchema;
 
 export const forgetSchema = object({ identifiers: nullish(array(identifierSchema)) });
 
-const textSchema = pipe(string(), maxLength(4000));
+const textSchema = pipe(string(), maxLength(MAX_ROLL_COMMAND_LENGTH));
+
+/** 結果の後ろに付ける対象の名前。1行の ` [名前]` だけ。違う形を通すと、印の付いた結果に好きな文を足せてしまう */
+const TARGET_SUFFIX = new RegExp(`^ \\[[^\\r\\n]{1,${MAX_ROLL_TARGET_NAME_LENGTH}}\\]$`);
 
 export const rollRequestSchema = object({
   message: objectContextSchema,
   command: textSchema,
   gameSystem: pipe(string(), maxLength(128)),
   speaker: textSchema,
-  suffix: nullish(textSchema),
+  suffix: nullish(pipe(string(), regex(TARGET_SUFFIX))),
 });

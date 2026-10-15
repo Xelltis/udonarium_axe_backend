@@ -1,14 +1,13 @@
 import { runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthorityEvent, SyncEvent } from '../contracts/protocol';
+import { AuthorityEvent, MAX_ROLLS_PER_WINDOW, SyncEvent } from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
 import { MAX_EVENTS_PER_MESSAGE } from '../src/rooms/messages';
 import {
   MAX_EVENTS_PER_WINDOW,
   MAX_OBJECTS,
   MAX_PENDING_ROLLS,
-  MAX_ROLLS_PER_WINDOW,
   MAX_SOCKETS,
   MAX_VIEW_BYTES,
   TOKEN_GRACE_MS,
@@ -293,20 +292,27 @@ describe('sending too much', () => {
       '@authority',
     );
     const rolled = new Set<string>();
-    while (rolled.size < MAX_ROLLS_PER_WINDOW) {
+    const refused: unknown[] = [];
+    while (rolled.size < MAX_ROLLS_PER_WINDOW || refused.length === 0) {
       for (const event of await roller.client.events()) {
-        rolled.add((event.data as ObjectContext).identifier);
+        if (event.eventName === AuthorityEvent.ROLL_REJECTED) refused.push(event.data);
+        else rolled.add((event.data as ObjectContext).identifier);
       }
     }
     await roller.client.expectQuiet();
     expect(rolled.has(`r${MAX_ROLLS_PER_WINDOW}`)).toBe(false);
+    expect(refused).toEqual([{ identifier: `r${MAX_ROLLS_PER_WINDOW}`, reason: 'rate-limited' }]);
 
     await inside(roomKey, (room) => {
       room.pendingRolls = MAX_PENDING_ROLLS;
     });
     const other = await join(roomKey, 'other');
     other.client.emit([ask('waiting')], '@authority');
-    await other.client.expectQuiet();
+    expect((await other.client.events())[0]).toEqual({
+      eventName: AuthorityEvent.ROLL_REJECTED,
+      data: { identifier: 'waiting', reason: 'busy' },
+      sendFrom: '@authority',
+    });
     await inside(roomKey, (room) => {
       room.pendingRolls = 0;
     });

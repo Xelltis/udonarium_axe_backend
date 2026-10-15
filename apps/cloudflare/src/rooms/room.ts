@@ -11,6 +11,7 @@ import {
   CLOSE_CODE,
   DICE_BOT_SENDER,
   MAX_MEMBERS,
+  MAX_ROLLS_PER_WINDOW,
   PEER_CURSOR_ALIAS,
   PING,
   PONG,
@@ -25,6 +26,7 @@ import type {
   ObjectContext,
   PeerRole,
   RoleRejectReason,
+  RollRejectReason,
   ServerMessage,
 } from '../../contracts/protocol';
 import { deleteRoomAssets } from '../assets/sweep';
@@ -88,9 +90,6 @@ export const HELLO_TIMEOUT_MS = 10_000;
 
 /** 1つの接続が RATE_WINDOW_MS のあいだに送れるイベントの数。1つのフレームに多くのイベントを詰めても数える */
 export const MAX_EVENTS_PER_WINDOW = 20_000;
-
-/** 1つの接続が RATE_WINDOW_MS のあいだに頼めるダイスの数。超えたものは振らない */
-export const MAX_ROLLS_PER_WINDOW = 20;
 
 /** 部屋全体で振るのを待てるダイスの数。超えたものは振らない */
 export const MAX_PENDING_ROLLS = 64;
@@ -240,8 +239,27 @@ const mayChangeView = (before: View | null, after: View | null, seat: Seat): boo
 /** 人の名乗れないユーザー ID。Axe が発言の送り主に使う名前 */
 const RESERVED_USER_IDS: ReadonlySet<string> = new Set([DICE_BOT_SENDER, 'System']);
 
-/** サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value も） */
-const ROLLED_ATTRIBUTES = ['dicebot', 'tag', 'name', 'from', 'originFrom', SERVER_ROLL_FIELD];
+/**
+ * サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value と親のタブも）。
+ * 宛先と時刻も守る。守らないと、自分だけに宛てて何度も振り、よい目だけを全員に宛て直せてしまう
+ */
+const ROLLED_ATTRIBUTES = [
+  'dicebot',
+  'tag',
+  'name',
+  'from',
+  'originFrom',
+  SERVER_ROLL_FIELD,
+  'to',
+  'timestamp',
+  'editHistory',
+  'afterWhisperAt',
+  'afterWhisperTo',
+  'afterWhisperName',
+];
+
+/** サーバーが振った結果の発言で、GM のほかには書き換えさせない attributes（消したことにする印） */
+const ROLLED_GM_ATTRIBUTES = ['pseudoDeletedAt'];
 
 /**
  * 1つの部屋。部屋にいる人の WebSocket を受け、イベントを中継しながら、部屋の状態を持つ。
@@ -1098,14 +1116,27 @@ export class RoomDurableObject extends DurableObject<Env> {
       (original.originFrom === seat.userId || seat.role === 'gm') &&
       isDisclosureOf(original.tag, attributes.tag);
     const kept = disclosed ? { ...original, tag: attributes.tag } : original;
+    const guarded =
+      seat.role === 'gm' ? ROLLED_ATTRIBUTES : [...ROLLED_ATTRIBUTES, ...ROLLED_GM_ATTRIBUTES];
     const changed =
       context.syncData.value !== stored.syncData.value ||
-      ROLLED_ATTRIBUTES.some((field) => attributes[field] !== kept[field]);
+      context.syncData.parentIdentifier !== stored.syncData.parentIdentifier ||
+      guarded.some((field) => attributes[field] !== kept[field]);
     if (!changed) return context;
-    return withAttributes(
-      { ...context, syncData: { ...context.syncData, value: stored.syncData.value } },
-      Object.fromEntries(ROLLED_ATTRIBUTES.map((field) => [field, kept[field]])),
+    // 元の発言に無かった項目は、undefined を置かずに外す（MessagePack では null になって届く）
+    const restored = Object.fromEntries(
+      Object.entries(attributes).filter(([field]) => !guarded.includes(field)),
     );
+    for (const field of guarded) if (kept[field] !== undefined) restored[field] = kept[field];
+    const syncData = Object.fromEntries(
+      Object.entries(context.syncData).filter(([field]) => field !== 'parentIdentifier'),
+    );
+    if (stored.syncData.parentIdentifier !== undefined)
+      syncData.parentIdentifier = stored.syncData.parentIdentifier;
+    return {
+      ...context,
+      syncData: { ...syncData, value: stored.syncData.value, attributes: restored },
+    };
   }
 
   /**
@@ -1115,13 +1146,33 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   private requestRoll(data: unknown, seat: Seat, sender: WebSocket): void {
     const parsed = safeParse(rollRequestSchema, data);
-    if (!parsed.success) return;
+    const reject = (identifier: unknown, reason: RollRejectReason) => {
+      if (typeof identifier !== 'string') return;
+      this.post(sender, {
+        type: 'data',
+        from: AUTHORITY_PEER_ID,
+        events: [fromAuthority(AuthorityEvent.ROLL_REJECTED, { identifier, reason })],
+      });
+    };
+    if (!parsed.success) {
+      const message = (data as { message?: { identifier?: unknown } } | null)?.message;
+      return reject(message?.identifier, 'invalid');
+    }
     const request = parsed.output;
     const { message } = request;
-    if (message.aliasName !== CHAT_MESSAGE_ALIAS) return;
-    if (seat.role === 'guest' && !this.guestMayWrite(message, seat)) return;
+    if (
+      message.aliasName !== CHAT_MESSAGE_ALIAS ||
+      !fitsIndex(message) ||
+      this.store.size >= MAX_OBJECTS
+    ) {
+      return reject(message.identifier, 'invalid');
+    }
+    if (seat.role === 'guest' && !this.guestMayWrite(message, seat)) {
+      return reject(message.identifier, 'not-allowed');
+    }
     // 振るのは重いので、頼める数を絞る。超えたものは振らない
-    if (!this.withinRolls(sender) || this.pendingRolls >= MAX_PENDING_ROLLS) return;
+    if (!this.withinRolls(sender)) return reject(message.identifier, 'rate-limited');
+    if (this.pendingRolls >= MAX_PENDING_ROLLS) return reject(message.identifier, 'busy');
 
     this.pendingRolls += 1;
     this.rollQueue = this.rollQueue
@@ -1134,9 +1185,11 @@ export class RoomDurableObject extends DurableObject<Env> {
         if (!this.room()) return;
         this.record('roll', request.gameSystem, Date.now() - started);
         // 振っているあいだに、同じ識別子のものが置かれていたら作らない
+        // 同じものを頼み直されたとき（つなぎ直したあとなど）は、もう届いているので何もしない
         const taken =
           this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
-        if (!rolled || taken) return;
+        if (taken) return;
+        if (!rolled) return reject(message.identifier, 'not-a-command');
         // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる
         const result = withAttributes(
           {
@@ -1167,7 +1220,10 @@ export class RoomDurableObject extends DurableObject<Env> {
           }
         }
       })
-      .catch((err: unknown) => console.error('Roll failed:', err))
+      .catch((err: unknown) => {
+        console.error('Roll failed:', err);
+        reject(message.identifier, 'failed');
+      })
       .finally(() => {
         this.pendingRolls -= 1;
       });
@@ -1205,6 +1261,9 @@ export class RoomDurableObject extends DurableObject<Env> {
     // その人のあいだだけ置くもの（カーソル）は、その人だけが消せる
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)
       return this.refuseWrite(identifier, seat, reply);
+    // サーバーが振った結果は、GM のほかには消させない
+    if (seat.role !== 'gm' && this.isServerRoll(identifier))
+      return this.refuseWrite(identifier, seat, reply);
 
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
     const others = this.seats(sender);
@@ -1226,6 +1285,12 @@ export class RoomDurableObject extends DurableObject<Env> {
         );
       });
     }
+  }
+
+  private isServerRoll(identifier: string): boolean {
+    const stored =
+      this.store.entryOf(identifier)?.alias === CHAT_MESSAGE_ALIAS && this.store.get(identifier);
+    return stored ? attributesOf(stored)[SERVER_ROLL_FIELD] === true : false;
   }
 
   /** 見学者からは受けない */
