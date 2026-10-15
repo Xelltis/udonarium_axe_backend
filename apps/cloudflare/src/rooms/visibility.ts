@@ -175,6 +175,11 @@ const hiddenUnderCard = (path: string[]) =>
   (path[0] === 'detail' && path.length > 1);
 
 /**
+ * 持ち主のいるダイスの下で、出目の見えない人には見せないデータ要素。名前（Axe はラベルごと描かない）
+ */
+const hiddenUnderDie = (path: string[]) => path[0] === 'common' && path[1] === 'name';
+
+/**
  * 公開の範囲の外の人に、メモの下で伏せるもの。題と本文は文字を █ にして見せ（Axe が描くのと同じ形）、
  * 詳細は見せない
  */
@@ -230,6 +235,8 @@ export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): Vi
       return 'hidden';
     }
     if (view?.kind === 'card' && !seesFace(view, viewer) && hiddenUnderCard(path)) return 'hidden';
+    if (view?.kind === 'die' && ownKind(view, viewer) === 'masked' && hiddenUnderDie(path))
+      return 'hidden';
     if (view?.kind === 'note' && !seesDisclosed(view, viewer))
       kind = stricter(kind, kindUnderNote(path));
     if (view?.kind === 'data') names.push(view.name);

@@ -466,7 +466,8 @@ export type RoleRejectReason =
  *   カードの下のデータ要素のうち image/front・common/name・common/text と detail の下を届けない
  * - メモ（disclosureMode が gm か selected で、見えない人）：common/title と common/text は文字を █ にして
  *   届け（空白はそのまま）、detail の下は届けない
- * - 持ち主のいるダイス：持ち主と GM のほかには、attributes.face を空にして届ける
+ * - 持ち主のいるダイス：持ち主と GM のほかには、attributes.face を空にして届け、ダイスの下のデータ要素の
+ *   common/name（名前）は届けない
  * - 秘話（attributes.to が空でない発言）：宛先と送り主（from か originFrom）だけに届ける。GM にも届けない
  * - シークレット（attributes.tag に secret がある発言）：送り主と GM のほかには、value と、attributes の
  *   MASKED_CHAT_ATTRIBUTES を空にして届ける
