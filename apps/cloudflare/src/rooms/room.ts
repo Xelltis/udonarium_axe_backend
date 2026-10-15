@@ -27,7 +27,8 @@ import type {
   RoleRejectReason,
   ServerMessage,
 } from '../../contracts/protocol';
-import { INVITE_SECONDS, readToken, signToken } from '../auth/tokens';
+import { deleteRoomAssets } from '../assets/sweep';
+import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../auth/tokens';
 import { parseConfig } from '../config';
 import { rollLine } from '../dice/roll';
 import { decodeFrame, encodeFrame } from './codec';
@@ -414,6 +415,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.invite(ws, seat, received.role);
     } else if (received.type === 'auth') {
       this.renew(ws, seat, received.accessToken);
+    } else if (received.type === 'asset-token') {
+      this.post(ws, { type: 'asset-token', ...this.assetTokenFor(seat, 'expiresAt') });
     }
     // 入ったあとの hello は何もしない
   }
@@ -452,9 +455,17 @@ export class RoomDurableObject extends DurableObject<Env> {
     await this.wipe(room?.room_key ?? null);
   }
 
-  /** 部屋を一覧から外し、置いたものと時計をすべて消す */
+  /**
+   * 部屋を一覧から外し、部屋のアセットと置いたものと時計をすべて消す。アセットを消しそこねても、
+   * 部屋が一覧に無いので、アップロードのついでの掃除が拾う
+   */
   private async wipe(roomKey: string | null): Promise<void> {
-    if (roomKey) await this.lobby().remove(roomKey);
+    if (roomKey) {
+      await this.lobby().remove(roomKey);
+      await deleteRoomAssets(this.env.ASSETS, roomKey).catch((err: unknown) =>
+        console.error('Room asset deletion failed:', err),
+      );
+    }
     if (this.flushTimer !== null) clearTimeout(this.flushTimer);
     this.flushTimer = null;
     this.storeCache = null;
@@ -524,6 +535,24 @@ export class RoomDurableObject extends DurableObject<Env> {
     return role;
   }
 
+  /**
+   * この部屋のアセットを読み書きするトークンと、それが切れる時刻（Unix ミリ秒）。時刻は expiresAt の名前で
+   * 返す（welcome と asset-token で名前が違う）。役割を入れておき、置けるのは GM と PL だけにする
+   */
+  private assetTokenFor<K extends string>(
+    seat: Seat,
+    expiresAt: K,
+  ): { assetToken: string } & Record<K, number> {
+    const assetToken = signToken<'asset'>(
+      { aud: 'asset', room: seat.roomKey, role: seat.role },
+      ASSET_TOKEN_SECONDS,
+      this.sessionSecret(),
+    );
+    return { assetToken, [expiresAt]: Date.now() + ASSET_TOKEN_SECONDS * 1000 } as {
+      assetToken: string;
+    } & Record<K, number>;
+  }
+
   /** GM に頼まれて、招待を作る。GM でなければ invite を null にして返す */
   private invite(ws: WebSocket, seat: Seat, role: PeerRole): void {
     if (seat.role !== 'gm') {
@@ -567,6 +596,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       role: seat.role,
       members: others.filter((other) => other !== previous).map((other) => memberOf(other.seat)),
       serverTime: Date.now(),
+      ...this.assetTokenFor(seat, 'assetTokenExpiresAt'),
     });
     this.post(ws, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents(seat) });
     // 人がいるあいだは消さずに見回る
@@ -1130,6 +1160,11 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
     for (const { ws } of this.seats()) for (const update of updates) push(ws, update);
     this.deliver(outbox, () => AUTHORITY_PEER_ID);
+    // アセットを置けるかは役割で決まるので、新しい役割のトークンに替えさせる
+    for (const { ws, seat: other } of this.seats()) {
+      if (other.userId !== target.userId) continue;
+      this.post(ws, { type: 'asset-token', ...this.assetTokenFor(other, 'expiresAt') });
+    }
   }
 
   /**

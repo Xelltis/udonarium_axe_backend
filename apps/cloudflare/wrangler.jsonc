@@ -6,8 +6,9 @@
   // 部屋のフレームの gzip に node:zlib を使う
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // 画像と音声を SHA-256 の名前で置く。バケット名は書かず、最初のデプロイで「<Worker 名>-assets」を
-  // 作らせる。同じアカウントに何台置いても、Worker ごとに別のバケットになる
+  // 部屋の画像と音声を、部屋ごとに SHA-256 の名前で置く。部屋が消えるときに一緒に消す。
+  // バケット名は書かず、最初のデプロイで「<Worker 名>-assets」を作らせる。
+  // 同じアカウントに何台置いても、Worker ごとに別のバケットになる
   "r2_buckets": [{ "binding": "ASSETS" }],
   // 部屋ごとに1つの Durable Object と、部屋の一覧を持つ Durable Object。どちらも SQLite に置く
   "durable_objects": {
@@ -54,11 +55,9 @@
     },
   ],
   "vars": {
-    // カンマ区切り。PUT は、この Origin からしか受けない。
+    // カンマ区切り。部屋・アセット・ログインは、この Origin からしか受けない。
     // CI のデプロイでは、同じ名前のシークレットで本番の Origin に置き換わる（README 参照）
     "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
-    // 置いたものを残す日数。過ぎたものは 404 にし、アップロードのついでにバケットから消す
-    "ASSET_RETENTION_DAYS": "30",
     // 最後の1人が出てから部屋を消すまでの時間
     "ROOM_RETENTION_HOURS": "24",
     // DISCORD_CLIENT_ID・DISCORD_CLIENT_SECRET・SESSION_SECRET はシークレットとして置く（README 参照）。

@@ -14,6 +14,8 @@ export type ErrorCode =
   | 'origin-not-allowed'
   | 'not-found'
   | 'not-game-master'
+  | 'not-a-player'
+  | 'asset-token-required'
   | 'room-not-found'
   | 'length-required'
   | 'precondition-failed'

@@ -77,6 +77,18 @@ export class LobbyDurableObject extends DurableObject<Env> {
     this.ctx.storage.sql.exec('DELETE FROM game_masters WHERE room_key = ?', roomKey);
   }
 
+  /** 渡した鍵のうち、一覧にある部屋のもの。部屋がもう無いアセットを掃除するときに使う */
+  known(roomKeys: string[]): string[] {
+    if (roomKeys.length === 0) return [];
+    return this.ctx.storage.sql
+      .exec<{ room_key: string }>(
+        `SELECT room_key FROM rooms WHERE room_key IN (${roomKeys.map(() => '?').join(', ')})`,
+        ...roomKeys,
+      )
+      .toArray()
+      .map((row) => row.room_key);
+  }
+
   /** 作られた順。userId を渡せば、その人が GM の部屋に deletable を付ける */
   list(userId?: string): RoomSummary[] {
     return this.ctx.storage.sql

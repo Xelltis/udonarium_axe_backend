@@ -3,9 +3,8 @@ import { safeParse, summarize } from 'valibot';
 import { envSchema } from './schema';
 
 const HOUR_SECONDS = 60 * 60;
-const DAY_SECONDS = 24 * HOUR_SECONDS;
 
-/** Discord でのログイン。置かなければ、ログインと部屋は使えない（アセットサーバーだけになる） */
+/** Discord でのログイン。置かなければ、ログインも部屋も部屋のアセットも使えない */
 export interface LoginConfig {
   discordClientId: string;
   discordClientSecret: string;
@@ -14,10 +13,8 @@ export interface LoginConfig {
 }
 
 export interface AppConfig {
-  /** アップロードと部屋とログインを受ける Origin */
+  /** 部屋とアセットとログインを受ける Origin */
   allowedOrigins: string[];
-  /** バケットに置いたものを残す秒数 */
-  retentionSeconds: number;
   /** 部屋から最後の1人が出てから、部屋を消すまでの秒数 */
   roomRetentionSeconds: number;
   login: LoginConfig | null;
@@ -39,7 +36,6 @@ export const parseConfig = (env: unknown): AppConfig => {
     allowedOrigins: parsed.ACCESS_CONTROL_ALLOW_ORIGIN.split(',')
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),
-    retentionSeconds: parsed.ASSET_RETENTION_DAYS * DAY_SECONDS,
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     // 3つがそろっていることは envSchema で確かめてある
     login: parsed.SESSION_SECRET

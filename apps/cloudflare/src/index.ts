@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 
-import { assetRoutes } from './assets/routes';
 import { parseConfig } from './config';
 import type { AppEnv } from './http/context';
 import { accountRoutes, authRoutes, loginRoutes } from './auth/routes';
-import { apiCors, assetCors } from './http/cors';
+import { apiCors } from './http/cors';
 import { onError } from './http/errors';
 import { roomRoutes } from './rooms/routes';
 
@@ -24,8 +23,6 @@ const app = new Hono<AppEnv>();
 app.onError(onError);
 app.get('/', (c) => c.json({ message: 'Hello udonarium-axe-backend!' }));
 app.use('/v1/*', configLoader);
-app.use('/v1/assets/*', assetCors());
-app.route('/v1/assets', assetRoutes);
 for (const path of ['/v1/rooms', '/v1/auth', '/v1/account']) {
   app.use(path, apiCors());
   app.use(`${path}/*`, apiCors());

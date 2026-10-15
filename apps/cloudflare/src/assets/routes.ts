@@ -1,15 +1,16 @@
-import { Hono } from 'hono';
 import type { Context } from 'hono';
 
-import { bearerOf } from '../auth/session';
+import { readToken } from '../auth/tokens';
+import type { Claims } from '../auth/tokens';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';
-import { ASSET_ID, blockedKeyOf } from './keys';
-import { objectHeaders, remainingSeconds, setContentRange } from './response';
+import { LOBBY_NAME } from '../rooms/lobby';
+import { ASSET_ID, blockedKeyOf, roomAssetKey } from './keys';
+import { objectHeaders, privately, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
-import { randomStart, sweepExpired } from './sweep';
+import { randomStart, sweepOrphans } from './sweep';
 
 const MEGA_BYTE = 1024 * 1024;
 
@@ -25,8 +26,8 @@ const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));
 const R2_BAD_DIGEST = '(10037)';
 
 /**
- * 置いたあとに、期限切れのものを掃除する割合。バケットはアップロードでしか増えないので、
- * アップロードに比例して掃除すれば、ライフサイクル規則を作らなくても増え続けない
+ * 置いたあとに、部屋がもう無いアセットを掃除する割合。部屋のアセットは部屋が消えるときに消すので、
+ * 拾うのは消しそこねたものだけ。バケットはアップロードでしか増えないので、アップロードに比例して見回る
  */
 const SWEEP_CHANCE = 1 / 20;
 
@@ -69,76 +70,91 @@ const rejoin = (
     },
   });
 
-export const assetRoutes = new Hono<AppEnv>();
+/**
+ * 部屋のアセットのトークン。Authorization: Bearer に付いたもので、この部屋のために部屋のサーバーが
+ * 渡したものだけを受ける。ログインを置いていない Worker には部屋が無いので、受けるものも無い
+ */
+const assetClaimsOf = (c: Context<AppEnv>, roomKey: string): Claims<'asset'> | null => {
+  const login = c.var.config.login;
+  const header = c.req.header('Authorization') ?? '';
+  if (!login || !header.startsWith('Bearer ')) return null;
+  const claims = readToken(header.slice('Bearer '.length), 'asset', login.sessionSecret);
+  return claims?.room === roomKey ? claims : null;
+};
 
 /** HEAD は R2 の head で答え、中身のストリームを開かない */
-const headAsset = async (c: Context<AppEnv>, id: string) => {
+const headAsset = async (c: Context<AppEnv>, key: string) => {
   if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
-  const object = await c.env.ASSETS.head(id);
-  const remaining = object ? remainingSeconds(object, c.var.config.retentionSeconds) : 0;
-  if (!object || remaining <= 0) return fail(c, 404, 'not-found');
-  return new Response(null, { status: 200, headers: objectHeaders(object, remaining) });
+  const object = await c.env.ASSETS.head(key);
+  if (!object) return fail(c, 404, 'not-found');
+  return privately(new Response(null, { status: 200, headers: objectHeaders(object) }));
 };
 
-// Hono は HEAD も GET の経路に回し、返した本文を捨てる。
-assetRoutes.get('/:id', async (c) => {
-  const id = c.req.param('id');
+/**
+ * GET と HEAD /v1/rooms/:roomKey/assets/:id。この部屋のトークンを持つ人（いま部屋にいる人）に返す。
+ * Hono は HEAD も GET の経路に回し、返した本文を捨てる
+ */
+export const getRoomAsset = async (c: Context<AppEnv>) => {
+  const roomKey = c.req.param('roomKey') as string;
+  const id = c.req.param('id') as string;
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
-  if (c.req.method === 'HEAD') return headAsset(c, id);
+  if (!assetClaimsOf(c, roomKey)) return fail(c, 401, 'asset-token-required');
+  const key = roomAssetKey(roomKey, id);
+  if (c.req.method === 'HEAD') return headAsset(c, key);
 
   // Worker が作った応答は CDN に残らないので、Cache API で同じデータセンターからの読み出しを受ける。
+  // トークンを確かめてから引くので、キャッシュに残ったものもトークンの無い人には返らない。
   // 条件付きリクエスト（304）と Range（206）は cache.match が答える。
   const cache = caches.default;
   const cached = await cache.match(c.req.raw);
-  if (cached) return cached;
+  if (cached) return privately(cached);
 
   if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
   // 条件付きリクエストと Range は R2 に任せる。条件が合わないと、R2 は本文の無いものを返す
   const headers = c.req.raw.headers;
-  const object = await c.env.ASSETS.get(id, { onlyIf: headers, range: headers });
-  const remaining = object ? remainingSeconds(object, c.var.config.retentionSeconds) : 0;
-  if (!object || remaining <= 0) return fail(c, 404, 'not-found');
+  const object = await c.env.ASSETS.get(key, { onlyIf: headers, range: headers });
+  if (!object) return fail(c, 404, 'not-found');
 
-  const responseHeaders = objectHeaders(object, remaining);
+  const responseHeaders = objectHeaders(object);
   if (!('body' in object)) {
     if (headers.has('If-Match') || headers.has('If-Unmodified-Since')) {
       return fail(c, 412, 'precondition-failed');
     }
     responseHeaders.delete('Content-Length');
-    return new Response(null, { status: 304, headers: responseHeaders });
+    return privately(new Response(null, { status: 304, headers: responseHeaders }));
   }
   if (headers.has('Range') && object.range) {
     setContentRange(responseHeaders, object.range, object.size);
-    return new Response(object.body, { status: 206, headers: responseHeaders });
+    return privately(new Response(object.body, { status: 206, headers: responseHeaders }));
   }
 
   const response = new Response(object.body, { status: 200, headers: responseHeaders });
   c.executionCtx.waitUntil(cache.put(c.req.url, response.clone()));
-  return response;
-});
+  return privately(response);
+};
 
-assetRoutes.put('/:id', async (c) => {
-  const id = c.req.param('id');
+/** PUT /v1/rooms/:roomKey/assets/:id。この部屋の GM と PL だけが置ける */
+export const putRoomAsset = async (c: Context<AppEnv>) => {
+  const roomKey = c.req.param('roomKey') as string;
+  const id = c.req.param('id') as string;
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
 
   const length = declaredLengthOf(c);
   if (length === null) return fail(c, 411, 'length-required');
   if (length > MAX_ANY_BYTES) return fail(c, 413, 'too-large');
 
-  // ログインを置いた Worker では、ログインした人だけが置ける
-  const login = c.var.config.login;
-  if (login && !bearerOf(c, login)) return fail(c, 401, 'login-required');
+  const claims = assetClaimsOf(c, roomKey);
+  if (!claims) return fail(c, 401, 'asset-token-required');
+  if (claims.role === 'guest') return fail(c, 403, 'not-a-player');
   if (await c.env.ASSETS.head(blockedKeyOf(id))) return fail(c, 451, 'blocked');
 
-  // 置いてあるものは数えずに答える。部屋を読み込むと、上がっている画像もまとめて送られてくるため
-  const existing = await c.env.ASSETS.head(id);
-  if (existing && remainingSeconds(existing, c.var.config.retentionSeconds) > 0) {
-    return c.json({ id, status: 'exists' }, 200);
-  }
+  // 置いてあるものは数えずに答える。部屋に入ると、手元の画像をまとめて確かめに来るため
+  const key = roomAssetKey(roomKey, id);
+  if (await c.env.ASSETS.head(key)) return c.json({ id, status: 'exists' }, 200);
 
   // IPv6 は /64 ごとに数える。アドレスを替えるだけでは増やせない
   if (!(await withinLimits(c, c.env.UPLOAD_LIMITER, [networkOfRequest(c)]))) {
@@ -158,7 +174,7 @@ assetRoutes.put('/:id', async (c) => {
   // 名前と中身が合わないものは置かない。照合は R2 が書き込みながら行う
   const body = rejoin(head, reader).pipeThrough(new FixedLengthStream(length));
   try {
-    await c.env.ASSETS.put(id, body, { sha256: id, httpMetadata: { contentType: sniffed.type } });
+    await c.env.ASSETS.put(key, body, { sha256: id, httpMetadata: { contentType: sniffed.type } });
   } catch (err) {
     if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) {
       return fail(c, 400, 'hash-mismatch');
@@ -166,9 +182,10 @@ assetRoutes.put('/:id', async (c) => {
     throw err;
   }
   if (Math.random() < SWEEP_CHANCE) {
+    const lobby = c.env.LOBBY.getByName(LOBBY_NAME);
     c.executionCtx.waitUntil(
-      sweepExpired(c.env.ASSETS, c.var.config.retentionSeconds, randomStart()),
+      sweepOrphans(c.env.ASSETS, (roomKeys) => lobby.known(roomKeys), randomStart()),
     );
   }
   return c.json({ id, status: 'stored' }, 201);
-});
+};

@@ -131,7 +131,7 @@ describe('POST /v1/rooms', () => {
     );
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
-    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,POST,DELETE');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST,PUT,DELETE');
     expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization');
   });
 
@@ -200,6 +200,8 @@ describe('joining a room', () => {
       role: 'pl',
       members: [],
       serverTime: expect.any(Number),
+      assetToken: expect.any(String),
+      assetTokenExpiresAt: expect.any(Number),
     });
     expect(keysOf(welcome)).toEqual(keysOf(messages.server.welcome));
     expect(catalog).toEqual([

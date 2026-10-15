@@ -409,6 +409,7 @@ describe('roles and what they see', () => {
       ['AUTHORITATIVE_OBJECT', 'front_c6'],
       ['AUTHORITATIVE_OBJECT', 'name_c6'],
     ]);
+    await t.alice.next('asset-token');
 
     t.gm.emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId: 'alice', role: 'pl' } }]);
     expect(ids(await t.alice.events())).toEqual([

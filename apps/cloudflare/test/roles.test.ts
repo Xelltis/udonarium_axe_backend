@@ -7,7 +7,7 @@ import {
   AuthorityEvent,
   SyncEvent,
 } from '../contracts/protocol';
-import { signToken } from '../src/auth/tokens';
+import { readToken, signToken } from '../src/auth/tokens';
 import app from '../src/index';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { ORIGIN, SESSION_SECRET, accessTokenFor } from './helpers';
@@ -355,6 +355,9 @@ describe('changing a role', () => {
       minorVersion: expect.any(Number),
     });
     for (const other of [gm, guest]) expect((await other.events())[0]).toEqual(promoted);
+    // 置けるかどうかはトークンの役割で決まるので、新しい役割のトークンが届く
+    const renewed = await pl.next('asset-token');
+    expect(readToken(renewed.assetToken, 'asset', SESSION_SECRET)?.role).toBe('gm');
 
     // GM が2人になったので、もとの GM は降りられる
     gm.emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId: 'gm', role: 'pl' } }]);

@@ -418,6 +418,6 @@ describe('/v1/account', () => {
     });
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization');
-    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,POST,DELETE');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST,PUT,DELETE');
   });
 });

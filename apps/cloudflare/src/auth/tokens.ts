@@ -13,6 +13,11 @@ export const ACCESS_TOKEN_SECONDS = 15 * 60;
 export const INVITE_SECONDS = 30 * 24 * 60 * 60;
 /** ログインを始めてから、Discord から戻ってくるまでに許す秒数 */
 export const LOGIN_STATE_SECONDS = 10 * 60;
+/**
+ * 部屋のアセットを読み書きするトークンが使える秒数。部屋を抜けた人が読めるのは、長くてもこのあいだだけ。
+ * 部屋にいるあいだは、切れる前に部屋のサーバーが渡し直す
+ */
+export const ASSET_TOKEN_SECONDS = 15 * 60;
 
 const encoder = new TextEncoder();
 
@@ -52,6 +57,12 @@ const claimSchemas = {
     aud: literal('login'),
     redirect: string(),
     challenge: string(),
+    exp: number(),
+  }),
+  asset: object({
+    aud: literal('asset'),
+    room: string(),
+    role: picklist(PEER_ROLES),
     exp: number(),
   }),
 } satisfies Record<string, GenericSchema>;

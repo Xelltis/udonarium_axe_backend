@@ -110,7 +110,13 @@ export interface AuthMessage {
   accessToken: string;
 }
 
-export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage;
+/** 部屋のアセットのトークンを渡し直してもらう。切れる前に頼む。答えは asset-token で届く */
+export interface AssetTokenRequest {
+  type: 'asset-token';
+}
+
+export type ClientMessage =
+  HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest;
 
 // ---- サーバーからクライアントへ ----
 
@@ -128,6 +134,13 @@ export interface WelcomeMessage {
   members: Member[];
   /** サーバーの時刻（Unix ミリ秒） */
   serverTime: number;
+  /**
+   * この部屋のアセット（/v1/rooms/:roomKey/assets/:sha256）を読み書きするトークン。
+   * Authorization: Bearer に付ける。読むのはどの役割でもよく、置けるのは GM と PL だけ
+   */
+  assetToken: string;
+  /** assetToken が使えなくなる時刻（Unix ミリ秒）。その前に asset-token で渡し直してもらう */
+  assetTokenExpiresAt: number;
 }
 
 /** だれかが部屋に入った */
@@ -168,6 +181,17 @@ export interface InviteMessage {
   invite: string | null;
   /** 招待が使えなくなる時刻（Unix ミリ秒） */
   expiresAt: number | null;
+}
+
+/**
+ * 部屋のアセットの新しいトークン。asset-token を頼んだときと、役割が変わったときに届く。
+ * 今のトークンと入れ替える
+ */
+export interface AssetTokenMessage {
+  type: 'asset-token';
+  assetToken: string;
+  /** Unix ミリ秒 */
+  expiresAt: number;
 }
 
 /**
@@ -216,6 +240,7 @@ export type ServerMessage =
   | DataMessage
   | TimeMessage
   | InviteMessage
+  | AssetTokenMessage
   | ErrorMessage;
 
 /** サーバーが閉じるときの WebSocket の close code */
