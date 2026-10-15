@@ -361,7 +361,11 @@ describe('writes that would uncover what is kept back', () => {
 
   it.each([
     ['peeks at', { owner: 'user-alice' }],
-    ['takes into its own hand', { location: { name: 'hand:user-alice' } }],
+    ['takes into its own hand face up', { location: { name: 'hand:user-alice' }, state: 0 }],
+    [
+      'takes into its own hand peeking',
+      { location: { name: 'hand:user-alice' }, owner: 'user-alice' },
+    ],
     ['turns up', { state: 0 }],
   ])('refuses a player who %s a card in the hand of another', async (_what, change) => {
     const t = await table();
@@ -377,6 +381,123 @@ describe('writes that would uncover what is kept back', () => {
     ]);
 
     await expectRefused(t, 'u4');
+  });
+
+  it('lets a player draw from a deck into its own hand, which moves the card and shows it the face', async () => {
+    const t = await table();
+    const deck = contextOf('deck', 1, 0.5, { attributes: {} }, 'card-stack');
+    const { card, elements } = cardTree('d1', { state: 1, location: { name: 'table' } });
+    const stacked = { ...card, syncData: { ...card.syncData, parentIdentifier: 'deck' } };
+    await place(t, [deck, stacked, ...elements]);
+
+    // Axe は山札から外すのと手札に入れるのを、1つの書き込みにまとめて送る
+    t.alice.emit([
+      update({
+        ...card,
+        majorVersion: 2,
+        syncData: { attributes: { state: 1, location: { name: 'hand:user-alice' } } },
+      }),
+    ]);
+
+    expect(ids(await t.alice.events())).not.toContainEqual(['AUTHORITATIVE_OBJECT', 'd1']);
+    expect(ids(await t.bob.events())).toContainEqual(['UPDATE_GAME_OBJECT', 'd1']);
+  });
+
+  it('lets a player draw a card from the hand of another into its own, face down', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('u5', { state: 1, location: { name: 'hand:user-bob' } });
+    await place(t, [card, ...elements]);
+
+    t.alice.emit([
+      update({
+        ...card,
+        majorVersion: 2,
+        syncData: { attributes: { state: 1, location: { name: 'hand:user-alice' } } },
+      }),
+    ]);
+
+    expect(ids(await t.alice.events())).toContainEqual(['AUTHORITATIVE_OBJECT', 'front_u5']);
+    const seenByBob = ids(await t.bob.events());
+    expect(seenByBob).toContainEqual(['UPDATE_GAME_OBJECT', 'u5']);
+    expect(seenByBob).toContainEqual(['WITHDRAW_GAME_OBJECT', 'front_u5']);
+  });
+
+  it('refuses a player moving the text of a memo kept from it under a parent not there yet', async () => {
+    const t = await table();
+    const memo = memoOf('m9', 'gm');
+    const part = (name: string, parent: string, value = '') =>
+      contextOf(
+        `${name}_m9`,
+        1,
+        0.5,
+        { parentIdentifier: parent, value, attributes: { name } },
+        'data',
+      );
+    await place(t, [
+      memo,
+      part('text-note', 'm9'),
+      part('common', 'text-note_m9'),
+      part('text', 'common_m9', 'the plan'),
+    ]);
+
+    // 決まりを持つメモの下から、まだ無い親の下へ移す。親を作れば、決まりの外で読めてしまう
+    t.alice.emit([update({ ...part('common', 'ghost'), majorVersion: 2 })]);
+
+    await expectRefused(t, 'common_m9');
+  });
+
+  it('refuses a player opening a tab to those the GM kept it from', async () => {
+    const t = await table();
+    const tab = listedTabOf('t1', { plCanView: true, guestCanView: false });
+    await place(t, [chatTabList(), tab]);
+
+    t.alice.emit([
+      update({
+        ...tab,
+        majorVersion: 2,
+        syncData: {
+          ...tab.syncData,
+          attributes: { name: 't1', plCanView: true, guestCanView: true },
+        },
+      }),
+    ]);
+
+    await expectRefused(t, 't1');
+  });
+
+  it('takes back, rather than answers emptily, a stale write to something whose parent is not there', async () => {
+    const t = await table();
+    await place(t, [contextOf('x1', 1, 0.5)]);
+    // alice がまだ無い親の下へ移した。だれにとっても見え方が決まらない
+    t.alice.emit([update(contextOf('x1', 3, 0.5, { parentIdentifier: 'later' }))]);
+    expect(ids(await t.gm.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'x1']]);
+
+    t.gm.emit([update(contextOf('x1', 2, 0.5))]);
+
+    expect(ids(await t.gm.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'x1']]);
+  });
+
+  it('keeps a reaction from everyone until the line it is on is there', async () => {
+    const t = await table();
+    t.bob.emit([
+      update(
+        contextOf('r9', 1, 0.5, { messageIdentifier: 'later-line', stamps: 'ok' }, 'chat-reaction'),
+      ),
+    ]);
+
+    await t.alice.expectQuiet();
+    await t.carol.expectQuiet();
+  });
+
+  it('has a player drop what it holds whose parent is not there, as it does what it may not see', async () => {
+    const t = await table();
+    t.gm.emit([update(contextOf('orphan', 1, 0.5, { parentIdentifier: 'later' }))]);
+
+    t.alice.emit([
+      { eventName: SyncEvent.CATALOG, data: [{ identifier: 'orphan', version: 1.5 }] },
+    ]);
+
+    expect(ids(await t.alice.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'orphan']]);
   });
 
   it('refuses a player claiming a memo kept to the GM, and lets one claim an open memo', async () => {

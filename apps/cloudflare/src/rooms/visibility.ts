@@ -214,6 +214,8 @@ export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): Vi
   if (!entry) return 'full';
   let kind = ownKind(entry.view, viewer);
   if (entry.view?.kind === 'reaction') {
+    // まだ置いていない（か消えた）発言へのリアクションは、発言の見え方が決まるまで待つ
+    if (!lookup(entry.view.message)) return 'pending';
     const message = viewKind(entry.view.message, viewer, lookup);
     if (!delivered(message)) return message;
   }

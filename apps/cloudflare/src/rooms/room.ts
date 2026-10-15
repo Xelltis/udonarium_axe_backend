@@ -229,7 +229,9 @@ const fitsIndex = (context: ObjectContext): boolean => {
  *   持ち主のいないメモを自分のものにできるのは、いまそのメモが見える人だけ（GM だけのメモは取れない）
  * - ダイスの持ち主も同じ
  * - カードの持ち主（覗いている人）は、自分にするか、空にするだけ。ほかの人の手札のカードは、向きも
- *   持ち主も場所も変えられない
+ *   持ち主も変えられない
+ * - ほかの人の手札のカードは、伏せたまま自分の手札へ引くことだけができる
+ * - タブを PL や見学者に見せるかは、GM だけが変えられる
  * - 発言の宛先と、シークレットを外すことは、送り主だけ（ダイスの結果は振った人）。送り主はだれも変えられない
  */
 const mayChangeView = (before: View | null, after: View | null, seat: Seat): boolean => {
@@ -254,9 +256,15 @@ const mayChangeView = (before: View | null, after: View | null, seat: Seat): boo
     case 'card': {
       const next = after as typeof before;
       if (before.hand !== '' && before.hand !== seat.userId) {
-        return JSON.stringify(next) === JSON.stringify(before);
+        // 引くことだけは通す。自分の手札へ、伏せて、だれも覗いていない形で移す（Axe の「相手の手札から引く」）
+        const drawn = next.hand === seat.userId && !next.front && next.owner === '';
+        return drawn || JSON.stringify(next) === JSON.stringify(before);
       }
       return next.owner === before.owner || next.owner === '' || next.owner === seat.userId;
+    }
+    case 'tab': {
+      const next = after as typeof before;
+      return next.pl === before.pl && next.guest === before.guest;
     }
     case 'chat': {
       const next = after as typeof before;
@@ -1067,12 +1075,12 @@ export class RoomDurableObject extends DurableObject<Env> {
       owner === null && this.store.isDeleted(identifier),
     );
     if (verdict === 'stale') {
+      const view = this.viewOf(identifier, seat);
+      // まだ見え方の決まらないもの（親が未着）は、中身を返せないので手元から外させる
+      if (!view) return this.refuseWrite(identifier, seat, reply);
       // 伏せた形には本物より小さい版を付けるので、送り主の版より低いことがある。そのときは UPDATE では
       // 捨てられ、負けた変更がその人の画面にだけ残るので、版にかかわらず置き換えさせる
-      reply(
-        seen === 'masked' ? AuthorityEvent.AUTHORITATIVE : SyncEvent.UPDATE,
-        this.viewOf(identifier, seat),
-      );
+      reply(seen === 'masked' ? AuthorityEvent.AUTHORITATIVE : SyncEvent.UPDATE, view);
     } else if (verdict === 'deleted') {
       reply(SyncEvent.DELETE, { aliasName, identifier });
     } else if (verdict === 'accept') {
@@ -1095,10 +1103,18 @@ export class RoomDurableObject extends DurableObject<Env> {
       existing.view.name !== next.view.name;
     if (next.parent === existing.parent && !renamed) return false;
     const identifier = context.identifier;
+    // 比べるのは道筋の変化だけ。カードの向きや手札などの状態は mayChangeView が確かめているので、
+    // 前のままにして比べる（山札から引いて自分の手札に入れると、親も変わるのに表は見えて正しい）
+    const moved = {
+      parent: next.parent,
+      view: next.view?.kind === 'data' ? next.view : existing.view,
+    };
     const after: Lookup = (other) =>
-      other === identifier ? { ...existing, ...next } : this.store.lookup(other);
+      other === identifier ? { ...existing, ...moved } : this.store.lookup(other);
+    // まだ無い親の下は、親が来たときにどう見えるかわからない。いちばん見える場合として比べる
+    const eventual = (kind: ViewKind): ViewKind => (kind === 'pending' ? 'full' : kind);
     return [identifier, ...this.store.dependentsOf(identifier)].some((other) =>
-      looser(this.kindOf(other, seat, after), this.kindOf(other, seat)),
+      looser(eventual(this.kindOf(other, seat, after)), eventual(this.kindOf(other, seat))),
     );
   }
 
@@ -1512,7 +1528,9 @@ export class RoomDurableObject extends DurableObject<Env> {
         reply(SyncEvent.DELETE, { aliasName: '', identifier });
         continue;
       }
-      if (this.kindOf(identifier, seat) === 'hidden') {
+      // 見え方の決まらないもの（親が未着）も、決まるまで外させる。決まって見えるようになれば渡す
+      const kind = this.kindOf(identifier, seat);
+      if (kind === 'hidden' || (kind === 'pending' && seat.role !== 'gm')) {
         reply(AuthorityEvent.WITHDRAW, { identifier });
         continue;
       }
