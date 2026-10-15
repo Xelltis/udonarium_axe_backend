@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { PROTOCOL_VERSION } from '../contracts/protocol';
 import type { CreateRoomResponse, ServerMessage } from '../contracts/protocol';
 import { decodeFrame } from '../src/rooms/codec';
-import { ORIGIN, accessTokenFor, freshIp } from './helpers';
+import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp } from './helpers';
 
 export const ROOMS = 'https://backend.example/v1/rooms';
 
@@ -171,6 +171,35 @@ export const join = async (
   const welcome = await client.next('welcome');
   const catalog = await client.events();
   return { client, welcome, catalog };
+};
+
+/** 席に着けておいた UPLOADER の接続。部屋の鍵ごと */
+const seatedUploaders = new Map<string, Client>();
+
+/**
+ * ROOM_KEY と OTHER_ROOM_KEY の部屋を、まだ無ければ UPLOADER が作り、席に着けておく。置くときは、置く人が
+ * いまその部屋に GM か PL として着いているかを部屋に尋ねるので、アセットの経路を試す前に呼ぶ
+ */
+export const prepareAssetRooms = async () => {
+  for (const roomKey of [ROOM_KEY, OTHER_ROOM_KEY]) {
+    const room = env.ROOMS.getByName(roomKey);
+    const allowed = await room.canUpload(UPLOADER);
+    if (allowed === 'ok') continue;
+    if (allowed === 'room-not-found') {
+      await room.create({
+        roomKey,
+        roomId: 'abc',
+        name: 'assets',
+        password: '',
+        creatorUserId: UPLOADER,
+        host: 'backend.example',
+      });
+    }
+    const client = await connect(roomKey);
+    client.hello(UPLOADER, { userId: UPLOADER, accessToken: accessTokenFor(UPLOADER) });
+    await client.next('welcome');
+    seatedUploaders.set(roomKey, client);
+  }
 };
 
 /** 同期するオブジェクトの中身 */

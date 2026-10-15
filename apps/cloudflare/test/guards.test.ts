@@ -1,7 +1,8 @@
 import { runInDurableObject } from 'cloudflare:test';
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthorityEvent, MAX_ROLLS_PER_WINDOW, SyncEvent } from '../contracts/protocol';
+import { AuthorityEvent, MAX_ROLLS_PER_WINDOW, SyncEvent, toBase62 } from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
 import { MAX_EVENTS_PER_MESSAGE } from '../src/rooms/messages';
 import {
@@ -36,7 +37,37 @@ const inside = <T>(roomKey: string, run: (room: Internals, state: DurableObjectS
 
 const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
 
+/** Axe が部屋に入るときの形のピア ID。頭はユーザー ID のダイジェスト */
+const roomPeerIdOf = (userId: string) =>
+  `${toBase62(new Uint8Array(createHash('sha256').update(userId).digest())).slice(0, 6)}abcRoomName-`;
+
 describe('who a seat is', () => {
+  it('keeps out the Axe peer id of somebody else, made from their user id, while they are away', async () => {
+    const roomKey = await createRoom();
+    const thief = await connect(roomKey);
+    thief.hello(roomPeerIdOf('user-gm'), {
+      userId: 'user-thief',
+      accessToken: accessTokenFor('user-thief'),
+    });
+    expect((await thief.next('error')).code).toBe('bad-message');
+
+    const owner = await connect(roomKey);
+    owner.hello(roomPeerIdOf('user-gm'), {
+      userId: 'user-gm',
+      accessToken: accessTokenFor('user-gm'),
+    });
+    expect((await owner.next('welcome')).peerId).toBe(roomPeerIdOf('user-gm'));
+  });
+
+  it('closes the seat of a guest going by the user id of an account that comes in', async () => {
+    const roomKey = await createRoom();
+    const guest = await join(roomKey, 'guest-tab', { userId: 'user-alice', accessToken: null });
+
+    await join(roomKey, 'alice');
+
+    expect((await guest.client.next('error')).code).toBe('unauthorized');
+  });
+
   it('keeps out a hello that takes the peer id of somebody else in the room', async () => {
     const roomKey = await createRoom();
     const gm = await join(roomKey, 'gm');

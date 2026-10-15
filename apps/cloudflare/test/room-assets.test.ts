@@ -6,7 +6,7 @@ import { roomAssetKey } from '../src/assets/keys';
 import { ASSET_TOKEN_SECONDS, readToken } from '../src/auth/tokens';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { ORIGIN, PNG_HEAD, SESSION_SECRET, accessTokenFor, freshFile, freshIp } from './helpers';
-import { ROOMS, createRoom, join, stubOf } from './room-helpers';
+import { ROOMS, createRoom, eventually, join, stubOf } from './room-helpers';
 
 // 部屋が席に渡すアセットのトークンと、部屋が消えるときのアセット
 
@@ -96,6 +96,22 @@ describe('the asset token a room hands its seats', () => {
     const pl = await join(roomKey, 'pl');
     gm.client.emit([{ eventName: 'ROLE_REQUEST', data: { peerId: 'pl', role: 'guest' } }]);
     await pl.client.next('asset-token');
+
+    const { res } = await tryPut(roomKey, pl.welcome.assetToken);
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'not-a-player' });
+  });
+
+  it('puts nothing up for a player who has left the room, though the token has time to run', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    await join(roomKey, 'gm');
+    const pl = await join(roomKey, 'pl');
+    pl.client.close();
+    await eventually(
+      () => stubOf(roomKey).canUpload('user-pl'),
+      (answer) => answer === 'not-a-player',
+    );
 
     const { res } = await tryPut(roomKey, pl.welcome.assetToken);
 

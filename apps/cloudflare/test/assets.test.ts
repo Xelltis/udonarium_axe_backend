@@ -19,11 +19,11 @@ import {
   fileOf,
   freshFile,
   freshIp,
-  prepareAssetRooms,
   put,
   sha256Hex,
   storedKeyOf,
 } from './helpers';
+import { prepareAssetRooms } from './room-helpers';
 
 beforeAll(prepareAssetRooms);
 

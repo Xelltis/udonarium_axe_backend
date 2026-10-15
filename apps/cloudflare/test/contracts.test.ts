@@ -73,6 +73,14 @@ describe('the event contract', () => {
   });
 });
 
+describe('the peer id digest', () => {
+  it('writes bytes in base62 as Axe does, each leading zero byte as a 0', () => {
+    expect(protocol.toBase62(new Uint8Array([0, 0, 1, 2]))).toBe('004a');
+    expect(protocol.toBase62(new Uint8Array([0, 255]))).toBe('047');
+    expect(protocol.toBase62(new Uint8Array([]))).toBe('');
+  });
+});
+
 describe('the limit contract', () => {
   it('holds the limits both sides keep', () => {
     const kept = { ...protocol, ...tokens } as unknown as Record<string, unknown>;

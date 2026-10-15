@@ -55,6 +55,35 @@ export type PeerRole = (typeof PEER_ROLES)[number];
  */
 export const ACCOUNT_USER_ID_PREFIX = 'acct_';
 
+/**
+ * Axe が部屋に入るときのピア ID の形。ユーザー ID のダイジェスト（6文字）、部屋の ID（3文字）、
+ * 部屋の名前のダイジェスト（8文字）、`-`、パスワードのダイジェスト（パスワードがあれば7文字）。
+ * この形のピア ID は、頭のダイジェストが名乗るユーザー ID のものでなければ受けない
+ */
+export const ROOM_PEER_ID_PATTERN = /^(\w{6})\w{3}\w{8}-(?:\w{7})?$/;
+
+/** ピア ID の頭に置く、ユーザー ID のダイジェストの長さ（SHA-256 を toBase62 にした頭） */
+export const PEER_ID_USER_DIGEST_LENGTH = 6;
+
+const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * バイト列を、Axe がピア ID に使うのと同じ base62 にする。数として 62 進に直し、先頭の 0 のバイトは
+ * 1つずつ `0` にする（base-x と同じ）
+ */
+export const toBase62 = (bytes: Uint8Array): string => {
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  let value = 0n;
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
+  let digits = '';
+  while (value > 0n) {
+    digits = BASE62[Number(value % 62n)] + digits;
+    value /= 62n;
+  }
+  return '0'.repeat(zeros) + digits;
+};
+
 /** 部屋にいる人 */
 export interface Member {
   peerId: string;

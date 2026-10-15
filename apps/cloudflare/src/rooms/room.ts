@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { DurableObject } from 'cloudflare:workers';
 import { safeParse } from 'valibot';
 
@@ -14,13 +16,16 @@ import {
   MAX_MEMBERS,
   MAX_ROLLS_PER_WINDOW,
   PEER_CURSOR_ALIAS,
+  PEER_ID_USER_DIGEST_LENGTH,
   PING,
   PONG,
   PROTOCOL_VERSION,
   RATE_WINDOW_SECONDS,
+  ROOM_PEER_ID_PATTERN,
   SERVER_ROLL_FIELD,
   SyncEvent,
   judgeUpdate,
+  toBase62,
 } from '../../contracts/protocol';
 import type {
   ErrorCode,
@@ -163,6 +168,19 @@ const memberOf = (seat: Seat) => ({ peerId: seat.peerId, userId: seat.userId, ro
  */
 const isSamePerson = (a: Seat, b: Seat): boolean =>
   a.userId === b.userId && a.account === b.account;
+
+/**
+ * そのユーザー ID で、そのピア ID を名乗ってよいか。Axe の部屋のピア ID は、頭にユーザー ID の
+ * ダイジェストを持つので、合わないものはほかの人のピア ID。形の違うものは、だれの Axe のピア ID とも
+ * 重ならないので受ける
+ */
+const mayClaimPeerId = (userId: string, peerId: string): boolean => {
+  const shaped = ROOM_PEER_ID_PATTERN.exec(peerId);
+  if (!shaped) return true;
+  // 確かめるあいだにほかのメッセージが割り込まないよう、同期で計算する
+  const digest = toBase62(new Uint8Array(createHash('sha256').update(userId).digest()));
+  return shaped[1] === digest.slice(0, PEER_ID_USER_DIGEST_LENGTH);
+};
 
 const isHello = (value: unknown): value is { protocolVersion?: unknown } =>
   typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'hello';
@@ -394,10 +412,12 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   canUpload(userId: string): 'ok' | 'room-not-found' | 'not-a-player' {
     if (this.wiping || !this.room()) return 'room-not-found';
-    const known = this.ctx.storage.sql
-      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
-      .toArray()[0];
-    return known?.role === 'gm' || known?.role === 'pl' ? 'ok' : 'not-a-player';
+    // 席に着いているあいだだけ。抜けた人は、トークンが残っていても置けない
+    const seated = this.seats().some(
+      ({ seat }) =>
+        seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl'),
+    );
+    return seated ? 'ok' : 'not-a-player';
   }
 
   /**
@@ -586,6 +606,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     // 発言の送り主に使う名前（ダイスボットなど）は名乗らせない。サーバーが振った発言の送り主と
     // みなされ、シークレットや秘話が見えてしまう
     if (RESERVED_USER_IDS.has(hello.userId)) return this.refuse(ws, 'bad-message');
+    // ほかの人のピア ID を名乗らせない。名乗れると、その人が抜けたすきに席を取り、戻ってきた本人を締め出せる
+    if (!mayClaimPeerId(hello.userId, hello.peerId)) return this.refuse(ws, 'bad-message');
     if (hello.accessToken) {
       const secret = this.sessionSecret();
       const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
@@ -701,6 +723,17 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.refuse(previous.ws, 'bad-message');
       others = this.seats(ws);
       previous = undefined;
+    }
+    if (seat.account) {
+      // ログインした人のユーザー ID を、トークン無しで名乗っていた見学は外す。見え方はユーザー ID で
+      // 決まるので、残せばその人の手札や秘話がその見学にも届く
+      for (const other of others) {
+        if (!other.seat.account && other.seat.userId === seat.userId) {
+          this.refuse(other.ws, 'unauthorized');
+        }
+      }
+      others = this.seats(ws);
+      previous = others.find((other) => other.seat.peerId === seat.peerId);
     }
     if (!previous && others.length >= MAX_MEMBERS) {
       this.refuse(ws, 'room-full');

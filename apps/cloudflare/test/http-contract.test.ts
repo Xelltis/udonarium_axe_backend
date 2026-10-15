@@ -2,15 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import http from '../contracts/fixtures/http.json';
 import { callApi, logIn } from './auth-helpers';
-import {
-  ROOM_KEY,
-  accessTokenFor,
-  assetTokenFor,
-  freshFile,
-  prepareAssetRooms,
-  put,
-} from './helpers';
-import { createRoom } from './room-helpers';
+import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put } from './helpers';
+import { createRoom, prepareAssetRooms } from './room-helpers';
 
 // HTTP の返事が、contracts/fixtures/http.json の例と同じ形かを、実際に呼んで確かめる
 

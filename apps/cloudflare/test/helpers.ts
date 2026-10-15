@@ -1,4 +1,3 @@
-import { env } from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
 
 import type { PeerRole } from '../contracts/protocol';
@@ -37,25 +36,6 @@ export const assetTokenFor = (
   seconds = ASSET_TOKEN_SECONDS,
   uid = UPLOADER,
 ) => signToken<'asset'>({ aud: 'asset', room, role, uid }, seconds, SESSION_SECRET);
-
-/**
- * ROOM_KEY と OTHER_ROOM_KEY の部屋を、まだ無ければ UPLOADER が作る。置くときは、置く人がいまも
- * その部屋の GM か PL かを部屋に尋ねるので、アセットの経路を試す前に呼ぶ
- */
-export const prepareAssetRooms = async () => {
-  for (const roomKey of [ROOM_KEY, OTHER_ROOM_KEY]) {
-    const room = env.ROOMS.getByName(roomKey);
-    if ((await room.canUpload(UPLOADER)) === 'ok') continue;
-    await room.create({
-      roomKey,
-      roomId: 'abc',
-      name: 'assets',
-      password: '',
-      creatorUserId: UPLOADER,
-      host: 'backend.example',
-    });
-  }
-};
 
 /** ROOM_KEY の部屋に置いたアセットが、バケットで置かれる名前 */
 export const storedKeyOf = (id: string) => roomAssetKey(ROOM_KEY, id);
