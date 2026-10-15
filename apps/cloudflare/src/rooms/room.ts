@@ -48,7 +48,7 @@ import { attributesOf, withAttributes } from './objects';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
 import type { StoredEntry } from './store';
-import { describe, maskedMinor, unmasked, viewFor, viewKind } from './visibility';
+import { delivered, describe, maskedMinor, unmasked, viewFor, viewKind } from './visibility';
 import type { Lookup, View, ViewKind, Viewer } from './visibility';
 
 /**
@@ -874,47 +874,54 @@ export class RoomDurableObject extends DurableObject<Env> {
     for (const { ws, seat: other } of this.seats(sender)) {
       const then = before ? this.kindOf(identifier, other, was) : 'hidden';
       const now = this.kindOf(identifier, other);
-      if (now !== 'hidden') {
+      if (delivered(now)) {
         push(ws, {
           eventName: SyncEvent.UPDATE,
           data: viewFor(context, now),
           sendFrom: seat.peerId,
         });
-      } else if (then !== 'hidden') {
+      } else if (delivered(then)) {
         push(ws, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
       }
     }
+    // 親がまだ届いていないもの（pending）は、送り主の手元にあるままにする
     const mine = this.kindOf(identifier, seat);
     if (mine === 'hidden') push(sender, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
-    else if (corrected) {
+    else if (corrected && delivered(mine)) {
       push(sender, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, mine)));
     }
 
+    // 見え方の手がかりか親が変わったか、初めて届いたもの（その子が親を待っていたかもしれない）なら、
+    // 子孫の見え方を比べ直す
     const after = this.store.lookup(identifier) as StoredEntry;
-    if (JSON.stringify(before?.view ?? null) !== JSON.stringify(after.view)) {
-      this.revisit(this.store.dependentsOf(identifier), this.seats(), was, push);
+    if (
+      !before ||
+      before.parent !== after.parent ||
+      JSON.stringify(before.view) !== JSON.stringify(after.view)
+    ) {
+      this.revisit(this.store.dependentsOf(identifier), this.seats(), was, push, sender);
     }
   }
 
   /**
    * 見え方の決まるもとが変わったので、そのものの見え方を人ごとに比べ直す。見えるようになった人には
-   * AUTHORITATIVE_OBJECT で渡し（版が同じでも置き換わる）、見えなくなった人には WITHDRAW で外させる
+   * AUTHORITATIVE_OBJECT で渡し（版が同じでも置き換わる）、見えなくなった人には WITHDRAW で外させる。
+   *
+   * 親を待っていたもの（pending）が見えるようになったとき、writer には渡さない。親を待つ子を作れるのは、
+   * その親を持っている人（親を送ってきた本人）だけなので、writer はもう持っている
    */
   private revisit(
     identifiers: string[],
     seats: { ws: WebSocket; seat: Viewer }[],
     was: Lookup,
     push: Push,
+    writer?: WebSocket,
   ): void {
     for (const { ws, seat } of seats) {
       for (const identifier of identifiers) {
-        this.resend(
-          ws,
-          identifier,
-          viewKind(identifier, seat, was),
-          viewKind(identifier, seat, this.store.lookup),
-          push,
-        );
+        const then = viewKind(identifier, seat, was);
+        if (ws === writer && then === 'pending') continue;
+        this.resend(ws, identifier, then, viewKind(identifier, seat, this.store.lookup), push);
       }
     }
   }
@@ -928,8 +935,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     push: Push,
   ): void {
     if (then === now) return;
-    if (now === 'hidden') {
-      push(ws, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
+    if (!delivered(now)) {
+      if (delivered(then)) push(ws, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
       return;
     }
     const context = this.store.get(identifier) as ObjectContext;
@@ -1092,7 +1099,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     for (const id of doomed) this.store.delete(id, !cursor);
     for (const { ws } of others) {
       doomed.forEach((id, index) => {
-        if ((seen.get(ws) as ViewKind[])[index] === 'hidden') return;
+        if (!delivered((seen.get(ws) as ViewKind[])[index])) return;
         push(
           ws,
           id === identifier
@@ -1216,7 +1223,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   private catalogEvents(seat: Seat): EventContext[] {
     const catalog = this.store.catalog().flatMap((item) => {
       const kind = this.kindOf(item.identifier, seat);
-      if (kind === 'hidden') return [];
+      if (!delivered(kind)) return [];
       if (kind === 'full') return [item];
       // 伏せた形を渡すときと同じ、本物より小さい版を載せる
       const entry = this.store.entryOf(item.identifier) as StoredEntry;

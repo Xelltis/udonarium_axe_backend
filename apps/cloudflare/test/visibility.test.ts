@@ -263,15 +263,18 @@ group('chat', () => {
 });
 
 group('the walk up the parents', () => {
-  it('stops at a parent that is not there, and at a loop', () => {
+  it('holds back what waits for a parent that is not there yet, and stops at a loop', () => {
     const orphan = world(
       context('data', 'lost', { parentIdentifier: 'nowhere', attributes: { name: 'front' } }),
+      context('chat-reaction', 'nod', { messageIdentifier: 'lost' }),
     );
     const loop = world(
       context('data', 'a', { parentIdentifier: 'b', attributes: { name: 'x' } }),
       context('data', 'b', { parentIdentifier: 'a', attributes: { name: 'y' } }),
     );
-    expect(viewKind('lost', player, orphan)).toBe('full');
+    expect(viewKind('lost', player, orphan)).toBe('pending');
+    expect(viewKind('lost', gm, orphan)).toBe('pending');
+    expect(viewKind('nod', player, orphan)).toBe('pending');
     expect(viewKind('a', player, loop)).toBe('full');
     expect(viewKind('unknown', player, orphan)).toBe('full');
   });

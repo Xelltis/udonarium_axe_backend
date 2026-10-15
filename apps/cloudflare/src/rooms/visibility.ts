@@ -7,6 +7,7 @@ import { attributesOf, withAttributes } from './objects';
 //
 // オブジェクトごとに、見え方を決める小さな手がかり（View）を作っておき、見る人と、親をたどった道筋
 // から、まるごと見せる（full）・一部を伏せて見せる（masked）・見せない（hidden）を決める。
+// 親がまだ届いていないもの（pending）は、決まりをたどりきれないので、親が届くまでだれにも見せない。
 
 /** 見る人 */
 export interface Viewer {
@@ -14,7 +15,10 @@ export interface Viewer {
   role: PeerRole;
 }
 
-export type ViewKind = 'full' | 'masked' | 'hidden';
+export type ViewKind = 'full' | 'masked' | 'pending' | 'hidden';
+
+/** その見え方なら、その人に届けるか（まるごとか、伏せた形で） */
+export const delivered = (kind: ViewKind): boolean => kind === 'full' || kind === 'masked';
 
 /** 見え方を決める手がかり。オブジェクトの中身から作り、メモリと SQLite に置く */
 export type View =
@@ -178,35 +182,37 @@ const kindUnderNote = (path: string[]): ViewKind =>
       ? 'hidden'
       : 'full';
 
+/** 伏せる強さの順。後ろほど強い */
+const STRICTNESS: readonly ViewKind[] = ['full', 'masked', 'pending', 'hidden'];
+
 /** 2つの見え方のうち、より伏せる方 */
 const stricter = (a: ViewKind, b: ViewKind): ViewKind =>
-  a === 'hidden' || b === 'hidden'
-    ? 'hidden'
-    : a === 'masked' || b === 'masked'
-      ? 'masked'
-      : 'full';
+  STRICTNESS.indexOf(a) >= STRICTNESS.indexOf(b) ? a : b;
 
 /**
  * その人に、そのオブジェクトをどう見せるか。親をたどり、カード・メモ・タブの決まりを当てる。
- * 索引に無いもの（まだ置いていないもの）は full
+ * 索引に無いもの（まだ置いていないもの）は full。
+ *
+ * 親がまだ届いていなければ pending。親より先に子が届くことがあり（部屋の読み込みや複製では、
+ * 送る順が入れ替わる）、そのまま full とみなすと、裏向きのカードの表や GM だけのメモが、決まりを
+ * 当てる前に配られてしまう。親が届いたら、見え方を比べ直して渡す
  */
 export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): ViewKind => {
   const entry = lookup(identifier);
   if (!entry) return 'full';
   let kind = ownKind(entry.view, viewer);
-  if (
-    entry.view?.kind === 'reaction' &&
-    viewKind(entry.view.message, viewer, lookup) === 'hidden'
-  ) {
-    return 'hidden';
+  if (entry.view?.kind === 'reaction') {
+    const message = viewKind(entry.view.message, viewer, lookup);
+    if (!delivered(message)) return message;
   }
 
   // データ要素の名前を集めながら、決まりを持つ親までたどる
   const names = entry.view?.kind === 'data' ? [entry.view.name] : [];
   let current = entry;
   for (let depth = 0; depth < MAX_DEPTH && kind !== 'hidden'; depth++) {
-    const parent = current.parent ? lookup(current.parent) : null;
-    if (!parent) break;
+    if (!current.parent) break;
+    const parent = lookup(current.parent);
+    if (!parent) return stricter(kind, 'pending');
     const view = parent.view;
     // 根のデータ要素（名前はオブジェクトの種類）を除いた、根からの道筋
     const path = names.slice(0, -1).reverse();
@@ -281,7 +287,7 @@ export const maskedMinor = (minorVersion: number): number =>
 
 /** その人に見せる形。見せないなら null。伏せた形には、本物より小さい版を付ける */
 export const viewFor = (context: ObjectContext, kind: ViewKind): ObjectContext | null =>
-  kind === 'hidden'
+  !delivered(kind)
     ? null
     : kind === 'masked'
       ? { ...masked(context), minorVersion: maskedMinor(context.minorVersion) }

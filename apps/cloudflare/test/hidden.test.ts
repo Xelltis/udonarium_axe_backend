@@ -199,6 +199,83 @@ describe('cards', () => {
   });
 });
 
+describe('parts that arrive before what they belong to', () => {
+  it('keeps the face of a turned-down card from players when its parts come first', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('c6', { state: 1, location: { name: 'table' } });
+
+    t.gm.emit([...elements].reverse().concat(card).map(update));
+
+    for (const player of t.players) {
+      const events = await player.events();
+      const seen = ids(events);
+      expect(seen[0]).toEqual(['UPDATE_GAME_OBJECT', 'c6']);
+      expect(seen.slice(1).map(([name]) => name)).toEqual(Array(5).fill('AUTHORITATIVE_OBJECT'));
+      expect(seen.map(([, id]) => id).sort()).toEqual(
+        ['back_c6', 'c6', 'card_c6', 'common_c6', 'detail_c6', 'image_c6'].sort(),
+      );
+    }
+    // 子を送ってきた本人は、もう持っている
+    await t.gm.expectQuiet();
+  });
+
+  it('hands players the text of a memo kept to the GM only once the memo is there, blacked out', async () => {
+    const t = await table();
+    const memo = contextOf(
+      'm1',
+      1,
+      0.5,
+      { attributes: { disclosureMode: 'gm', owner: '' } },
+      'text-note',
+    );
+    const part = (name: string, parent: string, value = '') =>
+      contextOf(
+        `${name}_m1`,
+        1,
+        0.5,
+        { parentIdentifier: parent, value, attributes: { name } },
+        'data',
+      );
+    const parts = [
+      part('text', 'common_m1', 'the secret'),
+      part('common', 'text-note_m1'),
+      part('text-note', 'm1'),
+    ];
+
+    t.gm.emit([...parts, memo].map(update));
+
+    const events = await t.alice.events();
+    const text = events.find((event) => (event.data as ObjectContext).identifier === 'text_m1');
+    expect(text?.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
+    expect((text?.data as ObjectContext).syncData.value).toBe('███ ██████');
+  });
+
+  it('looks again at what lies under a part that is moved to another parent', async () => {
+    const t = await table();
+    const up = cardTree('c7', { state: 0, location: { name: 'table' } });
+    const down = cardTree('c8', { state: 1, location: { name: 'table' } });
+    await place(t, [up.card, ...up.elements, down.card, ...down.elements]);
+
+    // 裏向きのカードの絵の入れ物を、表向きのカードの下へ移す
+    t.gm.emit([
+      update(
+        contextOf(
+          'image_c8',
+          2,
+          0.5,
+          { parentIdentifier: 'card_c7', value: '', attributes: { name: 'image' } },
+          'data',
+        ),
+      ),
+    ]);
+
+    for (const player of t.players) {
+      const seen = ids(await player.events());
+      expect(seen).toContainEqual(['AUTHORITATIVE_OBJECT', 'front_c8']);
+    }
+  });
+});
+
 describe('whispers and secrets', () => {
   const tab = contextOf(
     'tab',
