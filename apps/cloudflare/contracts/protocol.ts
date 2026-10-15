@@ -334,7 +334,8 @@ export interface RoomListResponse {
 
 /**
  * PUT /v1/rooms/:roomKey/assets/:sha256 に付けてよいヘッダー。アセットの名前（ファイル名）を
- * encodeURIComponent したもの。GET /v1/rooms/:roomKey/assets の一覧で返る
+ * encodeURIComponent したもの。GET /v1/rooms/:roomKey/assets の一覧で返るほか、HEAD と GET の答えにも
+ * 同じヘッダーで付く（Access-Control-Expose-Headers で、ページから読める）
  */
 export const ASSET_NAME_HEADER = 'X-Asset-Name';
 /** アセットの名前の最長（文字数）。長いものは切る */
