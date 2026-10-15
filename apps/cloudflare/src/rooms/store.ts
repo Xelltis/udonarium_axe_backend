@@ -81,28 +81,35 @@ export class RoomStore {
   private load(): Map<string, StoredEntry> {
     if (this.entries) return this.entries;
     this.entries = new Map();
-    const rows = this.storage.sql
-      .exec<{
-        identifier: string;
-        alias: string;
-        major: number;
-        minor: number;
-        owner: string | null;
-        parent: string;
-        view: string | null;
-      }>('SELECT identifier, alias, major, minor, owner, parent, view FROM objects')
-      .toArray();
-    for (const row of rows) {
-      this.remember(row.identifier, {
-        alias: row.alias,
-        majorVersion: row.major,
-        minorVersion: row.minor,
-        owner: row.owner,
-        parent: row.parent,
-        view: row.view === null ? null : (JSON.parse(row.view) as View),
-      });
-    }
+    for (const row of this.indexRows()) this.remember(row.identifier, entryOf(row));
     return this.entries;
+  }
+
+  /** 索引に置く列。identifier を渡せば、その1行だけ */
+  private indexRows(identifier?: string): IndexRow[] {
+    const columns = 'SELECT identifier, alias, major, minor, owner, parent, view FROM objects';
+    return identifier === undefined
+      ? this.storage.sql.exec<IndexRow>(columns).toArray()
+      : this.storage.sql.exec<IndexRow>(`${columns} WHERE identifier = ?`, identifier).toArray();
+  }
+
+  /**
+   * 書けなかったものの索引を、SQLite にあるとおりに戻す。戻さないと、索引は新しい版のまま中身は古い
+   * （または無い）ので、読むと版と中身が食い違うか、中身が見つからずに止まる
+   */
+  private resync(identifier: string): void {
+    const [row] = this.indexRows(identifier);
+    if (row) {
+      this.remember(identifier, entryOf(row));
+    } else {
+      this.forgetRelations(identifier);
+      this.index.delete(identifier);
+    }
+    const marked =
+      this.storage.sql.exec('SELECT 1 FROM tombstones WHERE identifier = ?', identifier).toArray()
+        .length > 0;
+    if (marked) this.deleted.add(identifier);
+    else this.deleted.delete(identifier);
   }
 
   /** 親から子へ、発言からリアクションへの引き */
@@ -296,8 +303,8 @@ export class RoomStore {
    * まとめておいた変更を1つのトランザクションで書く。書いた識別子の数を返す。
    *
    * 1つでも書けないもの（SQLite の1行の上限を超えたものなど）があると、トランザクションごと戻る。
-   * そのときは1つずつ書き直し、書けないものだけを捨てる。捨てないと、次からも同じところで止まり、
-   * 何も残らなくなる
+   * そのときは1つずつ書き直し、書けないものだけを捨てて、その索引を SQLite に合わせて戻す。捨てないと、
+   * 次からも同じところで止まり、何も残らなくなる
    */
   flush(): number {
     const count = this.pending.size;
@@ -311,6 +318,7 @@ export class RoomStore {
           this.storage.transactionSync(() => this.writePending(identifier, write));
         } catch (err) {
           console.error('Could not keep an object:', identifier, err);
+          this.resync(identifier);
         }
       }
     }
@@ -388,6 +396,25 @@ export class RoomStore {
     }
   }
 }
+
+interface IndexRow extends Record<string, SqlStorageValue> {
+  identifier: string;
+  alias: string;
+  major: number;
+  minor: number;
+  owner: string | null;
+  parent: string;
+  view: string | null;
+}
+
+const entryOf = (row: IndexRow): StoredEntry => ({
+  alias: row.alias,
+  majorVersion: row.major,
+  minorVersion: row.minor,
+  owner: row.owner,
+  parent: row.parent,
+  view: row.view === null ? null : (JSON.parse(row.view) as View),
+});
 
 const relate = (relations: Map<string, Set<string>>, from: string, to: string): void => {
   const set = relations.get(from) ?? new Set<string>();

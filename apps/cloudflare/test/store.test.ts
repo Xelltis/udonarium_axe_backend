@@ -66,6 +66,36 @@ describe('the room store', () => {
     expect(error).toHaveBeenCalled();
   });
 
+  it('goes back to what is written for an object it could not write', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const after = await withStore('store-resync', (store) => {
+      store.put(contextOf('kept', 1, 0.5, { value: 'first' }), null);
+      store.delete('marked', true);
+      store.flush();
+      const write = (store as unknown as { writeObject: (context: unknown) => number }).writeObject;
+      vi.spyOn(
+        store as unknown as { writeObject: (context: { identifier: string }) => number },
+        'writeObject',
+      ).mockImplementation(function (this: unknown, context: { identifier: string }) {
+        if (context.identifier !== 'other') throw new Error('row too big');
+        return write.call(this, context);
+      });
+      store.put(contextOf('kept', 2, 0.5, { value: 'second' }), null);
+      store.put(contextOf('new', 1, 0.5), null);
+      store.put(contextOf('other', 1, 0.5), null);
+      store.forget(['marked']);
+      store.put(contextOf('marked', 1, 0.5), null);
+      store.flush();
+      return {
+        kept: [store.entryOf('kept')?.majorVersion, store.get('kept')?.syncData.value],
+        added: store.entryOf('new'),
+        marked: store.isDeleted('marked'),
+        other: store.entryOf('other')?.majorVersion,
+      };
+    });
+    expect(after).toEqual({ kept: [1, 'first'], added: null, marked: true, other: 1 });
+  });
+
   it('forgets the oldest marks of what was deleted once there are too many', async () => {
     const left = await runInDurableObject(
       env.ROOMS.getByName('store-prune'),
