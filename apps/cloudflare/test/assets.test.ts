@@ -646,6 +646,19 @@ describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
     }
     expect(statuses).toEqual([404, 404, 404, 404, 404, 429]);
   });
+
+  it('answers from the copy in the data centre as GET does', async () => {
+    const { file, id } = await freshFile(PNG_HEAD, 200);
+    await put(id, file);
+    await readOnce(id);
+    await env.ASSETS.delete(storedKeyOf(id));
+
+    const res = await call(id, { method: 'HEAD' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Length')).toBe('200');
+    expect(res.headers.get('Cache-Control')).toBe(`private, max-age=${WEEK_SECONDS}, immutable`);
+  });
 });
 
 describe('OPTIONS /v1/rooms/:roomKey/assets/:id', () => {

@@ -82,8 +82,13 @@ const assetClaimsOf = (c: Context<AppEnv>, roomKey: string): Claims<'asset'> | n
   return claims?.room === roomKey ? claims : null;
 };
 
-/** HEAD は R2 の head で答え、中身のストリームを開かない */
+/**
+ * HEAD は R2 の head で答え、中身のストリームを開かない。GET と同じく、キャッシュに残っているものは
+ * キャッシュから答える（GET と HEAD で答えが食い違わないように）
+ */
 const headAsset = async (c: Context<AppEnv>, key: string) => {
+  const cached = await caches.default.match(c.req.url);
+  if (cached) return privately(new Response(null, { status: 200, headers: cached.headers }));
   if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');
   }
