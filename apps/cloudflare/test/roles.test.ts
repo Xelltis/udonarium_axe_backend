@@ -491,6 +491,7 @@ describe('changing a role', () => {
     // 置けるかどうかはトークンの役割で決まるので、新しい役割のトークンが届く
     const renewed = await pl.next('asset-token');
     expect(readToken(renewed.assetToken, 'asset', SESSION_SECRET)?.role).toBe('gm');
+    expect(renewed.role).toBe('gm');
 
     // GM が2人になったので、もとの GM は降りられる
     gm.emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId: 'gm', role: 'pl' } }]);

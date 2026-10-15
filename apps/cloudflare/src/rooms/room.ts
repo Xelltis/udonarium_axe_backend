@@ -478,7 +478,11 @@ export class RoomDurableObject extends DurableObject<Env> {
     } else if (received.type === 'auth') {
       this.renew(ws, seat, received.accessToken);
     } else if (received.type === 'asset-token') {
-      this.post(ws, { type: 'asset-token', ...this.assetTokenFor(seat, 'expiresAt') });
+      this.post(ws, {
+        type: 'asset-token',
+        ...this.assetTokenFor(seat, 'expiresAt'),
+        role: seat.role,
+      });
     }
     // 入ったあとの hello は何もしない
   }
@@ -1407,7 +1411,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     // アセットを置けるかは役割で決まるので、新しい役割のトークンに替えさせる
     for (const { ws, seat: other } of this.seats()) {
       if (other.userId !== target.userId) continue;
-      this.post(ws, { type: 'asset-token', ...this.assetTokenFor(other, 'expiresAt') });
+      this.post(ws, { type: 'asset-token', ...this.assetTokenFor(other, 'expiresAt'), role });
     }
   }
 

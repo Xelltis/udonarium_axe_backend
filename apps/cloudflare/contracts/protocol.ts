@@ -192,6 +192,11 @@ export interface AssetTokenMessage {
   assetToken: string;
   /** Unix ミリ秒 */
   expiresAt: number;
+  /**
+   * いまの役割。役割が変わったときに届くトークンは新しい役割のものなので、Axe はこれで自分の役割を
+   * 知り直す（GM か PL になったら、手元の画像や音声を部屋に上げるなど）
+   */
+  role: PeerRole;
 }
 
 /**

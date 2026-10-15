@@ -77,6 +77,7 @@ describe('the asset token a room hands its seats', () => {
     const renewed = await client.next('asset-token');
 
     expect(claimsOf(renewed.assetToken)).toMatchObject({ room: roomKey, role: 'pl' });
+    expect(renewed.role).toBe('pl');
     expect(renewed.expiresAt).toBeGreaterThan(Date.now());
   });
 
