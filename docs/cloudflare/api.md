@@ -14,6 +14,7 @@ Axeは、画像と音声を置くときと受け取るときに、これらを�
 | `OPTIONS` | `/v1/assets/:sha256`    | ブラウザのプリフライトに答える                                         |
 | `POST`    | `/v1/rooms`             | 部屋を作る（→ [部屋のプロトコル](/cloudflare/protocol#post-v1-rooms)） |
 | `GET`     | `/v1/rooms`             | 部屋の一覧                                                             |
+| `DELETE`  | `/v1/rooms/:roomKey`    | 部屋を削除する（その部屋のGMだけ）                                     |
 | `GET`     | `/v1/rooms/:roomKey/ws` | 部屋に入る（WebSocket）                                                |
 
 `:sha256`は、中身のSHA-256を**小文字の16進**で書いた64文字です。

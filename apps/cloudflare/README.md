@@ -18,6 +18,7 @@ SkyWay版の配信は、これからも残ります。
 | `PUT`    | `/v1/assets/:sha256`    | 置く。許可したOriginからのリクエストだけ受ける           |
 | `POST`   | `/v1/rooms`             | 部屋を作る                                               |
 | `GET`    | `/v1/rooms`             | 部屋の一覧                                               |
+| `DELETE` | `/v1/rooms/:roomKey`    | 部屋を削除する（その部屋のGMだけ）                       |
 | `GET`    | `/v1/rooms/:roomKey/ws` | 部屋に入る（WebSocket）                                  |
 | `GET`    | `/v1/auth/config`       | ログインに使える提供元                                   |
 | `GET`    | `/v1/login/discord`     | ログインを始める（ページとして開く）                     |
@@ -81,6 +82,7 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 | 401  | `login-required`      | 部屋を作る・置くのに、アクセストークンが無いか無効                 |
 | 400  | `hash-mismatch`       | 本文のハッシュが名前と合わない                                     |
 | 403  | `origin-not-allowed`  | PUTか部屋のもののOriginが許可リストにない                          |
+| 403  | `not-game-master`     | 部屋を削除しようとしたが、その部屋のGMでない                       |
 | 404  | `not-found`           | その名前の中身が置かれていないか、保持期間を過ぎた                 |
 | 404  | `room-not-found`      | 部屋が無い（作られていないか、消えた）                             |
 | 411  | `length-required`     | PUTに`Content-Length`がない                                        |
