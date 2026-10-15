@@ -219,6 +219,8 @@ export default defineConfig({
           { text: '運用と料金', link: '/cloudflare/operations' },
           { text: 'mainからの自動デプロイ', link: '/cloudflare/auto-deploy' },
           { text: '運営する人へ', link: '/cloudflare/policies' },
+          { text: 'プライバシーポリシーのひな形', link: '/cloudflare/privacy-template' },
+          { text: '利用規約のひな形', link: '/cloudflare/terms-template' },
           { text: '困ったとき', link: '/cloudflare/troubleshooting' },
         ],
       },

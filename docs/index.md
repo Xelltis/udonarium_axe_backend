@@ -26,7 +26,7 @@ features:
     link: /vercel/
     linkText: Vercel版を見る
   - title: Cloudflare版
-    details: サーバー版のWorkerです。画像と音声を置き、参加者はP2Pの代わりにここから受け取ります。部屋ごとのサーバー（Durable Objects）も入っていて、Axe側の対応ができればSkyWayなしで遊べます。
+    details: サーバー版のWorkerです。部屋ごとのサーバー（Durable Objects）が参加者のやりとりを中継し、卓の状態を持ちます。画像と音声も部屋の中に置き、その部屋の参加者に配ります。Axe v1.68.0から、SkyWayなしで遊べます（ベータ）。
     link: /cloudflare/
     linkText: Cloudflare版を見る
 ---
@@ -38,8 +38,8 @@ features:
 
 Axeの配信には、2つの方式があります。
 
-- **SkyWay版**：参加者どうしがSkyWayを使ってP2Pでつながる、いまの方式です。認証トークンを発行するサーバー（PHP版かVercel版）が1つ要ります。画像と音声の置き場（Cloudflare版）を足すこともできます。
-- **サーバー版**：部屋ごとのサーバー（CloudflareのDurable Objects）に参加者がつながる方式で、SkyWayを使いません。サーバー側はでき、Axe側の対応を進めているところです。
+- **SkyWay版**：参加者どうしがSkyWayを使ってP2Pでつながる、いまの方式です。認証トークンを発行するサーバー（PHP版かVercel版）が1つ要ります。画像と音声も、参加者どうしのP2Pで配ります。
+- **サーバー版**：部屋ごとのサーバー（CloudflareのDurable Objects）に参加者がつながる方式で、SkyWayを使いません。Axe v1.68.0から、ベータとして使えます。
 
 どちらの方式で配信するかは、配信ごとに選びます。
 SkyWay版は、サーバー版ができたあとも残ります。

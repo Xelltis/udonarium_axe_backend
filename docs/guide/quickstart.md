@@ -2,7 +2,7 @@
 
 いちばん手軽な組み合わせ（Vercel版のトークン発行サーバー）で、SkyWay版のAxeが遊べるようになるまでの手順です。
 
-SkyWayを使わないサーバー版は、いま作っているところです（→ [今後の計画](/guide/roadmap)）。
+SkyWayを使わないサーバー版は、Axe v1.68.0からベータとして使えます（→ [今後の計画](/guide/roadmap)）。
 サーバー版で使うCloudflare版の手順は、[Cloudflare版をデプロイする](/cloudflare/deploy)にあります。
 
 所要時間の目安は15分ほどです。

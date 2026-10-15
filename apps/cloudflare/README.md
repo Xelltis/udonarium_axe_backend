@@ -37,10 +37,11 @@ PUTでは、本文のハッシュがこの名前と合わなければ置きま�
 
 どのリクエストにも、`Authorization: Bearer <アセットのトークン>`が要ります。
 トークンは部屋のサーバーが席に渡すもので、入室時の`welcome`の`assetToken`と`assetTokenExpiresAt`で届きます。
-中身はその部屋の鍵と席の役割で、`SESSION_SECRET`を使ってHS256で署名し、15分で切れます。
+中身はその部屋の鍵と、席のユーザーIDと役割で、`SESSION_SECRET`を使ってHS256で署名し、15分で切れます。
 Axeは切れる前に`asset-token`を送って渡し直してもらい、役割が変わったときはサーバーが新しいトークンを送ります。
 読む（HEADとGET）のはその部屋の席ならだれでも、置く（PUT）のはGMとPLだけです。
-トークンが無い・切れた・ほかの部屋のものなら`401 asset-token-required`、見学のトークンで置こうとすれば`403 not-a-player`を返します。
+置くときは、トークンの役割ではなく、部屋にそのユーザーIDがいまGMかPLとしているかを尋ねます。
+トークンが無い・切れた・ほかの部屋のものなら`401 asset-token-required`、部屋がもう無ければ`404 room-not-found`、いまGMでもPLでもなければ`403 not-a-player`を返します。
 
 どのリクエストも、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginからしか受けません。
 新しく置くPUTは、送信元ごとに1分100件までです。
@@ -106,7 +107,6 @@ R2を読むGETとHEADは、送信元ごとに1分600件までです。
 | 451  | `blocked`              | 運営する人が、その名前のものを置かせないようにした                 |
 | 500  | `config-invalid`       | 環境変数が足りないか、形が違う                                     |
 | 500  | `internal-error`       | それ以外の失敗                                                     |
-| 503  | `room-full`            | 部屋が受けるWebSocketの数に達している                              |
 | 503  | `login-unavailable`    | ログインの3つが入っていない                                        |
 
 `config-invalid`のときは、足りない設定の名前がWorkerのログに出ます。

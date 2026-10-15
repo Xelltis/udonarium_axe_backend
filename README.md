@@ -8,11 +8,11 @@
 動かす場所ごとに、`apps/`の下へ分けて置いています。
 選びかた、設置のしかた、設定項目、困ったときの対処は、[ドキュメント](https://xelltis.github.io/udonarium_axe_backend/)にまとめています。
 
-| ディレクトリ                       | 内容                                                 | 動かす場所                              |
-| ---------------------------------- | ---------------------------------------------------- | --------------------------------------- |
-| [apps/php](apps/php)               | SkyWayの認証トークンを発行するPHP実装                | レンタルサーバー（Apache＋PHP 8.3〜）   |
-| [apps/vercel](apps/vercel)         | 同じトークン発行をHonoで書いたもの                   | Vercel Functions（Node.js 24）          |
-| [apps/cloudflare](apps/cloudflare) | 画像と音声の置き場と、SkyWayを使わない部屋のサーバー | Cloudflare Workers＋R2＋Durable Objects |
+| ディレクトリ                       | 内容                                                       | 動かす場所                              |
+| ---------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
+| [apps/php](apps/php)               | SkyWayの認証トークンを発行するPHP実装                      | レンタルサーバー（Apache＋PHP 8.3〜）   |
+| [apps/vercel](apps/vercel)         | 同じトークン発行をHonoで書いたもの                         | Vercel Functions（Node.js 24）          |
+| [apps/cloudflare](apps/cloudflare) | SkyWayを使わない部屋のサーバー。画像と音声は部屋の中に置く | Cloudflare Workers＋R2＋Durable Objects |
 
 ## セルフホスト
 
@@ -30,7 +30,7 @@ Vercel版（SkyWayの認証トークンの発行）:
 
 要る環境変数は[apps/vercel/README.md](apps/vercel/README.md)にあります。
 
-Cloudflare版（画像と音声の置き場と、部屋のサーバー）:
+Cloudflare版（SkyWayを使わない部屋のサーバー）:
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Xelltis/udonarium_axe_backend/tree/main/apps/cloudflare)
 
