@@ -64,8 +64,9 @@ describe('room metrics', () => {
         ['flush', ''],
       ]),
     );
+    // 書いたのは2つ。それぞれの行と、その主キーの索引の行を書く
     const flush = points.find((point) => point.blobs?.[1] === 'flush');
-    expect(flush?.doubles?.[0]).toBe(2);
+    expect(flush?.doubles?.[0]).toBe(4);
   });
 
   it('writes the number of changes once a minute while people play', async () => {
@@ -82,7 +83,8 @@ describe('room metrics', () => {
     alice.client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     await eventually(async () => summary(points).some(([event]) => event === 'flush'), Boolean);
 
-    expect(points.find((point) => point.blobs?.[1] === 'flush')?.doubles).toEqual([4]);
+    // 前からの3行に、1つのものの行と索引の行
+    expect(points.find((point) => point.blobs?.[1] === 'flush')?.doubles).toEqual([5]);
   });
 
   it('writes nothing once the room is gone', async () => {

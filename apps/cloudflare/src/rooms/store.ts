@@ -300,22 +300,26 @@ export class RoomStore {
   }
 
   /**
-   * まとめておいた変更を1つのトランザクションで書く。書いた識別子の数を返す。
+   * まとめておいた変更を1つのトランザクションで書く。SQLite が書いた行の数（索引の行も入る）を返す。
+   * 無料枠でいちばん先に尽きるのが書いた行の数なので、見積もりと比べられるよう、識別子ではなく行で数える。
    *
    * 1つでも書けないもの（SQLite の1行の上限を超えたものなど）があると、トランザクションごと戻る。
    * そのときは1つずつ書き直し、書けないものだけを捨てて、その索引を SQLite に合わせて戻す。捨てないと、
    * 次からも同じところで止まり、何も残らなくなる
    */
   flush(): number {
-    const count = this.pending.size;
+    let rows = 0;
     try {
-      this.storage.transactionSync(() => {
-        for (const [identifier, write] of this.pending) this.writePending(identifier, write);
+      rows = this.storage.transactionSync(() => {
+        let written = 0;
+        for (const [identifier, write] of this.pending)
+          written += this.writePending(identifier, write);
+        return written;
       });
     } catch {
       for (const [identifier, write] of this.pending) {
         try {
-          this.storage.transactionSync(() => this.writePending(identifier, write));
+          rows += this.storage.transactionSync(() => this.writePending(identifier, write));
         } catch (err) {
           console.error('Could not keep an object:', identifier, err);
           this.resync(identifier);
@@ -324,28 +328,37 @@ export class RoomStore {
     }
     this.pending.clear();
     this.pruneTombstones();
-    return count;
+    return rows;
   }
 
-  private writePending(identifier: string, write: PendingWrite): void {
-    const sql = this.storage.sql;
+  /** 書いた行の数を返す */
+  private writePending(identifier: string, write: PendingWrite): number {
+    let rows = 0;
     if (write.context !== undefined) {
-      sql.exec('DELETE FROM object_chunks WHERE identifier = ?', identifier);
+      rows += this.run('DELETE FROM object_chunks WHERE identifier = ?', identifier);
       if (write.context === null) {
-        sql.exec('DELETE FROM objects WHERE identifier = ?', identifier);
+        rows += this.run('DELETE FROM objects WHERE identifier = ?', identifier);
       } else {
-        this.writeObject(write.context, write.owner ?? null);
+        rows += this.writeObject(write.context, write.owner ?? null);
       }
     }
     if (write.tombstone === true) {
-      sql.exec(
+      rows += this.run(
         'INSERT OR REPLACE INTO tombstones (identifier, deleted_at) VALUES (?, ?)',
         identifier,
         Date.now(),
       );
     } else if (write.tombstone === false) {
-      sql.exec('DELETE FROM tombstones WHERE identifier = ?', identifier);
+      rows += this.run('DELETE FROM tombstones WHERE identifier = ?', identifier);
     }
+    return rows;
+  }
+
+  /** 書く文を最後まで流し、書いた行の数を返す */
+  private run(query: string, ...bindings: SqlStorageValue[]): number {
+    const cursor = this.storage.sql.exec(query, ...bindings);
+    cursor.toArray();
+    return cursor.rowsWritten;
   }
 
   /**
@@ -367,12 +380,12 @@ export class RoomStore {
     }
   }
 
-  private writeObject(context: ObjectContext, owner: string | null): void {
-    const sql = this.storage.sql;
+  /** 書いた行の数を返す */
+  private writeObject(context: ObjectContext, owner: string | null): number {
     const data = encodeData(context.syncData);
     const chunks = data.byteLength > CHUNK_BYTES ? Math.ceil(data.byteLength / CHUNK_BYTES) : 0;
     const { parent, view } = describe(context);
-    sql.exec(
+    let rows = this.run(
       `INSERT OR REPLACE INTO objects
          (identifier, alias, major, minor, owner, parent, view, chunks, data)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -387,13 +400,14 @@ export class RoomStore {
       chunks === 0 ? data : null,
     );
     for (let seq = 0; seq < chunks; seq++) {
-      sql.exec(
+      rows += this.run(
         'INSERT INTO object_chunks (identifier, seq, data) VALUES (?, ?, ?)',
         context.identifier,
         seq,
         data.slice(seq * CHUNK_BYTES, (seq + 1) * CHUNK_BYTES),
       );
     }
+    return rows;
   }
 }
 
