@@ -7,16 +7,19 @@
 
 ## HTTP
 
-| メソッド | パス                    | 内容                                  |
-| -------- | ----------------------- | ------------------------------------- |
-| `POST`   | `/v1/rooms`             | 部屋を作る                            |
-| `GET`    | `/v1/rooms`             | 部屋の一覧                            |
-| `DELETE` | `/v1/rooms/:roomKey`    | 部屋を削除する（その部屋のGMだけ）    |
-| `GET`    | `/v1/rooms/:roomKey/ws` | 部屋に入る（WebSocketにつなぎ替える） |
+| メソッド | パス                                | 内容                                         |
+| -------- | ----------------------------------- | -------------------------------------------- |
+| `POST`   | `/v1/rooms`                         | 部屋を作る                                   |
+| `GET`    | `/v1/rooms`                         | 部屋の一覧                                   |
+| `DELETE` | `/v1/rooms/:roomKey`                | 部屋を削除する（その部屋のGMだけ）           |
+| `GET`    | `/v1/rooms/:roomKey/ws`             | 部屋に入る（WebSocketにつなぎ替える）        |
+| `HEAD`   | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットが置かれているか               |
+| `GET`    | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットの中身                         |
+| `PUT`    | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットを置く（その部屋のGMとPLだけ） |
 
 どれも、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのページからしか受けません。
 ほかのOriginには`403 origin-not-allowed`を返します。
-`POST`・`DELETE`と`GET`の一覧は、CORSのプリフライトにも答えます。
+`POST`・`DELETE`と`GET`の一覧、部屋のアセットは、CORSのプリフライトにも答えます。
 
 ### `POST /v1/rooms`
 
@@ -87,7 +90,7 @@ Authorization: Bearer <アクセストークン>
 
 `204`を返します。
 部屋にいる人には`room-deleted`を送ってから、接続を閉じます。
-そのあとは保持期間が過ぎたときと同じく、部屋を一覧から外し、置いたものをすべて消します。
+そのあとは保持期間が過ぎたときと同じく、部屋を一覧から外し、置いたものと部屋のアセットをすべて消します。
 
 | 状態  | 本文                            | 起きるとき                                             |
 | ----- | ------------------------------- | ------------------------------------------------------ |
@@ -114,6 +117,36 @@ WebSocketにつなぎ替えます（`101`）。
 
 トークンやパスワードはURLに載せません。
 パスワードは、つないだあとの`hello`で送ります。
+
+### 部屋のアセット
+
+その部屋の画像と音声は、`/v1/rooms/:roomKey/assets/:sha256`で読み書きします。
+`HEAD`で置かれているかを確かめ、`GET`で受け取り、`PUT`で置きます。
+`:sha256`は、中身のSHA-256を小文字の16進で書いた64文字です。
+R2には`rooms/<部屋の鍵>/<SHA-256>`の名前で置くので、同じ中身でも部屋が違えば別に置きます。
+
+```http
+PUT /v1/rooms/511c18c897b08d168145a815870cf90b/assets/<sha256>
+Origin: https://axe.example.com
+Authorization: Bearer <アセットのトークン>
+Content-Length: <大きさ>
+```
+
+どれにも、部屋のサーバーが席に渡したアセットのトークン（→ [部屋のアセットのトークン](#部屋のアセットのトークン)）を付けます。
+ログインのアクセストークンでは通りません。
+読む（`HEAD`・`GET`）のはその部屋の席ならだれでも、置く（`PUT`）のはGMとPLだけです。
+`PUT`は、置いたら`201`（`{"id":"<sha256>","status":"stored"}`）を、その部屋にすでに置かれていれば`200`（`"status":"exists"`）を返します。
+部屋のアセットは、部屋と一緒に消えます。
+
+| 状態  | コード                 | 起きるとき                                                   |
+| ----- | ---------------------- | ------------------------------------------------------------ |
+| `400` | `invalid-id`           | 名前が64文字の小文字16進でない、部屋の鍵の形が違う           |
+| `401` | `asset-token-required` | トークンが無い・無効・期限切れ・ほかの部屋のもの             |
+| `403` | `not-a-player`         | 見学のトークンで置こうとした                                 |
+| `403` | `origin-not-allowed`   | Originが許可リストにない                                     |
+| `404` | `not-found`            | その部屋に置かれていない（部屋が消えて、一緒に消えたときも） |
+
+返すヘッダー、形式と大きさの上限、条件付きリクエストと範囲指定、ほかのコード（`411`・`413`・`415`・`429`・`451`など）は、[APIリファレンス](/cloudflare/api)にあります。
 
 ## WebSocketのフレーム
 
@@ -187,22 +220,48 @@ Axeは、トークンを替えたらすぐ送ります。
 見学の席から送っても何もしません。
 ほかの人のトークンを送ると、`unauthorized`で閉じます。
 
+### `asset-token`
+
+`{"type":"asset-token"}`を送ると、部屋のアセットの新しいトークンを`asset-token`で返します（→ [部屋のアセットのトークン](#部屋のアセットのトークン)）。
+どの役割の席からでも頼めます。
+
 ## サーバーから送るもの
 
-| `type`    | 中身                                                                            | 送るとき             |
-| --------- | ------------------------------------------------------------------------------- | -------------------- |
-| `welcome` | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime` | `hello`が通ったとき  |
-| `join`    | `member`（`peerId`、`userId`、`role`）                                          | 誰かが入ったとき     |
-| `leave`   | `peerId`                                                                        | 誰かが抜けたとき     |
-| `data`    | `from`（送り主のピアID）、`events`                                              | イベントを届けるとき |
-| `time`    | `serverTime`（Unixミリ秒）                                                      | `time`を受けたとき   |
-| `invite`  | `role`、`invite`、`expiresAt`。GMでなければ`invite`と`expiresAt`は`null`        | `invite`を受けたとき |
-| `error`   | `code`、`protocolVersion`                                                       | 接続を閉じる前       |
+| `type`        | 中身                                                                                                                 | 送るとき                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `welcome`     | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime`、`assetToken`、`assetTokenExpiresAt` | `hello`が通ったとき                                   |
+| `join`        | `member`（`peerId`、`userId`、`role`）                                                                               | 誰かが入ったとき                                      |
+| `leave`       | `peerId`                                                                                                             | 誰かが抜けたとき                                      |
+| `data`        | `from`（送り主のピアID）、`events`                                                                                   | イベントを届けるとき                                  |
+| `time`        | `serverTime`（Unixミリ秒）                                                                                           | `time`を受けたとき                                    |
+| `invite`      | `role`、`invite`、`expiresAt`。GMでなければ`invite`と`expiresAt`は`null`                                             | `invite`を受けたとき                                  |
+| `asset-token` | `assetToken`、`expiresAt`（Unixミリ秒）                                                                              | `asset-token`を受けたときと、自分の役割が変わったとき |
+| `error`       | `code`、`protocolVersion`                                                                                            | 接続を閉じる前                                        |
 
 - `welcome`の`role`は、サーバーが決めた自分の役割（`gm`・`pl`・`guest`）です。自分の`PeerCursor`の`role`はこれにします。
 - `welcome`の`members`には、つないだ本人とサーバーは入りません。
 - サーバー自身のピアIDは`welcome`の`authorityPeerId`（`@authority`）で知らせます。ピアIDの形から推し量らないでください。
 - `welcome`のすぐあとには、必ずサーバーのカタログ（`from`が`@authority`の`data`）が届きます。部屋が空でも、空のカタログが1件届きます。
+
+### 部屋のアセットのトークン
+
+`welcome`の`assetToken`は、この部屋のアセット（→ [部屋のアセット](#部屋のアセット)）を読み書きするトークンです。
+`Authorization: Bearer`に付けて使います。
+中身は部屋の鍵とその席の役割で、`SESSION_SECRET`で署名し（HS256）、15分で切れます。
+切れる時刻は`assetTokenExpiresAt`（Unixミリ秒）です。
+
+```json
+{
+  "type": "asset-token",
+  "assetToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+  "expiresAt": 1792000900000
+}
+```
+
+- 切れる前に、Axeは`{"type":"asset-token"}`を送り、上の形で新しいトークンを受け取ります。届いたら、今のトークンと入れ替えます。
+- 役割が変わったときも、サーバーはその人に新しい役割のトークンを送ります（PLをGMにしたときなど）。置けるかどうかは、トークンの役割で決まるためです。
+- 切れる時刻の名前は、`welcome`では`assetTokenExpiresAt`、`asset-token`では`expiresAt`です。
+- 部屋を抜けた人が読めるのは、持っているトークンが切れるまで（最長15分）です。
 
 ## サーバーが中身を読むイベント
 

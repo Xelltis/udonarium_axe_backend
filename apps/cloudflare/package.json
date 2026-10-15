@@ -46,19 +46,16 @@
   "cloudflare": {
     "bindings": {
       "ASSETS": {
-        "description": "画像と音声を置くR2バケット。新しく作られる（アカウントでR2を使い始めておく必要がある）"
+        "description": "部屋の画像と音声を置くR2バケット。新しく作られる（アカウントでR2を使い始めておく必要がある）"
       },
       "ACCESS_CONTROL_ALLOW_ORIGIN": {
         "description": "アプリ（Udonarium Axe）を配信しているOrigin。複数あるときはカンマで区切る。例：`https://axe.example.com`"
       },
-      "ASSET_RETENTION_DAYS": {
-        "description": "画像と音声を残す日数。過ぎたものは消え、使う人が次に部屋を読み込んだときに上げ直される"
-      },
       "ROOM_RETENTION_HOURS": {
-        "description": "部屋から最後の1人が出てから、部屋を消すまでの時間"
+        "description": "部屋から最後の1人が出てから、部屋とその画像と音声を消すまでの時間"
       },
       "DISCORD_CLIENT_ID": {
-        "description": "ログインに使う[Discordのアプリ](https://discord.com/developers/applications)の「OAuth2 → Client ID」。ログインと部屋を使わないなら空のまま"
+        "description": "ログインに使う[Discordのアプリ](https://discord.com/developers/applications)の「OAuth2 → Client ID」。部屋を使うには、ログインの3つがそろっている必要がある"
       },
       "DISCORD_CLIENT_SECRET": {
         "description": "同じアプリの「OAuth2 → Client Secret」。ログインの3つは、そろえて入れるか、どれも入れないか"

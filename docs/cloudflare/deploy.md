@@ -1,6 +1,6 @@
 # Cloudflare版をデプロイする
 
-Cloudflare版（アセットサーバー）を自分のCloudflareアカウントに置き、Axeから使えるようにするまでの手順です。
+Cloudflare版（部屋のサーバー）を自分のCloudflareアカウントに置き、Axeから使えるようにするまでの手順です。
 いちばん手軽なのは、Deploy to Cloudflareボタンを使う方法です。
 
 ## 1. R2を使い始める（アカウントに一度だけ）
@@ -28,18 +28,18 @@ R2を使い始めていないアカウントでは、バケットを作れずに
 
 画面では、次のものを決めます。
 
-| 項目                          | 入れるもの                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------------ |
-| Gitのアカウントとリポジトリ名 | 複製先。身内用と公開用など、複数置くときは名前を変える                         |
-| Workerの名前                  | 例：`udonarium-axe-assets`。R2のバケットは「<この名前>-assets」で作られる      |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` | Axeを配信しているOrigin（例：`https://axe.example.com`）。複数はカンマ区切り   |
-| `ASSET_RETENTION_DAYS`        | 画像と音声を残す日数。既定は`30`                                               |
-| `ROOM_RETENTION_HOURS`        | 最後の1人が抜けてから部屋を消すまでの時間。既定は`24`                          |
-| `DISCORD_CLIENT_ID`           | ログインに使うDiscordのアプリのClient ID。ログインと部屋を使わないなら空のまま |
-| `DISCORD_CLIENT_SECRET`       | 同じアプリのClient Secret                                                      |
-| `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数（`openssl rand -base64 48`など）        |
+| 項目                          | 入れるもの                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| Gitのアカウントとリポジトリ名 | 複製先。身内用と公開用など、複数置くときは名前を変える                       |
+| Workerの名前                  | 例：`udonarium-axe-backend`。R2のバケットは「<この名前>-assets」で作られる   |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` | Axeを配信しているOrigin（例：`https://axe.example.com`）。複数はカンマ区切り |
+| `ROOM_RETENTION_HOURS`        | 最後の1人が抜けてから部屋を消すまでの時間。既定は`24`                        |
+| `DISCORD_CLIENT_ID`           | ログインに使うDiscordのアプリのClient ID                                     |
+| `DISCORD_CLIENT_SECRET`       | 同じアプリのClient Secret                                                    |
+| `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数（`openssl rand -base64 48`など）      |
 
 ログインの3つは、そろえて入れるか、どれも入れないかのどちらかにします。
+どれも入れなければ、ログインも部屋も、部屋のアセットも使えません。
 Discordのアプリの作りかたは[ログインと役割](/cloudflare/login#ログインを使えるようにする)にあります。
 アプリの**Redirects**に入れるURLはWorkerのURLから決まるので、先にアプリだけ作ってClient IDとClient Secretを入れ、デプロイしてURLが決まってから**Redirects**を足しても構いません。
 
@@ -53,55 +53,54 @@ CloudflareのCache APIは`*.workers.dev`では効かないので、そのまま�
 
 1. ダッシュボードで「Workers & Pages」から、デプロイしたWorkerを開きます。
 2. 「Settings → Domains & Routes」で**Add → Custom domain**を選びます。
-3. `assets.example.com`のように、Cloudflareで管理しているドメインの下の名前を入れます。
+3. `backend.example.com`のように、Cloudflareで管理しているドメインの下の名前を入れます。
 
 カスタムドメインには、そのドメインのDNSをCloudflareで管理している必要があります。
 
 ::: warning cookieを使わないホスト名にする
-Axeやログインの画面とは別の、アセットのためだけのホスト名にしてください。
+Axeやログインの画面とは別の、このWorkerのためだけのホスト名にしてください。
 置かれたSVGを直接開いても、そのホスト名のcookieを読ませないためです。
 詳しくは[安全のしくみ](/cloudflare/security#svgはサンドボックスに入れて配る)にあります。
 :::
 
 ## 4. Axeにつなぐ
 
-Axeの`assets/config.json`の`assets.url`に、手順3のURLを書きます。
+Axeの`assets/config.json`で、`transport`を`"server"`にし、`backend.url`に手順3のURLを書きます。
 
 ```json
 {
+  "transport": "server",
   "backend": {
     "url": "https://backend.example.com"
-  },
-  "assets": {
-    "url": "https://assets.example.com"
   }
 }
 ```
 
-詳しくは[Axe側の設定](/guide/client-config)を見てください。
+詳しくは[Axe側の設定](/guide/client-config#サーバー版で配信するとき)を見てください。
 
 ## 5. 動いているか確かめる
 
-置かれていない名前にHEADを送ると、`404`が返ります。
-
-```sh
-curl -I https://assets.example.com/v1/assets/0000000000000000000000000000000000000000000000000000000000000000
-```
-
-Axeで部屋に画像を足し、開発者ツール（F12）の「ネットワーク」を見ると、次の流れが見えます。
-
-1. 画像を足した人のブラウザ：`HEAD`（`404`）のあと`PUT`（`201`）
-2. ほかの参加者のブラウザ：`GET`（`200`）
-
-ログインを置いたかは、次で確かめます。
+部屋の一覧を尋ねると、`{"rooms":[]}`のような答えが返ります。
 `Origin`には、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたものを付けます。
 
 ```sh
-curl -H "Origin: https://axe.example.com" https://assets.example.com/v1/auth/config
+curl -H "Origin: https://axe.example.com" https://backend.example.com/v1/rooms
+```
+
+サーバー版のAxeで部屋に入って画像を足し、開発者ツール（F12）の「ネットワーク」を見ると、次の流れが見えます。
+どれも`/v1/rooms/<部屋の鍵>/assets/<SHA-256>`へのリクエストです。
+
+1. 画像を足した人（GMかPL）のブラウザ：`HEAD`（`404`）のあと`PUT`（`201`）
+2. ほかの参加者のブラウザ：`GET`（`200`）
+
+ログインを置いたかは、次で確かめます。
+
+```sh
+curl -H "Origin: https://axe.example.com" https://backend.example.com/v1/auth/config
 ```
 
 `{"providers":["discord"]}`が返れば、ログインと部屋が使えます。
-`{"providers":[]}`なら、ログインの3つが入っていません（アセットサーバーだけが動いています）。
+`{"providers":[]}`なら、ログインの3つが入っていません。このままでは、部屋も部屋のアセットも使えません。
 ログインそのものは、Axeから一度ログインしてみて確かめてください。
 
 ## 手元からwranglerでデプロイする
@@ -113,7 +112,7 @@ git clone https://github.com/Xelltis/udonarium_axe_backend.git
 cd udonarium_axe_backend/apps/cloudflare
 npm ci
 npx wrangler login
-npx wrangler deploy --name my-udonarium-assets \
+npx wrangler deploy --name my-udonarium-axe \
   --var ACCESS_CONTROL_ALLOW_ORIGIN:https://axe.example.com
 ```
 
@@ -125,9 +124,9 @@ npx wrangler deploy --name my-udonarium-assets \
 シークレットは、デプロイし直しても残ります。
 
 ```sh
-npx wrangler secret put DISCORD_CLIENT_ID --name my-udonarium-assets
-npx wrangler secret put DISCORD_CLIENT_SECRET --name my-udonarium-assets
-openssl rand -base64 48 | npx wrangler secret put SESSION_SECRET --name my-udonarium-assets
+npx wrangler secret put DISCORD_CLIENT_ID --name my-udonarium-axe
+npx wrangler secret put DISCORD_CLIENT_SECRET --name my-udonarium-axe
+openssl rand -base64 48 | npx wrangler secret put SESSION_SECRET --name my-udonarium-axe
 ```
 
 ## 何台も置くとき

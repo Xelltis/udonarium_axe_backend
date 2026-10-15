@@ -1,11 +1,11 @@
 # クイックスタート
 
 いちばん手軽な組み合わせ（Vercel版のトークン発行サーバー）で、SkyWay版のAxeが遊べるようになるまでの手順です。
-アセットサーバー（Cloudflare版）を足す手順も、最後に載せています。
 
 SkyWayを使わないサーバー版は、いま作っているところです（→ [今後の計画](/guide/roadmap)）。
+サーバー版で使うCloudflare版の手順は、[Cloudflare版をデプロイする](/cloudflare/deploy)にあります。
 
-所要時間の目安は、トークン発行サーバーだけなら15分ほどです。
+所要時間の目安は15分ほどです。
 
 ## 用意するもの
 
@@ -74,29 +74,12 @@ Axeを配信している場所の`assets/config.json`に、手順2のURLを書�
 {
   "backend": {
     "url": "https://my-udonarium-backend-vercel.vercel.app"
-  },
-  "assets": {
-    "url": ""
   }
 }
 ```
 
 Axeを開いて部屋を作り、ほかのブラウザから入れれば完成です。
 設定項目の詳しい意味は、[Axe側の設定](/guide/client-config)にあります。
-
-## 5.（任意）アセットサーバーを足す
-
-参加者が多い卓や、画像の多い部屋を快適にしたいときに足します。
-
-1. Cloudflareのダッシュボードで、R2を使い始める申し込みをします（アカウントに一度だけ。無料枠があります）。
-2. 下のボタンからデプロイします。`ACCESS_CONTROL_ALLOW_ORIGIN`には、手順2と同じAxeのOriginを入れます。R2のバケットは、このとき自動で作られます。
-
-   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Xelltis/udonarium_axe_backend/tree/main/apps/cloudflare)
-
-3. デプロイしたWorkerにカスタムドメインを付けます。
-4. Axeの`assets/config.json`の`assets.url`に、WorkerのURLを書きます。
-
-それぞれの詳しい手順は、[Cloudflare版をデプロイする](/cloudflare/deploy)にあります。
 
 ## うまくいかないとき
 
