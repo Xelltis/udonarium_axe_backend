@@ -72,15 +72,17 @@ curl -I https://backend.example.com/v1/rooms/<部屋の鍵>/assets/<sha256> \
 
 ### 返すヘッダー
 
-| ヘッダー                      | 値                                                                                          |
-| ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `Content-Type`                | 置いたときに中身から判定した形式（例：`image/png`）                                         |
-| `Content-Length`              | 大きさ（バイト）                                                                            |
-| `ETag`                        | R2がつけた値                                                                                |
-| `Cache-Control`               | `private, max-age=604800, immutable`。ブラウザには7日置かせ、共有のキャッシュには置かせない |
-| `Accept-Ranges`               | `bytes`                                                                                     |
-| `X-Content-Type-Options`      | `nosniff`                                                                                   |
-| `Access-Control-Allow-Origin` | リクエストの`Origin`                                                                        |
+| ヘッダー                        | 値                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `Content-Type`                  | 置いたときに中身から判定した形式（例：`image/png`）                                         |
+| `Content-Length`                | 大きさ（バイト）                                                                            |
+| `ETag`                          | R2がつけた値                                                                                |
+| `Cache-Control`                 | `private, max-age=604800, immutable`。ブラウザには7日置かせ、共有のキャッシュには置かせない |
+| `Accept-Ranges`                 | `bytes`                                                                                     |
+| `X-Content-Type-Options`        | `nosniff`                                                                                   |
+| `Access-Control-Allow-Origin`   | リクエストの`Origin`                                                                        |
+| `X-Asset-Name`                  | 置いたときの名前を`encodeURIComponent`したもの。名前が無ければ付けない                      |
+| `Access-Control-Expose-Headers` | `X-Asset-Name`。ページから名前を読めるように                                                |
 
 SVGのときだけ、`Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox`も付けます。
 理由は[安全のしくみ](/cloudflare/security#svgはサンドボックスに入れて配る)にあります。
@@ -119,7 +121,7 @@ X-Asset-Name: dragon.png
 - `Origin`は、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのどれかでなければなりません。
 - その部屋のGMかPLのアセットのトークンが要ります。見学のトークンには`403 not-a-player`を返します。
 - 部屋がまだあり、その人がいまGMかPLとして席にいるかを部屋のサーバーに尋ねます。部屋が無ければ`404 room-not-found`、見学に変えられているか抜けていれば`403 not-a-player`を返します。
-- `X-Asset-Name`には、ファイル名を`encodeURIComponent`したものを付けられます。255文字を超える分は切り、読めなければ空にします。R2のカスタムメタデータ（`name`）に置き、[一覧](#get-v1-rooms-roomkey-assets)の`name`として返します。
+- `X-Asset-Name`には、ファイル名を`encodeURIComponent`したものを付けられます。255文字を超える分は切り（2つで1文字のものは半分で切らない）、読めなければ空にします。R2のカスタムメタデータ（`name`）に置き、[一覧](#get-v1-rooms-roomkey-assets)の`name`として返します。
 - `Content-Length`が要ります。本文は読みためずに、そのままR2へ流します。
 - 宣言された`Content-Type`は見ません。中身の先頭のバイトで形式を判定します。
 - 本文のSHA-256が名前と合わなければ、何も置かずに`400 hash-mismatch`を返します。

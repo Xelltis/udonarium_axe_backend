@@ -14,6 +14,8 @@ const apiHeaders = cors({
   origin: (origin) => origin,
   allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
   allowHeaders: ['Content-Type', 'Authorization', ASSET_NAME_HEADER],
+  // 部屋のアセットを取るときに、置いたときの名前を読ませる
+  exposeHeaders: [ASSET_NAME_HEADER],
   maxAge: MAX_AGE_SECONDS,
 });
 

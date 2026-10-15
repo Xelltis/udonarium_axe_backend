@@ -1,3 +1,5 @@
+import { ASSET_NAME_HEADER } from '../../contracts/protocol';
+
 /** ブラウザや CDN に置いてよい最長の期間（7日） */
 const MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -27,6 +29,9 @@ export const objectHeaders = (object: R2Object): Headers => {
   if (object.httpMetadata?.contentType === 'image/svg+xml') {
     headers.set('Content-Security-Policy', SVG_CONTENT_SECURITY_POLICY);
   }
+  // 置いたときの名前。カタログには名前が無いので、取りに来た人はこれで名前を知る
+  const name = object.customMetadata?.name;
+  if (name) headers.set(ASSET_NAME_HEADER, encodeURIComponent(name));
   return headers;
 };
 

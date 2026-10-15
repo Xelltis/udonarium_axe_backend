@@ -88,14 +88,18 @@ const assetClaimsOf = (c: Context<AppEnv>, roomKey: string): Claims<'asset'> | n
 /** 一覧で読む R2 のページの数の上限。1ページは 1000 件 */
 const MAX_LIST_PAGES = 10;
 
-/** PUT に付いてきた名前。読めなければ空、長ければ切る */
+/** PUT に付いてきた名前。読めなければ空、長ければ切る。2つで1文字のものを半分で切らない */
 const assetNameOf = (c: Context<AppEnv>): string => {
   const header = c.req.header(ASSET_NAME_HEADER) ?? '';
+  let name: string;
   try {
-    return decodeURIComponent(header).slice(0, MAX_ASSET_NAME_LENGTH);
+    name = decodeURIComponent(header);
   } catch {
     return '';
   }
+  if (name.length <= MAX_ASSET_NAME_LENGTH) return name;
+  name = name.slice(0, MAX_ASSET_NAME_LENGTH);
+  return /[\uD800-\uDBFF]$/.test(name) ? name.slice(0, -1) : name;
 };
 
 /**

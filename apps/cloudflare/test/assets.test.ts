@@ -423,6 +423,20 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     expect(res.headers.get('Content-Security-Policy')).toBeNull();
   });
 
+  it('names what it hands back by the name it was put up under, and lets the page read it', async () => {
+    const named = await freshFile(PNG_HEAD, 300);
+    const unnamed = await freshFile(PNG_HEAD, 310);
+    await put(named.id, named.file, { 'X-Asset-Name': encodeURIComponent('ドラゴン.png') });
+    await put(unnamed.id, unnamed.file);
+
+    for (const method of ['GET', 'HEAD']) {
+      const res = await call(named.id, { method });
+      expect(decodeURIComponent(res.headers.get('X-Asset-Name') ?? '')).toBe('ドラゴン.png');
+      expect(res.headers.get('Access-Control-Expose-Headers')).toContain('X-Asset-Name');
+      expect((await call(unnamed.id, { method })).headers.get('X-Asset-Name')).toBeNull();
+    }
+  });
+
   it('lets the browser keep a copy, but no cache it shares with others', async () => {
     const { file, id } = await freshFile();
     await put(id, file);
@@ -706,6 +720,17 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
     });
     expect(byId.get(garbled.id)?.name).toBe('');
     expect(byId.get(long.id)?.name).toBe('x'.repeat(255));
+  });
+
+  it('cuts a long name before a character the cut would halve', async () => {
+    const halved = await freshFile(PNG_HEAD, 170);
+    await put(halved.id, halved.file, {
+      'X-Asset-Name': encodeURIComponent(`${'x'.repeat(254)}🐉🐉`),
+    });
+
+    const { assets } = await (await list()).json<{ assets: { id: string; name: string }[] }>();
+
+    expect(assets.find((asset) => asset.id === halved.id)?.name).toBe('x'.repeat(254));
   });
 
   it('asks for the room’s token, and turns away a room key that cannot be one', async () => {
