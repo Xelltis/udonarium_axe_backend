@@ -661,6 +661,105 @@ describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
   });
 });
 
+describe('GET /v1/rooms/:roomKey/assets', () => {
+  const list = (headers: Record<string, string> = {}, roomKey = ROOM_KEY) =>
+    exports.default.fetch(
+      new Request(`https://backend.example/v1/rooms/${roomKey}/assets`, {
+        headers: {
+          Origin: ORIGIN,
+          'CF-Connecting-IP': freshIp(),
+          Authorization: `Bearer ${assetTokenFor('guest', roomKey)}`,
+          ...headers,
+        },
+      }),
+    );
+
+  it('lists what is in the room, with the names they were put up under', async () => {
+    const named = await freshFile(PNG_HEAD, 100);
+    const unnamed = await freshFile(OGG_HEAD, 120);
+    const garbled = await freshFile(PNG_HEAD, 140);
+    const long = await freshFile(PNG_HEAD, 160);
+    await put(named.id, named.file, { 'X-Asset-Name': encodeURIComponent('ドラゴン.png') });
+    await put(unnamed.id, unnamed.file);
+    await put(garbled.id, garbled.file, { 'X-Asset-Name': '%E3%81' });
+    await put(long.id, long.file, { 'X-Asset-Name': 'x'.repeat(300) });
+
+    const res = await list();
+    const { assets } = await res.json<{
+      assets: { id: string; type: string; size: number; name: string }[];
+    }>();
+    const byId = new Map(assets.map((asset) => [asset.id, asset]));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(byId.get(named.id)).toEqual({
+      id: named.id,
+      type: 'image/png',
+      size: 100,
+      name: 'ドラゴン.png',
+    });
+    expect(byId.get(unnamed.id)).toEqual({
+      id: unnamed.id,
+      type: 'audio/ogg',
+      size: 120,
+      name: '',
+    });
+    expect(byId.get(garbled.id)?.name).toBe('');
+    expect(byId.get(long.id)?.name).toBe('x'.repeat(255));
+  });
+
+  it('asks for the room’s token, and turns away a room key that cannot be one', async () => {
+    expect((await list({ Authorization: '' })).status).toBe(401);
+    expect(
+      (await list({ Authorization: `Bearer ${assetTokenFor('pl', OTHER_ROOM_KEY)}` })).status,
+    ).toBe(401);
+    expect((await list({}, 'nope')).status).toBe(400);
+  });
+
+  it('stops one address once it has listed its share', async () => {
+    const ip = freshIp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) statuses.push((await list({ 'CF-Connecting-IP': ip })).status);
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+  });
+
+  it('reads the bucket page by page, skipping what is not an asset, up to a bound', async () => {
+    const object = (key: string) => ({
+      key,
+      size: 1,
+      httpMetadata: {},
+      customMetadata: undefined,
+    });
+    const prefix = `rooms/${ROOM_KEY}/`;
+    const pages = vi.fn((options: { cursor?: string }) =>
+      Promise.resolve({
+        objects: [
+          object(`${prefix}${String(Number(options.cursor ?? 0)).padStart(64, '0')}`),
+          object(`${prefix}notes.txt`),
+        ],
+        truncated: true,
+        cursor: String(Number(options.cursor ?? 0) + 1),
+      }),
+    );
+    const res = await app.fetch(
+      new Request(`https://backend.example/v1/rooms/${ROOM_KEY}/assets`, {
+        headers: {
+          Origin: ORIGIN,
+          'CF-Connecting-IP': freshIp(),
+          Authorization: `Bearer ${assetTokenFor('pl')}`,
+        },
+      }),
+      { ...env, ASSETS: { list: pages } } as unknown as Env,
+      createExecutionContext(),
+    );
+    const { assets } = await res.json<{ assets: { type: string }[] }>();
+
+    expect(pages).toHaveBeenCalledTimes(10);
+    expect(assets).toHaveLength(10);
+    expect(assets[0].type).toBe('application/octet-stream');
+  });
+});
+
 describe('OPTIONS /v1/rooms/:roomKey/assets/:id', () => {
   const preflight = (origin: string, method: string, requestHeaders?: string) => {
     const headers: Record<string, string> = {
@@ -676,7 +775,9 @@ describe('OPTIONS /v1/rooms/:roomKey/assets/:id', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain(method);
-    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe(
+      'Content-Type,Authorization,X-Asset-Name',
+    );
     expect(res.headers.get('Vary')).toContain('Origin');
   });
 

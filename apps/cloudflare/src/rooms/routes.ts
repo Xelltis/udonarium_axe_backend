@@ -3,7 +3,7 @@ import { maxLength, minLength, nullish, object, pipe, safeParse, string } from '
 
 import { MAX_PASSWORD_LENGTH, MAX_ROOM_NAME_LENGTH } from '../../contracts/protocol';
 import type { CreateRoomResponse, RoomListResponse } from '../../contracts/protocol';
-import { getRoomAsset, putRoomAsset } from '../assets/routes';
+import { getRoomAsset, listRoomAssets, putRoomAsset } from '../assets/routes';
 import { bearerOf } from '../auth/session';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
@@ -88,6 +88,9 @@ roomRoutes.delete('/:roomKey', async (c) => {
 });
 
 /** 部屋のアセット。部屋の鍵の形が違えば、部屋のサーバーに尋ねるまでもない */
+roomRoutes.get('/:roomKey/assets', (c) =>
+  ROOM_KEY.test(c.req.param('roomKey')) ? listRoomAssets(c) : fail(c, 400, 'invalid-id'),
+);
 roomRoutes.get('/:roomKey/assets/:id', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? getRoomAsset(c) : fail(c, 400, 'invalid-id'),
 );

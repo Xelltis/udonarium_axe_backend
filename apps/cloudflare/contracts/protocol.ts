@@ -281,6 +281,33 @@ export interface RoomListResponse {
   rooms: RoomSummary[];
 }
 
+/**
+ * PUT /v1/rooms/:roomKey/assets/:sha256 に付けてよいヘッダー。アセットの名前（ファイル名）を
+ * encodeURIComponent したもの。GET /v1/rooms/:roomKey/assets の一覧で返る
+ */
+export const ASSET_NAME_HEADER = 'X-Asset-Name';
+/** アセットの名前の最長（文字数）。長いものは切る */
+export const MAX_ASSET_NAME_LENGTH = 255;
+
+/** 部屋に置いてあるアセット1つ */
+export interface RoomAsset {
+  /** 中身の SHA-256（小文字の16進） */
+  id: string;
+  /** 中身の形式（image/png、audio/ogg など） */
+  type: string;
+  size: number;
+  /** 置いた人が付けた名前。無ければ空 */
+  name: string;
+}
+
+/**
+ * GET /v1/rooms/:roomKey/assets の返事。その部屋に置いてあるアセットすべて。部屋のアセットのトークンで尋ねる。
+ * 部屋に入ったとき、だれのカタログにも無いが部屋に残っている画像や音声を取りに行くのに使う
+ */
+export interface RoomAssetListResponse {
+  assets: RoomAsset[];
+}
+
 /** GET /v1/auth/config。ログインに使える提供元。空なら、このサーバーではログインも部屋も使えない */
 export interface AuthConfigResponse {
   providers: 'discord'[];

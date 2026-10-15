@@ -1,6 +1,8 @@
 import { cors } from 'hono/cors';
 import type { MiddlewareHandler } from 'hono';
 
+import { ASSET_NAME_HEADER } from '../../contracts/protocol';
+
 import type { AppEnv } from './context';
 import { fail } from './errors';
 import { isAllowedOrigin } from './origin';
@@ -11,7 +13,7 @@ const MAX_AGE_SECONDS = 86_400;
 const apiHeaders = cors({
   origin: (origin) => origin,
   allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', ASSET_NAME_HEADER],
   maxAge: MAX_AGE_SECONDS,
 });
 

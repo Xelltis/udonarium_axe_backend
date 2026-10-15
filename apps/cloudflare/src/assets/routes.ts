@@ -1,12 +1,15 @@
 import type { Context } from 'hono';
 
+import { ASSET_NAME_HEADER, MAX_ASSET_NAME_LENGTH } from '../../contracts/protocol';
+import type { RoomAsset, RoomAssetListResponse } from '../../contracts/protocol';
+
 import { readToken } from '../auth/tokens';
 import type { Claims } from '../auth/tokens';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';
 import { LOBBY_NAME } from '../rooms/lobby';
-import { ASSET_ID, blockedKeyOf, roomAssetKey } from './keys';
+import { ASSET_ID, blockedKeyOf, roomAssetKey, roomAssetPrefix } from './keys';
 import { objectHeaders, privately, setContentRange } from './response';
 import { SNIFF_BYTES, sniff } from './sniff';
 import type { AssetKind } from './sniff';
@@ -80,6 +83,19 @@ const assetClaimsOf = (c: Context<AppEnv>, roomKey: string): Claims<'asset'> | n
   if (!login || !header.startsWith('Bearer ')) return null;
   const claims = readToken(header.slice('Bearer '.length), 'asset', login.sessionSecret);
   return claims?.room === roomKey ? claims : null;
+};
+
+/** 一覧で読む R2 のページの数の上限。1ページは 1000 件 */
+const MAX_LIST_PAGES = 10;
+
+/** PUT に付いてきた名前。読めなければ空、長ければ切る */
+const assetNameOf = (c: Context<AppEnv>): string => {
+  const header = c.req.header(ASSET_NAME_HEADER) ?? '';
+  try {
+    return decodeURIComponent(header).slice(0, MAX_ASSET_NAME_LENGTH);
+  } catch {
+    return '';
+  }
 };
 
 /**
@@ -183,8 +199,13 @@ export const putRoomAsset = async (c: Context<AppEnv>) => {
 
   // 名前と中身が合わないものは置かない。照合は R2 が書き込みながら行う
   const body = rejoin(head, reader).pipeThrough(new FixedLengthStream(length));
+  const name = assetNameOf(c);
   try {
-    await c.env.ASSETS.put(key, body, { sha256: id, httpMetadata: { contentType: sniffed.type } });
+    await c.env.ASSETS.put(key, body, {
+      sha256: id,
+      httpMetadata: { contentType: sniffed.type },
+      ...(name ? { customMetadata: { name } } : {}),
+    });
   } catch (err) {
     if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) {
       return fail(c, 400, 'hash-mismatch');
@@ -198,4 +219,40 @@ export const putRoomAsset = async (c: Context<AppEnv>) => {
     );
   }
   return c.json({ id, status: 'stored' }, 201);
+};
+
+/**
+ * GET /v1/rooms/:roomKey/assets。その部屋に置いてあるアセットの一覧を、この部屋のトークンを持つ人に返す。
+ * 部屋に入った人が、だれのカタログにも無いが部屋に残っているものを取りに行けるように
+ */
+export const listRoomAssets = async (c: Context<AppEnv>) => {
+  const roomKey = c.req.param('roomKey') as string;
+  if (!assetClaimsOf(c, roomKey)) return fail(c, 401, 'asset-token-required');
+  if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
+    return fail(c, 429, 'rate-limited');
+  }
+  const assets: RoomAsset[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const listed = await c.env.ASSETS.list({
+      prefix: roomAssetPrefix(roomKey),
+      include: ['httpMetadata', 'customMetadata'],
+      ...(cursor ? { cursor } : {}),
+    });
+    for (const object of listed.objects) {
+      const id = object.key.slice(roomAssetPrefix(roomKey).length);
+      if (!ASSET_ID.test(id)) continue;
+      assets.push({
+        id,
+        type: object.httpMetadata?.contentType ?? 'application/octet-stream',
+        size: object.size,
+        name: object.customMetadata?.name ?? '',
+      });
+    }
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  const response = c.json<RoomAssetListResponse>({ assets });
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
 };
