@@ -651,12 +651,13 @@ describe('roles and what they see', () => {
     t.alice.emit([update(die)]);
     await t.bob.events();
 
-    t.bob.emit([update({ ...die, majorVersion: 1 })]);
+    // 伏せた形（3.25）より新しく、本物（3.5）より古い版で書いてくる
+    t.bob.emit([update({ ...die, minorVersion: 0.4 })]);
 
-    // 伏せた形には、本物より小さい版が付く
+    // 伏せた形には本物より小さい版が付き、送り主の版より低いので、版にかかわらず置き換えさせる
     expect(await t.bob.events()).toEqual([
       {
-        eventName: SyncEvent.UPDATE,
+        eventName: AuthorityEvent.AUTHORITATIVE,
         data: {
           ...die,
           minorVersion: 0.25,

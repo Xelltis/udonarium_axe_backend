@@ -1003,7 +1003,12 @@ export class RoomDurableObject extends DurableObject<Env> {
       owner === null && this.store.isDeleted(identifier),
     );
     if (verdict === 'stale') {
-      reply(SyncEvent.UPDATE, this.viewOf(identifier, seat));
+      // 伏せた形には本物より小さい版を付けるので、送り主の版より低いことがある。そのときは UPDATE では
+      // 捨てられ、負けた変更がその人の画面にだけ残るので、版にかかわらず置き換えさせる
+      reply(
+        seen === 'masked' ? AuthorityEvent.AUTHORITATIVE : SyncEvent.UPDATE,
+        this.viewOf(identifier, seat),
+      );
     } else if (verdict === 'deleted') {
       reply(SyncEvent.DELETE, { aliasName, identifier });
     } else if (verdict === 'accept') {
