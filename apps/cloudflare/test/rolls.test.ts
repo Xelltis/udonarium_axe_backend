@@ -656,6 +656,51 @@ describe('a rolled result', () => {
     await clients.carol.expectQuiet();
   });
 
+  it('lets those lines go once the while it keeps them has passed, and keeps the lines of two tabs at once', async () => {
+    const clients = await room();
+    await rolledIn(clients);
+    clients.alice.emit([rollRequest('in-players', '1d1', {}, 'players')]);
+    await clients.alice.events();
+    await clients.bob.events();
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: contextOf(
+          'plain',
+          1,
+          0.5,
+          { parentIdentifier: 'main', value: 'hi', attributes: {} },
+          'chat',
+        ),
+      },
+    ]);
+    await clients.bob.events();
+
+    // 2つのタブを続けて消そうとする。どちらも中の行ごと消させない
+    clients.alice.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'players' } },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
+    ]);
+    await clients.alice.events();
+    await clients.bob.expectQuiet();
+
+    await runInDurableObject(stubOf(clients.roomKey), (instance: RoomDurableObject) => {
+      const room = instance as unknown as { keptFromDeleting: Map<string, { until: number }> };
+      for (const kept of room.keptFromDeleting.values()) kept.until = 0;
+    });
+    clients.alice.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
+    ]);
+
+    expect(
+      (await clients.bob.events()).map((event) => [
+        event.eventName,
+        (event.data as Message).identifier,
+      ]),
+    ).toEqual([[SyncEvent.DELETE, 'plain']]);
+  });
+
   it('is rolled once for a request sent twice before either is rolled', async () => {
     const clients = await room();
 

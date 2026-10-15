@@ -1375,8 +1375,8 @@ export class RoomDurableObject extends DurableObject<Env> {
         ([field]) => field !== 'parentIdentifier' && !ROLLED_PLACE.includes(field),
       ),
     );
-    for (const field of ROLLED_PLACE)
-      if (place[field] !== undefined) syncData[field] = place[field];
+    // 振った結果には、並びの位置をいつも置いてある
+    for (const field of ROLLED_PLACE) syncData[field] = place[field];
     // 振った結果は、タブの一覧の直下のタブにしか置かない
     syncData.parentIdentifier = stored.syncData.parentIdentifier;
     return {
@@ -1520,10 +1520,9 @@ export class RoomDurableObject extends DurableObject<Env> {
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)
       return this.refuseWrite(identifier, seat, reply);
     const kept = this.keptFromDeleting.get(seat.peerId);
-    if (kept && kept.until > Date.now() && kept.ids.has(identifier)) {
-      if (delivered(this.kindOf(identifier, seat))) this.refuseWrite(identifier, seat, reply);
-      return;
-    }
+    // 見えないものは上で外れ、残るものは親のそろった子孫なので、送り主に届いている
+    if (kept && kept.until > Date.now() && kept.ids.has(identifier))
+      return this.refuseWrite(identifier, seat, reply);
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
     // サーバーが振った結果は、GM のほかには消させない。タブごと消すのも同じ。送り主の手元からは消えて
     // いるので、見えるものを全部返す。続けて送られてくる中の行も、しばらく消させない
