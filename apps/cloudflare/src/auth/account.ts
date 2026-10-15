@@ -57,6 +57,18 @@ const sameText = (a: string, b: string): boolean => {
  * 人の情報、ログインから戻ったときの使い捨てのコード、リフレッシュトークンを置く。
  * どれも秘密はハッシュにして置き、そのままは置かない。D1 を使わないので、デプロイで作るものが増えない。
  */
+
+/** 書き込む前に作っておくリフレッシュトークンと、そのハッシュ（SHA-256 の base64url） */
+interface IssuedToken {
+  token: Secret;
+  hash: string;
+}
+
+const newRefreshToken = async (): Promise<IssuedToken> => {
+  const token = { id: randomText(12), secret: randomText(32) };
+  return { token, hash: await sha256(token.secret) };
+};
+
 export class AccountDurableObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -138,26 +150,29 @@ export class AccountDurableObject extends DurableObject<Env> {
       row.expires_at > nowSeconds() &&
       sameText(await sha256(code.secret), row.hash) &&
       sameText(await sha256(verifier), row.challenge);
-    return valid ? this.startSession(crypto.randomUUID()) : null;
+    return valid ? this.startSession(crypto.randomUUID(), await newRefreshToken()) : null;
   }
 
   /**
    * リフレッシュトークンを使い、同じ系統の新しいものに替える。
    * もう使ったものがまた来たら、盗まれたとみなして、その系統をすべて無効にする。
    *
-   * ハッシュは先に作り、行を探してから使ったことにするまでのあいだには await を挟まない。挟むと、
-   * 同じトークンで同時に来た2つが、どちらもまだ使っていないものとして通ってしまう
+   * ハッシュと替えたあとのトークンは先に作り、行を探してから新しいトークンを書くまでのあいだには
+   * await を挟まない。挟むと、同じトークンで同時に来た2つが、どちらもまだ使っていないものとして通るか、
+   * もう1つが系統を無効にしたあとに書いた新しいトークンが生き残ってしまう
    */
   async refresh(token: Secret): Promise<Session | null> {
     const sql = this.ctx.storage.sql;
-    const row = this.findRefreshToken(token, await sha256(token.secret));
+    const hash = await sha256(token.secret);
+    const next = await newRefreshToken();
+    const row = this.findRefreshToken(token, hash);
     if (!row) return null;
     if (row.used === 1) {
       sql.exec('DELETE FROM refresh_tokens WHERE family = ?', row.family);
       return null;
     }
     sql.exec('UPDATE refresh_tokens SET used = 1 WHERE id = ?', token.id);
-    return this.startSession(row.family);
+    return this.startSession(row.family, next);
   }
 
   /** ログアウトした。そのリフレッシュトークンの系統をすべて無効にする */
@@ -197,23 +212,25 @@ export class AccountDurableObject extends DurableObject<Env> {
     return sameText(hash, row.hash) ? row : null;
   }
 
-  /** 新しいリフレッシュトークンを作る。コードやトークンがあるなら、人の情報も必ずある */
-  private async startSession(family: string): Promise<Session> {
+  /**
+   * 作っておいたリフレッシュトークンを系統に加える。コードやトークンがあるなら、人の情報も必ずある。
+   * 書き込みのあいだに await を挟まない
+   */
+  private startSession(family: string, next: IssuedToken): Session {
     const profile = this.ctx.storage.sql
       .exec<ProfileRow>('SELECT account_key, user_id, name, avatar_url FROM profile')
       .one();
-    const token = { id: randomText(12), secret: randomText(32) };
     this.ctx.storage.sql.exec(
       'INSERT INTO refresh_tokens (id, family, hash, expires_at) VALUES (?, ?, ?, ?)',
-      token.id,
+      next.token.id,
       family,
-      await sha256(token.secret),
+      next.hash,
       nowSeconds() + REFRESH_TOKEN_SECONDS,
     );
     return {
       account: { userId: profile.user_id, name: profile.name, avatarUrl: profile.avatar_url },
       accountKey: profile.account_key,
-      refreshToken: token,
+      refreshToken: next.token,
     };
   }
 

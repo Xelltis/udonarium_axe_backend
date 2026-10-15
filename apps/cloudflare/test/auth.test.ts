@@ -280,6 +280,24 @@ describe('POST /v1/auth/token', () => {
     expect((await refresh(next.refreshToken)).status).toBe(400);
   });
 
+  it('drops the whole line even when hashing lets the second refresh in between', async () => {
+    const tokens = await logIn({ id: '16', username: 'ren' });
+    // 計算のたびにほかのリクエストへ順番を譲る。workerd の digest が譲らなくても、すき間を作る
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return digest(algorithm, data);
+    });
+
+    const answers = await Promise.all([refresh(tokens.refreshToken), refresh(tokens.refreshToken)]);
+    vi.restoreAllMocks();
+    const winner = answers.find((res) => res.status === 200);
+
+    expect(answers.map((res) => res.status).sort()).toEqual([200, 400]);
+    const next = await (winner as Response).json<TokenResponse>();
+    expect((await refresh(next.refreshToken)).status).toBe(400);
+  });
+
   it('turns away a refresh token whose secret is wrong', async () => {
     const tokens = await logIn({ id: '14', username: 'nao' });
     expect((await refresh(`${tokens.refreshToken.slice(0, -2)}xx`)).status).toBe(400);
