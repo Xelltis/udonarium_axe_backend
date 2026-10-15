@@ -174,10 +174,15 @@ export class AccountDurableObject extends DurableObject<Env> {
     return row ? { userId: row.user_id, name: row.name, avatarUrl: row.avatar_url } : null;
   }
 
-  /** アカウントを消す。人の情報もトークンもすべて消える */
-  async erase(): Promise<void> {
+  /**
+   * アカウントを消す。人の情報もトークンもすべて消える。userId は消すように頼んだトークンの人で、
+   * いまのアカウントと違えば（消したあと同じ人がまたログインして作り直したもの）消さずに false
+   */
+  async erase(userId: string): Promise<boolean> {
+    if (this.account()?.userId !== userId) return false;
     await this.ctx.storage.deleteAll();
     this.migrate();
+    return true;
   }
 
   /** hash は token.secret の SHA-256（base64url） */

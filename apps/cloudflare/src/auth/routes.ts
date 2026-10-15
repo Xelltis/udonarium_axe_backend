@@ -159,8 +159,9 @@ accountRoutes.get(
   withLogin(async (c, login) => {
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
+    // 消したあと同じ人が作り直したアカウントは、前のアカウントのトークンでは見せない
     const account = await accountOf(c.env, claims.sub).account();
-    return account ? c.json(account) : fail(c, 404, 'not-found');
+    return account?.userId === claims.uid ? c.json(account) : fail(c, 404, 'not-found');
   }),
 );
 
@@ -170,7 +171,8 @@ accountRoutes.delete(
   withLogin(async (c, login) => {
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
-    await accountOf(c.env, claims.sub).erase();
+    // 前のアカウントのトークンで、作り直したアカウントを消させない
+    if (!(await accountOf(c.env, claims.sub).erase(claims.uid))) return fail(c, 404, 'not-found');
     return c.body(null, 204);
   }),
 );

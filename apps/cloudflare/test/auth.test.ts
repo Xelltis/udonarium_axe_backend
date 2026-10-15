@@ -402,6 +402,20 @@ describe('/v1/account', () => {
     expect((await refresh(tokens.refreshToken)).status).toBe(400);
   });
 
+  it('neither shows nor deletes an account made again, for a token of the one deleted', async () => {
+    const before = await logIn({ id: '16', username: 'rin' });
+    await callApi('/v1/account', { method: 'DELETE', token: before.accessToken });
+    const again = await logIn({ id: '16', username: 'rin' });
+
+    const seen = await callApi('/v1/account', { token: before.accessToken });
+    const removal = await callApi('/v1/account', { method: 'DELETE', token: before.accessToken });
+
+    expect(again.account.userId).not.toBe(before.account.userId);
+    expect(seen.status).toBe(404);
+    expect(removal.status).toBe(404);
+    expect((await callApi('/v1/account', { token: again.accessToken })).status).toBe(200);
+  });
+
   it('asks for login without a token, or with one that has run out', async () => {
     const none = await callApi('/v1/account');
     const expired = await callApi('/v1/account', { token: accessTokenFor('someone', -1) });
