@@ -439,11 +439,47 @@ describe('the room list', () => {
       expect(rowOf(anybody, roomKey)).toBeUndefined();
       expect(anybody[0].roomKey).toBe('newer-999');
       expect(rowOf(mine, roomKey)?.deletable).toBe(true);
+      // 一覧に載らなくても、鍵でなら引ける
+      const found = await exports.default.fetch(
+        new Request(`${ROOMS}/${roomKey}`, {
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() },
+        }),
+      );
+      expect(found.status).toBe(200);
+      expect((await found.json<{ room: RoomSummary }>()).room).toMatchObject({
+        roomKey,
+        name: expect.any(String),
+      });
     } finally {
       await runInDurableObject(lobby, (_instance, state) => {
         state.storage.sql.exec("DELETE FROM rooms WHERE room_key LIKE 'newer-%'");
       });
     }
+  });
+
+  it('finds by its key a room the GM may delete, marked so, and nothing for a key it lacks or cannot be', async () => {
+    const roomKey = await createRoom({}, 'finder-gm');
+    const find = (key: string, userId?: string) =>
+      exports.default.fetch(
+        new Request(`${ROOMS}/${key}`, {
+          headers: {
+            Origin: ORIGIN,
+            'CF-Connecting-IP': freshIp(),
+            ...(userId ? { Authorization: `Bearer ${accessTokenFor(userId)}` } : {}),
+          },
+        }),
+      );
+
+    expect(
+      (await (await find(roomKey, 'user-finder-gm')).json<{ room: RoomSummary }>()).room.deletable,
+    ).toBe(true);
+    expect((await (await find(roomKey)).json<{ room: RoomSummary }>()).room).not.toHaveProperty(
+      'deletable',
+    );
+    const missing = await find('0'.repeat(32));
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: 'room-not-found' });
+    expect((await find('not-a-key')).status).toBe(400);
   });
 
   it('stops one address that asks for the list too often', async () => {

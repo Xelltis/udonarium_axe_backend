@@ -8,6 +8,22 @@ export const LOBBY_NAME = 'lobby';
 /** 一覧で返す部屋の数の上限。超えたら新しいものから返す */
 const MAX_LISTED_ROOMS = 1000;
 
+/** 一覧と鍵で引くときの列。最初の ? は、GM かを確かめるユーザー ID */
+const SUMMARY_COLUMNS = `SELECT room_key, room_id, name, has_password, members,
+       EXISTS (SELECT 1 FROM game_masters
+               WHERE game_masters.room_key = rooms.room_key AND user_id = ?) AS game_master
+     FROM rooms`;
+
+/** 一覧の1行を、部屋の要約にする */
+const summaryOf = (row: RoomRow): RoomSummary => ({
+  roomKey: row.room_key,
+  roomId: row.room_id,
+  name: row.name,
+  hasPassword: row.has_password === 1,
+  members: row.members,
+  ...(row.game_master === 1 ? { deletable: true } : {}),
+});
+
 /** 1つの文で束ねられる値の数。Durable Objects の SQLite は 100 まで */
 const MAX_BINDINGS = 100;
 
@@ -104,14 +120,10 @@ export class LobbyDurableObject extends DurableObject<Env> {
    * その部屋は数に入らなくても必ず入れる（削除できる部屋が一覧から消えないように）
    */
   list(userId?: string): RoomSummary[] {
-    const columns = `SELECT room_key, room_id, name, has_password, members,
-           EXISTS (SELECT 1 FROM game_masters
-                   WHERE game_masters.room_key = rooms.room_key AND user_id = ?) AS game_master
-         FROM rooms`;
     const sql = this.ctx.storage.sql;
     const newest = sql
       .exec<RoomRow>(
-        `${columns} ORDER BY created_at DESC, room_key LIMIT ?`,
+        `${SUMMARY_COLUMNS} ORDER BY created_at DESC, room_key LIMIT ?`,
         userId ?? '',
         MAX_LISTED_ROOMS,
       )
@@ -120,20 +132,24 @@ export class LobbyDurableObject extends DurableObject<Env> {
     const mine = userId
       ? sql
           .exec<RoomRow>(
-            `${columns} WHERE room_key IN (SELECT room_key FROM game_masters WHERE user_id = ?)`,
+            `${SUMMARY_COLUMNS} WHERE room_key IN (SELECT room_key FROM game_masters WHERE user_id = ?)`,
             userId,
             userId,
           )
           .toArray()
           .filter((row) => !listed.has(row.room_key))
       : [];
-    return [...newest, ...mine].map((row) => ({
-      roomKey: row.room_key,
-      roomId: row.room_id,
-      name: row.name,
-      hasPassword: row.has_password === 1,
-      members: row.members,
-      ...(row.game_master === 1 ? { deletable: true } : {}),
-    }));
+    return [...newest, ...mine].map(summaryOf);
+  }
+
+  /**
+   * 鍵で引いた1つの部屋。一覧に載らない古い部屋でも引ける。無ければ null。userId を渡せば、その人が GM
+   * なら deletable を付ける
+   */
+  find(roomKey: string, userId?: string): RoomSummary | null {
+    const [row] = this.ctx.storage.sql
+      .exec<RoomRow>(`${SUMMARY_COLUMNS} WHERE room_key = ?`, userId ?? '', roomKey)
+      .toArray();
+    return row ? summaryOf(row) : null;
   }
 }

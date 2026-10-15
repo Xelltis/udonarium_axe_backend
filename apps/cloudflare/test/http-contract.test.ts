@@ -49,6 +49,14 @@ describe('the HTTP contract', () => {
     );
   });
 
+  it('finds a room by its key as the example says', async () => {
+    const mine = await createRoom({}, 'shape-finder');
+
+    const res = await callApi(`/v1/rooms/${mine}`, { token: accessTokenFor('user-shape-finder') });
+
+    expect(shapeOf(await res.json())).toEqual(shapeOf(http.room));
+  });
+
   it('tells its login, the tokens and the account as the examples say', async () => {
     const config = await callApi('/v1/auth/config');
     const tokens = await logIn({ id: '77', username: 'shape' });

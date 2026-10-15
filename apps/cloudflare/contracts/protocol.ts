@@ -332,6 +332,11 @@ export interface RoomListResponse {
   rooms: RoomSummary[];
 }
 
+/** GET /v1/rooms/:roomKey の答え。一覧に載らない古い部屋も、鍵で引ける */
+export interface RoomResponse {
+  room: RoomSummary;
+}
+
 /**
  * PUT /v1/rooms/:roomKey/assets/:sha256 に付けてよいヘッダー。アセットの名前（ファイル名）を
  * encodeURIComponent したもの。GET /v1/rooms/:roomKey/assets の一覧で返るほか、HEAD と GET の答えにも

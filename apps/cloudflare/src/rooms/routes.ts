@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { maxLength, minLength, nullish, object, pipe, safeParse, string } from 'valibot';
 
 import { MAX_PASSWORD_LENGTH, MAX_ROOM_NAME_LENGTH } from '../../contracts/protocol';
-import type { CreateRoomResponse, RoomListResponse } from '../../contracts/protocol';
+import type { CreateRoomResponse, RoomListResponse, RoomResponse } from '../../contracts/protocol';
 import { getRoomAsset, listRoomAssets, putRoomAsset } from '../assets/routes';
 import { bearerOf } from '../auth/session';
 import type { AppEnv } from '../http/context';
@@ -43,6 +43,23 @@ roomRoutes.get('/', async (c) => {
   const claims = login ? bearerOf(c, login) : null;
   const rooms = await c.env.LOBBY.getByName(LOBBY_NAME).list(claims?.uid);
   return c.json<RoomListResponse>({ rooms });
+});
+
+/**
+ * 鍵で1つの部屋を引く。一覧は新しい順に1000件までなので、それより古い部屋への招待リンクや、つなぎ直しが
+ * 部屋を見つけられるように。数え方は一覧と同じ
+ */
+roomRoutes.get('/:roomKey', async (c) => {
+  const roomKey = c.req.param('roomKey');
+  if (!ROOM_KEY.test(roomKey)) return fail(c, 400, 'invalid-id');
+  if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
+    return fail(c, 429, 'rate-limited');
+  }
+  const login = c.var.config.login;
+  const claims = login ? bearerOf(c, login) : null;
+  const room = await c.env.LOBBY.getByName(LOBBY_NAME).find(roomKey, claims?.uid);
+  if (!room) return fail(c, 404, 'room-not-found');
+  return c.json<RoomResponse>({ room });
 });
 
 /** 部屋を作る。ログインした人だけが作れ、作った人が GM になる。ログインを置いていなければ 503 */
