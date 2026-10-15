@@ -443,8 +443,9 @@ export class RoomDurableObject extends DurableObject<Env> {
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    // PING には自動で答えるので、ここに来るテキストは使わない
-    if (typeof message === 'string') return;
+    // PING には自動で答えるので、ここに来るテキストは使わない。黙って捨てると、数えられないまま
+    // 部屋を起こし続けられるので、断って閉じる
+    if (typeof message === 'string') return this.refuse(ws, 'bad-message');
     this.expireSeats();
     const seat = seatOf(ws);
     if (seat?.closed || this.refused.has(ws)) return;
@@ -499,10 +500,14 @@ export class RoomDurableObject extends DurableObject<Env> {
    * 出てから保持期間が過ぎていれば、部屋を一覧から外し、置いたものをすべて消す
    */
   override async alarm(): Promise<void> {
+    // トークンの切れた席を外す。最後の1人が外れたなら、出ていったときと同じく保持期間の時計が置かれた
+    const seated = this.seats().length;
+    this.expireSeats();
+    if (seated > 0 && this.seats().length === 0) return;
     const room = this.room();
     if (room && this.seats().length > 0) {
       this.dropCursors(this.removeStrayCursors());
-      await this.ctx.storage.setAlarm(Date.now() + OCCUPIED_CHECK_MS);
+      await this.ctx.storage.setAlarm(this.nextCheckAt());
       this.notifyLobby(room.room_key);
       return;
     }
@@ -716,12 +721,23 @@ export class RoomDurableObject extends DurableObject<Env> {
     this.post(ws, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents(seat) });
     // 人がいるあいだは消さずに見回る
     this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');
-    void this.ctx.storage.setAlarm(Date.now() + OCCUPIED_CHECK_MS);
+    void this.ctx.storage.setAlarm(this.nextCheckAt());
     if (previous) return true;
     this.broadcast(ws, { type: 'join', member: memberOf(seat) });
     this.notifyLobby(seat.roomKey);
     this.record('join', seat.role, this.seats().length);
     return true;
+  }
+
+  /**
+   * 次に見回る時刻。ふだんは OCCUPIED_CHECK_MS ごと。ログインした席のトークンがそれより先に切れるなら、
+   * 切れて TOKEN_GRACE_MS を過ぎたころにも見る。だれも何も送らない部屋でも、切れた席を外すため
+   */
+  private nextCheckAt(): number {
+    const expiries = this.seats().flatMap(({ seat }) =>
+      seat.expiresAt === undefined ? [] : [seat.expiresAt + TOKEN_GRACE_MS + 1000],
+    );
+    return Math.min(Date.now() + OCCUPIED_CHECK_MS, ...expiries);
   }
 
   /** 部屋にいない人のカーソルを消す。消した識別子を返す */

@@ -19,11 +19,13 @@ import {
 } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { LOBBY_NAME } from '../src/rooms/lobby';
+import { ACCESS_TOKEN_SECONDS } from '../src/auth/tokens';
 import {
   MAX_FRAMES_PER_WINDOW,
   MAX_SOCKETS,
   OCCUPIED_CHECK_MS,
   RATE_WINDOW_MS,
+  TOKEN_GRACE_MS,
 } from '../src/rooms/room';
 import type { RoomStore } from '../src/rooms/store';
 import { CHUNK_BYTES } from '../src/rooms/store';
@@ -361,15 +363,16 @@ describe('joining a room', () => {
     ]);
   });
 
-  it('answers ping with pong without a frame of its own, and ignores other text', async () => {
+  it('answers ping with pong without a frame of its own, and closes on other text', async () => {
     const roomKey = await createRoom();
     const { client } = await join(roomKey, 'alice');
 
-    client.ws.send('hello?');
     client.ws.send('ping');
-
     expect((await client.nextRaw()).message).toBe('pong');
     await client.expectQuiet();
+
+    client.ws.send('hello?');
+    expect((await client.next('error')).code).toBe('bad-message');
   });
 
   it('tells the time, and ignores a second hello', async () => {
@@ -942,13 +945,32 @@ describe('closing the room', () => {
     );
     const ran = await runDurableObjectAlarm(stubOf(roomKey));
 
-    // 人がいるあいだの時計は見回り
+    // 人がいるあいだの時計は見回り。ログインした席のトークンが先に切れるなら、そのころに見る
     expect(occupied.emptiedAt).toBeNull();
-    expect(occupied.alarm).toBeGreaterThan(Date.now() + OCCUPIED_CHECK_MS - 60_000);
+    expect(occupied.alarm).toBeGreaterThan(Date.now() + ACCESS_TOKEN_SECONDS * 1000 - 60_000);
+    expect(occupied.alarm).toBeLessThan(Date.now() + OCCUPIED_CHECK_MS);
     expect(emptied.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
     expect(ran).toBe(true);
     expect((await listRooms()).some((room) => room.roomKey === roomKey)).toBe(false);
     expect((await upgrade(roomKey)).status).toBe(404);
+  });
+
+  it('lets out a seat whose login ran out though nobody sends anything, and keeps the room', async () => {
+    const roomKey = await createRoom();
+    const { client } = await join(roomKey, 'alice');
+    await runInDurableObject(stubOf(roomKey), (_instance, state) => {
+      for (const ws of state.getWebSockets()) {
+        const seat = ws.deserializeAttachment() as Record<string, unknown>;
+        ws.serializeAttachment({ ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1 });
+      }
+    });
+
+    expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+
+    expect((await client.next('error')).code).toBe('unauthorized');
+    const clock = await clockOf(roomKey);
+    expect(clock.emptiedAt).not.toBeNull();
+    expect(clock.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
   });
 
   it('deletes a room nobody entered', async () => {
@@ -963,7 +985,7 @@ describe('closing the room', () => {
 
   it('keeps a room someone is in, and looks again later', async () => {
     const roomKey = await createRoom();
-    await join(roomKey, 'alice');
+    await join(roomKey, 'alice', { accessToken: null });
     await runInDurableObject(stubOf(roomKey), (_instance, state) =>
       state.storage.setAlarm(Date.now() + 60_000),
     );
