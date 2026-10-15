@@ -3,10 +3,10 @@
 Cloudflare版には、SkyWayを使わずに遊ぶための**部屋のサーバー**が入っています。
 部屋ごとに1つのDurable Objectが、参加者のWebSocketを受けてやりとりを中継し、卓の状態を持ちます。
 
-::: warning Axe側の対応はこれから
-サーバー側はできていますが、Axeはまだ部屋のサーバーにつなげません。
-Axeの対応ができるまでは、これまでどおりSkyWay版で遊んでください。
-進み具合は[今後の計画](/guide/roadmap)にあります。
+::: tip ベータです
+Axe v1.68.0から、部屋のサーバーにつなげます。
+Axeの`assets/config.json`で`transport`を`"server"`にし、`backend.url`をこのWorkerのURLにします（→ [Axe側の設定](/guide/client-config#サーバー版で配信するとき)）。
+実際の卓で使った数はまだ多くありません。
 :::
 
 ## SkyWay版との違い

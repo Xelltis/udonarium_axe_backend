@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Udonarium Axe Backend
   text: Axeを動かすサーバーを、自分の手で
-  tagline: いまはSkyWay版の配信を支えるサーバーを、これからはSkyWayを使わずに遊べるサーバー版を用意します。
+  tagline: SkyWay版の配信を支えるサーバーと、SkyWayを使わずに遊べるサーバー版（ベータ）を用意しています。
   actions:
     - theme: brand
       text: はじめに
