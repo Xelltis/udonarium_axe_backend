@@ -349,15 +349,15 @@ const ROLL_NEUTRAL_ATTRIBUTES: Readonly<Record<string, unknown>> = {
 };
 
 /** 頼まれた結果の attributes から、持ち込ませないものを既定の値にする。もとから無いものは足さない */
-const neutralRollAttributes = (attributes: Record<string, unknown>): Record<string, unknown> => {
-  const kept: Record<string, unknown> = {};
-  for (const [field, value] of Object.entries(attributes)) {
-    if (!(field in ROLL_NEUTRAL_ATTRIBUTES)) kept[field] = value;
-    else if (ROLL_NEUTRAL_ATTRIBUTES[field] !== undefined)
-      kept[field] = ROLL_NEUTRAL_ATTRIBUTES[field];
-  }
-  return kept;
-};
+const neutralRollAttributes = (attributes: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(attributes).flatMap(([field, value]): [string, unknown][] => {
+      // 継承した名前（constructor など）は、持ち込ませない項目に数えない
+      if (!Object.hasOwn(ROLL_NEUTRAL_ATTRIBUTES, field)) return [[field, value]];
+      const neutral = ROLL_NEUTRAL_ATTRIBUTES[field];
+      return neutral === undefined ? [] : [[field, neutral]];
+    }),
+  );
 
 /** 発言の並びの位置。ObjectNode そのものの SyncVar なので、attributes ではなく syncData の直下にある */
 const ROLLED_PLACE = ['majorIndex', 'minorIndex'];
@@ -1439,6 +1439,9 @@ export class RoomDurableObject extends DurableObject<Env> {
           this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
         if (taken) return;
         if (!rolled) return reject(message.identifier, 'not-a-command');
+        // 振っているあいだにタブが消されたり移されたりしていたら、置く先が無い
+        if (!this.isListedTab(String(message.syncData.parentIdentifier ?? '')))
+          return reject(message.identifier, 'invalid');
         // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる。並びの位置は
         // 頼まれたタブの中の端数だけ受け、頼んだ人が足した飾りや印は外す
         const result = withAttributes(

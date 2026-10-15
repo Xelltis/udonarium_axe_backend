@@ -229,6 +229,54 @@ describe('rolling on the server', () => {
     expect((await bob.events())[0].eventName).toBe(AuthorityEvent.ROLL_REQUEST);
   });
 
+  it('takes in a request’s own attributes named like an object’s inherited ones as plain values', async () => {
+    const { alice, bob } = await room();
+    const request = rollRequest('inherited', '1d1');
+    const message = request.data.message;
+
+    alice.emit([
+      {
+        ...request,
+        data: {
+          ...request.data,
+          message: {
+            ...message,
+            syncData: {
+              ...message.syncData,
+              attributes: { ...attributes(message), constructor: 'c', toString: 't' },
+            },
+          },
+        },
+      },
+    ]);
+
+    const [{ data }] = await bob.events();
+    expect(attributes(data)).toMatchObject({ constructor: 'c', toString: 't' });
+  });
+
+  it('places nothing, and says so, when the tab was taken away while the dice rolled', async () => {
+    const { alice, bob } = await room('alice');
+
+    alice.emit([
+      rollRequest('orphaned', '1d1'),
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
+    ]);
+
+    const told: unknown[] = [];
+    for (;;) {
+      const events = await alice.events();
+      const rejected = events.find((event) => event.eventName === AuthorityEvent.ROLL_REJECTED);
+      if (rejected) {
+        told.push(rejected.data);
+        break;
+      }
+    }
+    expect(told).toEqual([{ identifier: 'orphaned', reason: 'invalid' }]);
+    expect((await bob.events()).map((event) => (event.data as Message).identifier)).not.toContain(
+      'orphaned',
+    );
+  });
+
   it('keeps going after a roll that fails', async () => {
     const { roomKey, alice, bob } = await room();
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
