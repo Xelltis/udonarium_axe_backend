@@ -1,4 +1,9 @@
-import { createExecutionContext, env, runInDurableObject } from 'cloudflare:test';
+import {
+  createExecutionContext,
+  env,
+  runDurableObjectAlarm,
+  runInDurableObject,
+} from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -186,6 +191,46 @@ describe('deleting a room', () => {
     expect(await refusalOf(roomKey)).toBe('room-not-found');
     expect(await stubOf(roomKey).canUpload('user-gm')).toBe('room-not-found');
     expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(404);
+  });
+
+  it('keeps a room it could not finish deleting gone, and finishes it on its own', async () => {
+    const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const roomKey = await createRoom({}, 'gm');
+    await join(roomKey, 'gm');
+    let unlisted = false;
+    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
+      const room = instance as unknown as {
+        lobby: () => { remove: (key: string) => Promise<void> };
+      };
+      const lobby = room.lobby.bind(instance);
+      room.lobby = () => ({
+        remove: async (key: string) => {
+          if (!unlisted) {
+            unlisted = true;
+            throw new Error('lobby unreachable');
+          }
+          await lobby().remove(key);
+        },
+      });
+    });
+
+    expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(204);
+
+    expect(failure).toHaveBeenCalledWith(
+      'Room deletion failed, to be tried again:',
+      expect.any(Error),
+    );
+    expect(await refusalOf(roomKey)).toBe('room-not-found');
+    expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(404);
+    expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+    expect(rowOf(await listFor('user-gm'), roomKey)).toBeUndefined();
+    expect(
+      await runInDurableObject(stubOf(roomKey), (_instance, state) =>
+        state.storage.sql
+          .exec("SELECT name FROM sqlite_master WHERE name IN ('room', 'deleting')")
+          .toArray(),
+      ),
+    ).toEqual([]);
   });
 
   it('tells nothing to a socket already counted as gone', async () => {

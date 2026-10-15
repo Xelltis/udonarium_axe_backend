@@ -561,6 +561,9 @@ export class RoomDurableObject extends DurableObject<Env> {
    * 出てから保持期間が過ぎていれば、部屋を一覧から外し、置いたものをすべて消す
    */
   override async alarm(): Promise<void> {
+    // 消しきれなかった部屋を、消しなおす
+    const deleting = this.deletingRoomKey();
+    if (deleting !== null) return this.wipe(deleting);
     // トークンの切れた席を外す。最後の1人が外れたなら、出ていったときと同じく保持期間の時計が置かれた
     const seated = this.seats().length;
     this.expireSeats();
@@ -586,18 +589,41 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   private async wipe(roomKey: string | null): Promise<void> {
     this.wiping = true;
-    if (roomKey) {
-      await this.lobby().remove(roomKey);
-      await deleteRoomAssets(this.env.ASSETS, roomKey).catch((err: unknown) =>
-        console.error('Room asset deletion failed:', err),
-      );
+    try {
+      if (roomKey) {
+        // 消しはじめたことを先に書く。途中で失敗しても、Worker が落ちても、入れる部屋には戻らない
+        const sql = this.ctx.storage.sql;
+        sql.exec('CREATE TABLE IF NOT EXISTS deleting (room_key TEXT NOT NULL)');
+        sql.exec('DELETE FROM deleting');
+        sql.exec('INSERT INTO deleting (room_key) VALUES (?)', roomKey);
+        await this.lobby().remove(roomKey);
+        await deleteRoomAssets(this.env.ASSETS, roomKey).catch((err: unknown) =>
+          console.error('Room asset deletion failed:', err),
+        );
+      }
+      if (this.flushTimer !== null) clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+      this.storeCache = null;
+      await this.ctx.storage.deleteAll();
+      await this.ctx.storage.deleteAlarm();
+    } catch (err) {
+      // 一覧から外せなかったなどで、消しきれなかった。時計で、もう一度消しにくる
+      console.error('Room deletion failed, to be tried again:', err);
+      await this.ctx.storage.setAlarm(Date.now() + WIPE_RETRY_MS);
+    } finally {
+      this.wiping = false;
     }
-    if (this.flushTimer !== null) clearTimeout(this.flushTimer);
-    this.flushTimer = null;
-    this.storeCache = null;
-    await this.ctx.storage.deleteAll();
-    await this.ctx.storage.deleteAlarm();
-    this.wiping = false;
+  }
+
+  /** 消しはじめて、消しきれていない部屋の鍵。無ければ null */
+  private deletingRoomKey(): string | null {
+    const sql = this.ctx.storage.sql;
+    const exists = sql
+      .exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'deleting'")
+      .toArray();
+    if (exists.length === 0) return null;
+    // 消しはじめるときに1行だけ書き、消しおわると表ごと消える
+    return sql.exec<{ room_key: string }>('SELECT room_key FROM deleting').one().room_key;
   }
 
   // ---- 入退室 ----
@@ -1611,10 +1637,14 @@ export class RoomDurableObject extends DurableObject<Env> {
   /** 部屋の行。作られていないか、消えたあとなら null */
   private room(): RoomRow | null {
     const sql = this.ctx.storage.sql;
-    const exists = sql
-      .exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room'")
-      .toArray();
-    if (exists.length === 0) return null;
+    const tables = sql
+      .exec<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'deleting')",
+      )
+      .toArray()
+      .map((table) => table.name);
+    // 消しはじめた部屋は、消しきれていなくても無いものとして扱う
+    if (!tables.includes('room') || tables.includes('deleting')) return null;
     return sql
       .exec<RoomRow>(
         'SELECT room_key, room_id, name, password_salt, password_hash, host, emptied_at FROM room',
