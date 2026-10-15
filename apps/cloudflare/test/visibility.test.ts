@@ -1,7 +1,14 @@
 import { describe as group, expect, it } from 'vitest';
 
 import type { ObjectContext } from '../contracts/protocol';
-import { describe, masked, unmasked, viewFor, viewKind } from '../src/rooms/visibility';
+import {
+  describe,
+  masked,
+  maskedMinor,
+  unmasked,
+  viewFor,
+  viewKind,
+} from '../src/rooms/visibility';
 import type { Lookup, ViewEntry, Viewer } from '../src/rooms/visibility';
 
 const context = (
@@ -312,6 +319,16 @@ group('masking', () => {
     expect(viewFor(die, 'full')).toBe(die);
     expect(viewFor(die, 'hidden')).toBeNull();
     expect(viewFor(die, 'masked')?.syncData.attributes).toEqual({ face: '' });
+  });
+});
+
+group('the version of a masked copy', () => {
+  it('is lower than the real one, so the real one replaces it once it may be seen', () => {
+    const die = context('dice-symbol', 'd', { attributes: { face: '3', owner: 'u-owner' } });
+
+    expect(viewFor(die, 'masked')?.minorVersion).toBe(0.25);
+    expect(maskedMinor(0)).toBeLessThan(0);
+    expect(viewFor(die, 'full')?.minorVersion).toBe(0.5);
   });
 });
 

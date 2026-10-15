@@ -47,7 +47,7 @@ import { attributesOf, withAttributes } from './objects';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
 import type { StoredEntry } from './store';
-import { describe, unmasked, viewFor, viewKind } from './visibility';
+import { describe, maskedMinor, unmasked, viewFor, viewKind } from './visibility';
 import type { Lookup, View, ViewKind, Viewer } from './visibility';
 
 /**
@@ -744,7 +744,9 @@ export class RoomDurableObject extends DurableObject<Env> {
       return this.refuseWrite(identifier, seat, reply);
 
     let owner: string | null = null;
-    let corrected = false;
+    // 伏せた形で持っている人には、受けたあとも伏せた形（伏せた版）を持たせる。見えるようになったときに
+    // 版の違いで取り直せるように
+    let corrected = seen === 'masked';
     if (aliasName === PEER_CURSOR_ALIAS) {
       owner = String(context.syncData.peerId);
       // 出ていった人のカーソルは置かない。クライアントは leave を受けて自分で片付ける
@@ -761,7 +763,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
     if (aliasName === CHAT_MESSAGE_ALIAS) {
       const kept = this.keepRolledFields(context, seat);
-      corrected = kept !== context;
+      corrected ||= kept !== context;
       context = kept;
     }
 
@@ -1131,9 +1133,14 @@ export class RoomDurableObject extends DurableObject<Env> {
    * カタログを送り終えたことがわかるようにする
    */
   private catalogEvents(seat: Seat): EventContext[] {
-    const catalog = this.store
-      .catalog()
-      .filter(({ identifier }) => this.kindOf(identifier, seat) !== 'hidden');
+    const catalog = this.store.catalog().flatMap((item) => {
+      const kind = this.kindOf(item.identifier, seat);
+      if (kind === 'hidden') return [];
+      if (kind === 'full') return [item];
+      // 伏せた形を渡すときと同じ、本物より小さい版を載せる
+      const entry = this.store.entryOf(item.identifier) as StoredEntry;
+      return [{ ...item, version: entry.majorVersion + maskedMinor(entry.minorVersion) }];
+    });
     const events = [fromAuthority(SyncEvent.CATALOG, catalog.slice(0, CATALOG_BATCH))];
     for (let start = CATALOG_BATCH; start < catalog.length; start += CATALOG_BATCH) {
       events.push(fromAuthority(SyncEvent.CATALOG, catalog.slice(start, start + CATALOG_BATCH)));

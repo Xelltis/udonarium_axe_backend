@@ -242,9 +242,12 @@ describe('whispers and secrets', () => {
     expect((masked.data as ObjectContext).syncData.value).toBe('');
     expect((full.data as ObjectContext).syncData.value).toBe('text of s1');
 
-    // 伏せた形を持っている bob が書き戻しても、中身は消えない
+    // 伏せた形を持っている bob が書き戻しても、中身は消えない。bob には伏せた形が返る
     t.bob.emit([update({ ...(masked.data as ObjectContext), majorVersion: 2 })]);
     expect(((await t.gm.events())[0].data as ObjectContext).syncData.value).toBe('text of s1');
+    const [kept] = await t.bob.events();
+    expect(kept.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
+    expect((kept.data as ObjectContext).syncData.value).toBe('');
 
     t.alice.emit([update(line('s1', { from: 'user-alice', tag: 'DiceBot', dicebot: '{}' }, 3))]);
     expect(((await t.bob.events())[0].data as ObjectContext).syncData.value).toBe('text of s1');
@@ -414,6 +417,33 @@ describe('roles and what they see', () => {
     ]);
   });
 
+  it('lists a masked die in the catalog under its masked version, and the real one once it may be seen', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const owner = await join(roomKey, 'alice');
+    const die = (ownerId: string, major: number) =>
+      contextOf('d3', major, 0.5, { attributes: { face: '5', owner: ownerId } }, 'dice-symbol');
+    owner.client.emit([update(die('user-alice', 1))]);
+    await owner.client.expectQuiet();
+
+    const versionFor = async (peerId: string) => {
+      const { client, catalog } = await join(roomKey, peerId);
+      const items = catalog.flatMap(
+        (event) => event.data as { identifier: string; version: number }[],
+      );
+      client.close();
+      return items.find((item) => item.identifier === 'd3')?.version;
+    };
+    const masked = await versionFor('bob');
+    await owner.client.next('join');
+    await owner.client.next('leave');
+    owner.client.emit([update(die('', 2))]);
+    await owner.client.expectQuiet();
+    const opened = await versionFor('bob2');
+
+    expect(masked).toBe(1.25);
+    expect(opened).toBe(2.5);
+  });
+
   it('sends a stale writer the kept version in the form it may see', async () => {
     const t = await table();
     const die = contextOf(
@@ -428,10 +458,15 @@ describe('roles and what they see', () => {
 
     t.bob.emit([update({ ...die, majorVersion: 1 })]);
 
+    // 伏せた形には、本物より小さい版が付く
     expect(await t.bob.events()).toEqual([
       {
         eventName: SyncEvent.UPDATE,
-        data: { ...die, syncData: { attributes: { face: '', owner: 'user-alice' } } },
+        data: {
+          ...die,
+          minorVersion: 0.25,
+          syncData: { attributes: { face: '', owner: 'user-alice' } },
+        },
         sendFrom: AUTHORITY_PEER_ID,
       },
     ]);

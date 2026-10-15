@@ -272,6 +272,17 @@ export const unmasked = (incoming: ObjectContext, stored: ObjectContext): Object
   }
 };
 
-/** その人に見せる形。見せないなら null */
+/**
+ * 伏せた形の版の小数部。本物より小さくしておくと、見えるようになったとき、本物の版の方が新しいと
+ * わかり、カタログの交換で取り直せる（同じ版だと、つなぎ直したあとも伏せたまま残る）
+ */
+export const maskedMinor = (minorVersion: number): number =>
+  minorVersion > 0 ? minorVersion / 2 : -0.5;
+
+/** その人に見せる形。見せないなら null。伏せた形には、本物より小さい版を付ける */
 export const viewFor = (context: ObjectContext, kind: ViewKind): ObjectContext | null =>
-  kind === 'hidden' ? null : kind === 'masked' ? masked(context) : context;
+  kind === 'hidden'
+    ? null
+    : kind === 'masked'
+      ? { ...masked(context), minorVersion: maskedMinor(context.minorVersion) }
+      : context;
