@@ -327,6 +327,47 @@ describe('the room list', () => {
     expect(rooms.some((room) => 'deletable' in room)).toBe(false);
   });
 
+  it('lists the newest rooms first, and always the rooms one may delete', async () => {
+    const roomKey = await createRoom({}, 'old-gm');
+    const lobby = env.LOBBY.getByName('lobby');
+    // 一覧に入りきらないほど、あとから部屋が作られた
+    await runInDurableObject(lobby, (_instance, state) => {
+      for (let i = 0; i < 1000; i++) {
+        state.storage.sql.exec(
+          `INSERT INTO rooms (room_key, room_id, name, has_password, members, created_at)
+           VALUES (?, 'abc', 'newer', 0, 0, ?)`,
+          `newer-${i}`,
+          Date.now() + 1000 + i,
+        );
+      }
+    });
+
+    try {
+      const anybody = await listRooms();
+      const mine = await listFor('user-old-gm');
+      expect(anybody).toHaveLength(1000);
+      expect(rowOf(anybody, roomKey)).toBeUndefined();
+      expect(anybody[0].roomKey).toBe('newer-999');
+      expect(rowOf(mine, roomKey)?.deletable).toBe(true);
+    } finally {
+      await runInDurableObject(lobby, (_instance, state) => {
+        state.storage.sql.exec("DELETE FROM rooms WHERE room_key LIKE 'newer-%'");
+      });
+    }
+  });
+
+  it('stops one address that asks for the list too often', async () => {
+    const ip = freshIp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await exports.default.fetch(
+        new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }),
+      );
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+  });
+
   it('lists the rooms of a Worker without login', async () => {
     const res = await app.fetch(
       new Request(ROOMS, { headers: { Origin: ORIGIN } }),

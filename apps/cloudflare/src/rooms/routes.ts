@@ -31,8 +31,14 @@ const randomRoomId = (): string =>
 
 export const roomRoutes = new Hono<AppEnv>();
 
-/** 部屋の一覧。アクセストークンが付いていれば、その人が GM の部屋に deletable を付ける */
+/**
+ * 部屋の一覧。アクセストークンが付いていれば、その人が GM の部屋に deletable を付ける。
+ * 呼ぶたびに1つしかない一覧の Durable Object を起こすので、送り元ごとに数を絞る
+ */
 roomRoutes.get('/', async (c) => {
+  if (!(await withinLimits(c, c.env.READ_LIMITER, [networkOfRequest(c)]))) {
+    return fail(c, 429, 'rate-limited');
+  }
   const login = c.var.config.login;
   const claims = login ? bearerOf(c, login) : null;
   const rooms = await c.env.LOBBY.getByName(LOBBY_NAME).list(claims?.uid);

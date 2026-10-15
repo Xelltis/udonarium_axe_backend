@@ -5,7 +5,7 @@ import type { RoomSummary } from '../../contracts/protocol';
 /** 部屋の一覧を持つ Durable Object の名前。Worker ごとに1つだけ置く */
 export const LOBBY_NAME = 'lobby';
 
-/** 一覧で返す部屋の数の上限 */
+/** 一覧で返す部屋の数の上限。超えたら新しいものから返す */
 const MAX_LISTED_ROOMS = 1000;
 
 /** 1つの文で束ねられる値の数。Durable Objects の SQLite は 100 まで */
@@ -99,25 +99,41 @@ export class LobbyDurableObject extends DurableObject<Env> {
     return found;
   }
 
-  /** 作られた順。userId を渡せば、その人が GM の部屋に deletable を付ける */
+  /**
+   * 新しい順に MAX_LISTED_ROOMS まで。userId を渡せば、その人が GM の部屋に deletable を付け、
+   * その部屋は数に入らなくても必ず入れる（削除できる部屋が一覧から消えないように）
+   */
   list(userId?: string): RoomSummary[] {
-    return this.ctx.storage.sql
-      .exec<RoomRow>(
-        `SELECT room_key, room_id, name, has_password, members,
+    const columns = `SELECT room_key, room_id, name, has_password, members,
            EXISTS (SELECT 1 FROM game_masters
                    WHERE game_masters.room_key = rooms.room_key AND user_id = ?) AS game_master
-         FROM rooms ORDER BY created_at, room_key LIMIT ?`,
+         FROM rooms`;
+    const sql = this.ctx.storage.sql;
+    const newest = sql
+      .exec<RoomRow>(
+        `${columns} ORDER BY created_at DESC, room_key LIMIT ?`,
         userId ?? '',
         MAX_LISTED_ROOMS,
       )
-      .toArray()
-      .map((row) => ({
-        roomKey: row.room_key,
-        roomId: row.room_id,
-        name: row.name,
-        hasPassword: row.has_password === 1,
-        members: row.members,
-        ...(row.game_master === 1 ? { deletable: true } : {}),
-      }));
+      .toArray();
+    const listed = new Set(newest.map((row) => row.room_key));
+    const mine = userId
+      ? sql
+          .exec<RoomRow>(
+            `${columns} WHERE room_key IN (SELECT room_key FROM game_masters WHERE user_id = ?)`,
+            userId,
+            userId,
+          )
+          .toArray()
+          .filter((row) => !listed.has(row.room_key))
+      : [];
+    return [...newest, ...mine].map((row) => ({
+      roomKey: row.room_key,
+      roomId: row.room_id,
+      name: row.name,
+      hasPassword: row.has_password === 1,
+      members: row.members,
+      ...(row.game_master === 1 ? { deletable: true } : {}),
+    }));
   }
 }
