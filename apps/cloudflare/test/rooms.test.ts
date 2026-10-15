@@ -41,6 +41,7 @@ import {
   postRoom,
   stubOf,
   upgrade,
+  refusalOf,
 } from './room-helpers';
 
 afterEach(() => {
@@ -158,11 +159,14 @@ describe('GET /v1/rooms/:roomKey/ws', () => {
       403,
       'origin-not-allowed',
     ],
-    ['a room that was never opened', '0'.repeat(32), {}, 404, 'room-not-found'],
   ])('turns away %s', async (_name, roomKey, headers, status, error) => {
     const res = await upgrade(roomKey, headers);
     expect(res.status).toBe(status);
     expect(await res.json()).toEqual({ error });
+  });
+
+  it('tells a socket to a room that was never opened that there is no such room', async () => {
+    expect(await refusalOf('0'.repeat(32))).toBe('room-not-found');
   });
 
   it('stops one address once it has connected its share of times', async () => {
@@ -181,10 +185,7 @@ describe('GET /v1/rooms/:roomKey/ws', () => {
     const roomKey = await createRoom();
     for (let i = 0; i < MAX_SOCKETS; i++) await connect(roomKey);
 
-    const res = await upgrade(roomKey);
-
-    expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: 'room-full' });
+    expect(await refusalOf(roomKey)).toBe('room-full');
   });
 });
 
@@ -952,7 +953,7 @@ describe('closing the room', () => {
     expect(emptied.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
     expect(ran).toBe(true);
     expect((await listRooms()).some((room) => room.roomKey === roomKey)).toBe(false);
-    expect((await upgrade(roomKey)).status).toBe(404);
+    expect(await refusalOf(roomKey)).toBe('room-not-found');
   });
 
   it('lets out a seat whose login ran out though nobody sends anything, and keeps the room', async () => {

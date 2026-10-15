@@ -399,20 +399,23 @@ export class RoomDurableObject extends DurableObject<Env> {
     return known?.role === 'gm' || known?.role === 'pl' ? 'ok' : 'not-a-player';
   }
 
-  /** WebSocket の接続を受ける。Worker が Origin とレート制限を確かめてから回してくる */
+  /**
+   * WebSocket の接続を受ける。Worker が Origin とレート制限を確かめてから回してくる。
+   * 部屋が無いときと満員のときも、つないでから理由を送って閉じる。つなぐ前に HTTP で断ると、
+   * ブラウザには理由が読めず、つながらなかったことしかわからない
+   */
   override async fetch(): Promise<Response> {
-    if (this.wiping || !this.room())
-      return Response.json({ error: 'room-not-found' }, { status: 404 });
-    this.closeSilentSockets();
-    const open = this.ctx
-      .getWebSockets()
-      .filter((ws) => !this.gone.has(ws) && !this.refused.has(ws));
-    if (open.length >= MAX_SOCKETS) {
-      return Response.json({ error: 'room-full' }, { status: 503 });
-    }
+    const missing = this.wiping || !this.room();
+    if (!missing) this.closeSilentSockets();
+    const full =
+      !missing &&
+      this.ctx.getWebSockets().filter((ws) => !this.gone.has(ws) && !this.refused.has(ws)).length >=
+        MAX_SOCKETS;
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    this.connectedAt.set(server, Date.now());
+    if (missing) this.refuse(server, 'room-not-found');
+    else if (full) this.refuse(server, 'room-full');
+    else this.connectedAt.set(server, Date.now());
     return new Response(null, { status: 101, webSocket: client });
   }
 

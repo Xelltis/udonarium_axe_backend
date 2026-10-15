@@ -15,7 +15,7 @@ import {
 import type { RoomDurableObject } from '../src/rooms/room';
 import type { RoomStore } from '../src/rooms/store';
 import { accessTokenFor } from './helpers';
-import { connect, contextOf, createRoom, join, stubOf, upgrade } from './room-helpers';
+import { connect, contextOf, createRoom, join, refusalOf, stubOf } from './room-helpers';
 
 // 部屋のサーバーを、名乗り・書き込み・送りすぎで壊させないための守り
 
@@ -250,12 +250,14 @@ describe('connections that say nothing', () => {
     const roomKey = await createRoom();
     const sockets = [];
     for (let i = 0; i < MAX_SOCKETS; i++) sockets.push(await connect(roomKey));
-    expect((await upgrade(roomKey)).status).toBe(503);
+    expect(await refusalOf(roomKey)).toBe('room-full');
 
     await inside(roomKey, (room, state) => {
       for (const ws of state.getWebSockets()) room.connectedAt.set(ws, 0);
     });
-    expect((await upgrade(roomKey)).status).toBe(101);
+    const fresh = await connect(roomKey);
+    fresh.hello('fresh');
+    expect((await fresh.next('welcome')).peerId).toBe('fresh');
   }, 90_000);
 });
 

@@ -152,6 +152,14 @@ export const connect = async (roomKey: string): Promise<Client> => {
   return new Client(res.webSocket);
 };
 
+/** 部屋につないだところで断られたときの理由。部屋が無いときと満員のときは、つないでから断る */
+export const refusalOf = async (roomKey: string) => {
+  const client = await connect(roomKey);
+  const code = (await client.next('error')).code;
+  await client.closed;
+  return code;
+};
+
 /** 部屋に入る。welcome と、続くサーバーのカタログまで読んだところで返す */
 export const join = async (
   roomKey: string,

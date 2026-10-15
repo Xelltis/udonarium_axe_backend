@@ -17,8 +17,8 @@ import {
   eventually,
   join,
   listRooms,
+  refusalOf,
   stubOf,
-  upgrade,
 } from './room-helpers';
 
 // GM が部屋を削除するときと、一覧で削除できる部屋に印を付けるとき
@@ -95,7 +95,7 @@ describe('deleting a room', () => {
     expect(
       await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm()),
     ).toBeNull();
-    expect((await upgrade(roomKey)).status).toBe(404);
+    expect(await refusalOf(roomKey)).toBe('room-not-found');
   });
 
   it('lets a GM made by another GM delete it too', async () => {
@@ -181,7 +181,7 @@ describe('deleting a room', () => {
 
     expect((await late.next('error')).code).toBe('room-not-found');
     expect((await gm.client.next('error')).code).toBe('room-deleted');
-    expect((await upgrade(roomKey)).status).toBe(404);
+    expect(await refusalOf(roomKey)).toBe('room-not-found');
     expect(await stubOf(roomKey).canUpload('user-gm')).toBe('room-not-found');
     expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(404);
   });
