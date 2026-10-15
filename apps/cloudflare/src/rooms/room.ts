@@ -48,7 +48,16 @@ import { attributesOf, withAttributes } from './objects';
 import { hashPassword, verifyPassword } from './password';
 import { RoomStore, migrate } from './store';
 import type { StoredEntry } from './store';
-import { delivered, describe, maskedMinor, unmasked, viewFor, viewKind } from './visibility';
+import {
+  delivered,
+  describe,
+  looser,
+  maskedMinor,
+  seesDisclosed,
+  unmasked,
+  viewFor,
+  viewKind,
+} from './visibility';
 import type { Lookup, View, ViewKind, Viewer } from './visibility';
 
 /**
@@ -183,10 +192,12 @@ const fitsIndex = (context: ObjectContext): boolean => {
 /**
  * GM でない人が、見え方を決めるところをそう変えてよいか。Axe の画面が許すことだけを許す。
  *
- * - メモの公開の範囲は、持ち主だけが変えられる。持ち主は、持ち主か、持ち主のいないものを自分にする人が変えられる
+ * - メモの公開の範囲は、持ち主だけが変えられる。持ち主は、持ち主か、持ち主のいないものを自分にする人が変えられる。
+ *   持ち主のいないメモを自分のものにできるのは、いまそのメモが見える人だけ（GM だけのメモは取れない）
  * - ダイスの持ち主も同じ
- * - カードの持ち主（覗いている人）は、自分にするか、空にするだけ
- * - 発言の宛先と、シークレットを外すことは、送り主だけ（ダイスの結果は振った人）
+ * - カードの持ち主（覗いている人）は、自分にするか、空にするだけ。ほかの人の手札のカードは、向きも
+ *   持ち主も場所も変えられない
+ * - 発言の宛先と、シークレットを外すことは、送り主だけ（ダイスの結果は振った人）。送り主はだれも変えられない
  */
 const mayChangeView = (before: View | null, after: View | null, seat: Seat): boolean => {
   if (!before || !after || before.kind !== after.kind) return true;
@@ -197,18 +208,26 @@ const mayChangeView = (before: View | null, after: View | null, seat: Seat): boo
       const next = after as typeof before;
       const disclosureSame =
         before.mode === next.mode && JSON.stringify(before.users) === JSON.stringify(next.users);
+      const claimsUnseen =
+        before.owner === '' && next.owner === seat.userId && !seesDisclosed(before, seat);
       return (
-        (disclosureSame || before.owner === seat.userId) && ownerMove(before.owner, next.owner)
+        (disclosureSame || before.owner === seat.userId) &&
+        ownerMove(before.owner, next.owner) &&
+        !claimsUnseen
       );
     }
     case 'die':
       return ownerMove(before.owner, (after as typeof before).owner);
     case 'card': {
       const next = after as typeof before;
+      if (before.hand !== '' && before.hand !== seat.userId) {
+        return JSON.stringify(next) === JSON.stringify(before);
+      }
       return next.owner === before.owner || next.owner === '' || next.owner === seat.userId;
     }
     case 'chat': {
       const next = after as typeof before;
+      if (next.from !== before.from || next.originFrom !== before.originFrom) return false;
       const sender = before.from === seat.userId || before.originFrom === seat.userId;
       const toSame = JSON.stringify(before.to) === JSON.stringify(next.to);
       return (toSame && (next.secret || !before.secret)) || sender;
@@ -812,7 +831,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (
       existing &&
       seat.role !== 'gm' &&
-      !mayChangeView(existing.view, describe(context).view, seat)
+      (!mayChangeView(existing.view, describe(context).view, seat) ||
+        this.uncovers(context, existing, seat))
     )
       return this.refuseWrite(identifier, seat, reply);
 
@@ -854,6 +874,26 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.store.put(context, owner);
       this.spread(context, before, seat, sender, push, corrected);
     }
+  }
+
+  /**
+   * 親か名前（データ要素の名前は、カードやメモの下のどこにあるかを決める）を変える書き込みで、
+   * 書いた人自身に、そのものか子孫が今より見えるようになるか。見え方は親と名前の道筋で決まるので、
+   * 名前を変えたり、決まりを持つ親の下から外したりすれば、伏せたものが手に入ってしまう
+   */
+  private uncovers(context: ObjectContext, existing: StoredEntry, seat: Seat): boolean {
+    const next = describe(context);
+    const renamed =
+      existing.view?.kind === 'data' &&
+      next.view?.kind === 'data' &&
+      existing.view.name !== next.view.name;
+    if (next.parent === existing.parent && !renamed) return false;
+    const identifier = context.identifier;
+    const after: Lookup = (other) =>
+      other === identifier ? { ...existing, ...next } : this.store.lookup(other);
+    return [identifier, ...this.store.dependentsOf(identifier)].some((other) =>
+      looser(this.kindOf(other, seat, after), this.kindOf(other, seat)),
+    );
   }
 
   /**

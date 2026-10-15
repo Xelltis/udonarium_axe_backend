@@ -136,7 +136,10 @@ const seesFace = (view: { front: boolean; owner: string; hand: string }, viewer:
   (view.hand !== '' && view.hand === viewer.userId);
 
 /** 公開の範囲（Axe の canViewDisclosable）。GM と持ち主はいつも見える */
-const seesDisclosed = (view: { mode: string; users: string[]; owner: string }, viewer: Viewer) => {
+export const seesDisclosed = (
+  view: { mode: string; users: string[]; owner: string },
+  viewer: Viewer,
+) => {
   if (isGameMaster(viewer)) return true;
   if (view.owner !== '' && view.owner === viewer.userId) return true;
   if (view.mode === 'gm') return false;
@@ -184,6 +187,10 @@ const kindUnderNote = (path: string[]): ViewKind =>
 
 /** 伏せる強さの順。後ろほど強い */
 const STRICTNESS: readonly ViewKind[] = ['full', 'masked', 'pending', 'hidden'];
+
+/** now の方が then より多く見せるか */
+export const looser = (now: ViewKind, then: ViewKind): boolean =>
+  STRICTNESS.indexOf(now) < STRICTNESS.indexOf(then);
 
 /** 2つの見え方のうち、より伏せる方 */
 const stricter = (a: ViewKind, b: ViewKind): ViewKind =>

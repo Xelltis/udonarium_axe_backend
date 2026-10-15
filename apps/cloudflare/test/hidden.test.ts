@@ -276,6 +276,123 @@ describe('parts that arrive before what they belong to', () => {
   });
 });
 
+describe('writes that would uncover what is kept back', () => {
+  const memoOf = (id: string, disclosureMode: string, owner = '') =>
+    contextOf(id, 1, 0.5, { attributes: { disclosureMode, owner } }, 'text-note');
+
+  /** 断られたなら、送り主には置いてあるものが返り、ほかの人には何も届かない */
+  const expectRefused = async (t: Awaited<ReturnType<typeof table>>, identifier: string) => {
+    const back = await t.alice.events();
+    expect(ids(back)).toEqual([['AUTHORITATIVE_OBJECT', identifier]]);
+    await t.bob.expectQuiet();
+    return back[0].data as ObjectContext;
+  };
+
+  it('refuses a player renaming what holds the face of a turned-down card', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('u1', { state: 1, location: { name: 'table' } });
+    await place(t, [card, ...elements]);
+
+    t.alice.emit([
+      update(
+        contextOf(
+          'image_u1',
+          2,
+          0.5,
+          { parentIdentifier: 'card_u1', value: '', attributes: { name: 'picture' } },
+          'data',
+        ),
+      ),
+    ]);
+
+    const kept = await expectRefused(t, 'image_u1');
+    expect((kept.syncData.attributes as { name: string }).name).toBe('image');
+  });
+
+  it('refuses a player taking out from under a card what holds its name', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('u2', { state: 1, location: { name: 'table' } });
+    await place(t, [card, ...elements]);
+
+    t.alice.emit([
+      update(contextOf('common_u2', 2, 0.5, { value: '', attributes: { name: 'common' } }, 'data')),
+    ]);
+
+    await expectRefused(t, 'common_u2');
+  });
+
+  it('refuses a player making someone else the sender of a secret line', async () => {
+    const t = await table();
+    const tab = contextOf(
+      'tab-u3',
+      1,
+      0.5,
+      { attributes: { name: 'main', plCanView: true, guestCanView: true } },
+      'chat-tab',
+    );
+    const line = contextOf(
+      'line-u3',
+      1,
+      0.5,
+      {
+        parentIdentifier: 'tab-u3',
+        value: 'the GM rolled 6',
+        attributes: { from: 'user-gm', tag: 'secret', to: '' },
+      },
+      'chat',
+    );
+    await place(t, [tab, line]);
+
+    t.alice.emit([
+      update({
+        ...line,
+        majorVersion: 2,
+        syncData: {
+          ...line.syncData,
+          value: '',
+          attributes: { from: 'user-alice', tag: 'secret' },
+        },
+      }),
+    ]);
+
+    const kept = await expectRefused(t, 'line-u3');
+    expect(kept.syncData.value).toBe('');
+  });
+
+  it.each([
+    ['peeks at', { owner: 'user-alice' }],
+    ['takes into its own hand', { location: { name: 'hand:user-alice' } }],
+    ['turns up', { state: 0 }],
+  ])('refuses a player who %s a card in the hand of another', async (_what, change) => {
+    const t = await table();
+    const { card, elements } = cardTree('u4', { state: 1, location: { name: 'hand:user-bob' } });
+    await place(t, [card, ...elements]);
+
+    t.alice.emit([
+      update({
+        ...card,
+        majorVersion: 2,
+        syncData: { attributes: { state: 1, location: { name: 'hand:user-bob' }, ...change } },
+      }),
+    ]);
+
+    await expectRefused(t, 'u4');
+  });
+
+  it('refuses a player claiming a memo kept to the GM, and lets one claim an open memo', async () => {
+    const t = await table();
+    await place(t, [memoOf('closed', 'gm'), memoOf('open', '')]);
+
+    t.alice.emit([
+      update({ ...memoOf('closed', 'gm', 'user-alice'), majorVersion: 2 }),
+      update({ ...memoOf('open', '', 'user-alice'), majorVersion: 2 }),
+    ]);
+
+    expect(ids(await t.alice.events())).toEqual([['AUTHORITATIVE_OBJECT', 'closed']]);
+    expect(ids(await t.bob.events())).toEqual([['UPDATE_GAME_OBJECT', 'open']]);
+  });
+});
+
 describe('whispers and secrets', () => {
   const tab = contextOf(
     'tab',
