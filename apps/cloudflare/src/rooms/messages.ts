@@ -52,6 +52,7 @@ export const clientMessageSchema = variant('type', [
   }),
   object({ type: literal('time') }),
   object({ type: literal('invite'), role: picklist(PEER_ROLES) }),
+  object({ type: literal('auth'), accessToken: string() }),
 ]);
 
 export const roleRequestSchema = object({ peerId: string(), role: picklist(PEER_ROLES) });

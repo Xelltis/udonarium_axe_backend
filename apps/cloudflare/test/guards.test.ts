@@ -11,9 +11,11 @@ import {
   MAX_ROLLS_PER_WINDOW,
   MAX_SOCKETS,
   MAX_VIEW_BYTES,
+  TOKEN_GRACE_MS,
 } from '../src/rooms/room';
 import type { RoomDurableObject } from '../src/rooms/room';
 import type { RoomStore } from '../src/rooms/store';
+import { accessTokenFor } from './helpers';
 import { connect, contextOf, createRoom, join, stubOf, upgrade } from './room-helpers';
 
 // 部屋のサーバーを、名乗り・書き込み・送りすぎで壊させないための守り
@@ -309,4 +311,40 @@ describe('sending too much', () => {
       room.pendingRolls = 0;
     });
   }, 90_000);
+});
+
+describe('a login that runs out while connected', () => {
+  it('lets a seat stay on a fresh token, and closes one whose token ran out', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+    await alice.client.next('join');
+
+    alice.client.send({ type: 'auth', accessToken: accessTokenFor('user-alice') });
+    await alice.client.expectQuiet();
+    await inside(roomKey, (_room, state) => {
+      for (const ws of state.getWebSockets()) {
+        const seat = ws.deserializeAttachment() as { peerId: string } | null;
+        if (seat?.peerId === 'bob')
+          ws.serializeAttachment({ ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1 });
+      }
+    });
+
+    alice.client.emit([]);
+
+    expect((await bob.client.next('error')).code).toBe('unauthorized');
+    expect(await alice.client.next('leave')).toEqual({ type: 'leave', peerId: 'bob' });
+  });
+
+  it('closes a seat that hands over somebody else’s token, and ignores one from a guest', async () => {
+    const roomKey = await createRoom();
+    const guest = await join(roomKey, 'guest', { accessToken: null, userId: 'guest-1' });
+    guest.client.send({ type: 'auth', accessToken: accessTokenFor('user-somebody') });
+    await guest.client.expectQuiet();
+
+    const alice = await join(roomKey, 'alice');
+    alice.client.send({ type: 'auth', accessToken: accessTokenFor('user-somebody') });
+
+    expect((await alice.client.next('error')).code).toBe('unauthorized');
+  });
 });

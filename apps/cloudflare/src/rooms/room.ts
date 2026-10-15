@@ -91,6 +91,9 @@ export const MAX_OBJECTS = 200_000;
 /** 見え方の手がかり（親の識別子と、宛先などの中身）の大きさの上限。超えるものは受けない */
 export const MAX_VIEW_BYTES = 16 * 1024;
 
+/** アクセストークンが切れてから、つながっている席を外すまでに待つ時間（ミリ秒）。新しいトークンが届くまでの余裕 */
+export const TOKEN_GRACE_MS = 60_000;
+
 /** 部屋を作るときに Worker から渡すもの */
 export interface RoomInit {
   roomKey: string;
@@ -122,6 +125,8 @@ interface Seat {
   account: boolean;
   /** 入った時刻（Unix ミリ秒） */
   joinedAt: number;
+  /** ログインして入った人の、アクセストークンが切れる時刻（Unix ミリ秒）。新しいトークンが届けば延びる */
+  expiresAt?: number;
   /** サーバーが閉じた（断った、または同じピア ID の新しい接続に替わった） */
   closed?: boolean;
 }
@@ -335,9 +340,23 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
   }
 
+  /**
+   * アクセストークンが切れてから TOKEN_GRACE_MS を過ぎても新しいトークンが届かない席を外す。
+   * ログアウトしたり、アカウントを消したりした人が、つながったまま見続けないように
+   */
+  private expireSeats(): void {
+    const now = Date.now();
+    for (const { ws, seat } of this.seats()) {
+      if (seat.expiresAt !== undefined && now > seat.expiresAt + TOKEN_GRACE_MS) {
+        this.refuse(ws, 'unauthorized');
+      }
+    }
+  }
+
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     // PING には自動で答えるので、ここに来るテキストは使わない
     if (typeof message === 'string') return;
+    this.expireSeats();
     const seat = seatOf(ws);
     if (seat?.closed || this.refused.has(ws)) return;
     if (!this.withinRate(ws)) return this.refuse(ws, 'too-many-messages');
@@ -361,6 +380,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.post(ws, { type: 'time', serverTime: Date.now() });
     } else if (received.type === 'invite') {
       this.invite(ws, seat, received.role);
+    } else if (received.type === 'auth') {
+      this.renew(ws, seat, received.accessToken);
     }
     // 入ったあとの hello は何もしない
   }
@@ -444,6 +465,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (!claims || claims.uid !== hello.userId) return this.refuse(ws, 'unauthorized');
       seat.role = this.roleOf(hello.userId, hello.invite ?? null, room.room_key, secret);
       seat.account = true;
+      seat.expiresAt = claims.exp * 1000;
     }
     this.seat(ws, seat);
   }
@@ -476,6 +498,17 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.sessionSecret(),
     );
     this.post(ws, { type: 'invite', role, invite, expiresAt: Date.now() + INVITE_SECONDS * 1000 });
+  }
+
+  /**
+   * つながったまま、新しいアクセストークンを受ける。同じ人のものなら席の期限を延ばし、そうでなければ
+   * 外す。見学の席には期限が無いので、受けても何もしない
+   */
+  private renew(ws: WebSocket, seat: Seat, accessToken: string): void {
+    if (!seat.account) return;
+    const claims = readToken(accessToken, 'access', this.sessionSecret());
+    if (!claims || claims.uid !== seat.userId) return this.refuse(ws, 'unauthorized');
+    ws.serializeAttachment({ ...seat, expiresAt: claims.exp * 1000 });
   }
 
   private seat(ws: WebSocket, seat: Seat): void {

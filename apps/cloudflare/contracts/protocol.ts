@@ -101,7 +101,16 @@ export interface InviteRequest {
   role: PeerRole;
 }
 
-export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest;
+/**
+ * つながったまま、新しいアクセストークンを渡す。ログインして入った席は、アクセストークンが切れてから
+ * 1分のうちに新しいものが届かなければ unauthorized で閉じる。Axe はトークンを替えたら送る
+ */
+export interface AuthMessage {
+  type: 'auth';
+  accessToken: string;
+}
+
+export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage;
 
 // ---- サーバーからクライアントへ ----
 
@@ -174,6 +183,7 @@ export interface InviteMessage {
  * - too-many-messages：短いあいだに送りすぎた
  * - replaced：同じピア ID で新しく接続した人がいるので、こちらを閉じる。つなぎ直さないこと
  * - unauthorized：アクセストークンが無効か期限切れ、または userId がトークンと違う。トークンを更新してつなぎ直す。
+ *   つながったあと、トークンが切れて1分のうちに新しいもの（auth）が届かなかったときも。
  *   トークンを付けずに、ログインした人のユーザー ID（ACCOUNT_USER_ID_PREFIX で始まるもの）を名乗ったときも
  */
 export const ERROR_CODES = [
