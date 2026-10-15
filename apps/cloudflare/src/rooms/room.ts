@@ -606,8 +606,12 @@ export class RoomDurableObject extends DurableObject<Env> {
    * 出てから保持期間が過ぎていれば、部屋を一覧から外し、置いたものをすべて消す
    */
   override async alarm(): Promise<void> {
-    // 消しきれなかった部屋を、消しなおす
+    // 消しきれなかった部屋を、消しなおす。消している最中なら、終わるのを待って、また来る
     const deleting = this.deletingRoomKey();
+    if (deleting !== null && this.wiping) {
+      await this.ctx.storage.setAlarm(Date.now() + WIPE_RETRY_MS);
+      return;
+    }
     if (deleting !== null) return this.wipe(deleting);
     // トークンの切れた席を外す。最後の1人が外れたなら、出ていったときと同じく保持期間の時計が置かれた
     const seated = this.seats().length;
@@ -636,11 +640,13 @@ export class RoomDurableObject extends DurableObject<Env> {
     this.wiping = true;
     try {
       if (roomKey) {
-        // 消しはじめたことを先に書く。途中で失敗しても、Worker が落ちても、入れる部屋には戻らない
+        // 消しはじめたことを先に書く。途中で失敗しても、Worker が落ちても、入れる部屋には戻らない。
+        // 落ちたときに残りを消しにくる時計も、外へ尋ねる前に置く（もとの時計は保持期間の終わりかもしれない）
         const sql = this.ctx.storage.sql;
         sql.exec('CREATE TABLE IF NOT EXISTS deleting (room_key TEXT NOT NULL)');
         sql.exec('DELETE FROM deleting');
         sql.exec('INSERT INTO deleting (room_key) VALUES (?)', roomKey);
+        await this.ctx.storage.setAlarm(Date.now() + WIPE_RETRY_MS);
         await this.lobby().remove(roomKey);
         await deleteRoomAssets(this.env.ASSETS, roomKey).catch((err: unknown) =>
           console.error('Room asset deletion failed:', err),

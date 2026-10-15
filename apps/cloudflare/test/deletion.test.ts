@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthorityEvent } from '../contracts/protocol';
 import type { ErrorMessage, RoomSummary } from '../contracts/protocol';
 import app from '../src/index';
+import { WIPE_RETRY_MS } from '../src/rooms/room';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { ORIGIN, accessTokenFor, freshIp } from './helpers';
 import {
@@ -231,6 +232,46 @@ describe('deleting a room', () => {
           .toArray(),
       ),
     ).toEqual([]);
+  });
+
+  it('sets the clock that finishes the deleting before it asks anything outside the room', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    await join(roomKey, 'gm');
+    let unlist: () => void = () => undefined;
+    const asked = new Promise<void>((resolveAsked) => {
+      void runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
+        const room = instance as unknown as {
+          lobby: () => { remove: (key: string) => Promise<void> };
+        };
+        const lobby = room.lobby.bind(instance);
+        room.lobby = () => ({
+          remove: (key: string) => {
+            resolveAsked();
+            return new Promise<void>((resolve) => {
+              unlist = () => void lobby().remove(key).then(resolve);
+            });
+          },
+        });
+      });
+    });
+
+    const deleted = deleteRoom(roomKey, 'user-gm');
+    await asked;
+    const alarm = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
+      state.storage.getAlarm(),
+    );
+    expect(alarm).toBeGreaterThan(Date.now());
+    expect(alarm).toBeLessThanOrEqual(Date.now() + WIPE_RETRY_MS);
+
+    // その時計が先に鳴っても、消している最中なら重ねて消さず、また来る
+    expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+    expect(
+      await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm()),
+    ).not.toBeNull();
+
+    unlist();
+    expect((await deleted).status).toBe(204);
+    expect(rowOf(await listFor('user-gm'), roomKey)).toBeUndefined();
   });
 
   it('tells nothing to a socket already counted as gone', async () => {
