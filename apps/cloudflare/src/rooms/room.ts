@@ -1445,7 +1445,7 @@ export class RoomDurableObject extends DurableObject<Env> {
         if (taken) return;
         if (!rolled) return reject(message.identifier, 'not-a-command');
         // 振っているあいだにタブが消されたり移されたりしていたら、置く先が無い
-        if (!this.isListedTab(String(message.syncData.parentIdentifier ?? '')))
+        if (!this.isListedTab(String(message.syncData.parentIdentifier)))
           return reject(message.identifier, 'invalid');
         // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる。並びの位置は
         // 頼まれたタブの中の端数だけ受け、頼んだ人が足した飾りや印は外す

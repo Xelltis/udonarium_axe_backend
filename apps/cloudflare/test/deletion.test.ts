@@ -494,6 +494,19 @@ describe('the room list', () => {
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
   });
 
+  it('counts finding one room by its key with the list', async () => {
+    const roomKey = await createRoom({}, 'counted-gm');
+    const ip = freshIp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await exports.default.fetch(
+        new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }),
+      );
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+  });
+
   it('lists the rooms of a Worker without login', async () => {
     const res = await app.fetch(
       new Request(ROOMS, { headers: { Origin: ORIGIN } }),
@@ -508,5 +521,22 @@ describe('the room list', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ rooms: expect.any(Array) });
+  });
+
+  it('finds a room by its key on a Worker without login, marked for nobody', async () => {
+    const roomKey = await createRoom({}, 'loginless-gm');
+    const res = await app.fetch(
+      new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN } }),
+      {
+        ...env,
+        DISCORD_CLIENT_ID: undefined,
+        DISCORD_CLIENT_SECRET: undefined,
+        SESSION_SECRET: undefined,
+      },
+      createExecutionContext(),
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json<{ room: RoomSummary }>()).room).not.toHaveProperty('deletable');
   });
 });
