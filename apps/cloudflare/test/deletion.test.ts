@@ -8,16 +8,18 @@ import app from '../src/index';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { ORIGIN, accessTokenFor, freshIp } from './helpers';
 import {
+  chatTabList,
   Client,
-  HOST,
-  ROOMS,
   connect,
   contextOf,
   createRoom,
   eventually,
+  HOST,
   join,
+  listedTabOf,
   listRooms,
   refusalOf,
+  ROOMS,
   stubOf,
 } from './room-helpers';
 
@@ -224,6 +226,8 @@ describe('deleting a room', () => {
           (instance as unknown as { pendingRolls: number }).pendingRolls,
       );
     gm.client.emit([
+      { eventName: 'UPDATE_GAME_OBJECT', data: chatTabList() },
+      { eventName: 'UPDATE_GAME_OBJECT', data: listedTabOf('main') },
       {
         eventName: AuthorityEvent.ROLL_REQUEST,
         data: {

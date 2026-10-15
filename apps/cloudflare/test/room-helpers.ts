@@ -3,7 +3,7 @@ import { env } from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
 import { gzipSync } from 'node:zlib';
 
-import { PROTOCOL_VERSION } from '../contracts/protocol';
+import { CHAT_TAB_LIST_IDENTIFIER, PROTOCOL_VERSION } from '../contracts/protocol';
 import type { CreateRoomResponse, ServerMessage } from '../contracts/protocol';
 import { decodeFrame } from '../src/rooms/codec';
 import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp } from './helpers';
@@ -210,6 +210,20 @@ export const contextOf = (
   syncData: Record<string, unknown> = { value: `${identifier}@${majorVersion}` },
   aliasName = 'character',
 ) => ({ aliasName, identifier, majorVersion, minorVersion, syncData });
+
+/** Axe のチャットのタブの一覧。タブはこの下に置き、振った結果はこの直下のタブにだけ置ける */
+export const chatTabList = () =>
+  contextOf(CHAT_TAB_LIST_IDENTIFIER, 1, 0.5, { attributes: {} }, 'chat-tab-list');
+
+/** タブの一覧の直下に置くタブ */
+export const listedTabOf = (identifier: string, attributes: Record<string, unknown> = {}) =>
+  contextOf(
+    identifier,
+    1,
+    0.5,
+    { parentIdentifier: CHAT_TAB_LIST_IDENTIFIER, attributes: { name: identifier, ...attributes } },
+    'chat-tab',
+  );
 
 /** 条件が満たされるまで待つ。部屋の一覧への知らせは、応答のあとに届く */
 export const eventually = async <T>(read: () => Promise<T>, accept: (value: T) => boolean) => {

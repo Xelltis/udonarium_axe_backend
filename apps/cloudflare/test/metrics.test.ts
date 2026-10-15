@@ -4,7 +4,16 @@ import { describe, expect, it } from 'vitest';
 import { AuthorityEvent, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { FLUSH_TALLY_MS } from '../src/rooms/room';
-import { connect, contextOf, createRoom, eventually, join, stubOf } from './room-helpers';
+import {
+  chatTabList,
+  connect,
+  contextOf,
+  createRoom,
+  eventually,
+  join,
+  listedTabOf,
+  stubOf,
+} from './room-helpers';
 
 /** 部屋が Analytics Engine に書いたものを手元に集める */
 const recordPoints = async (roomKey: string) => {
@@ -29,10 +38,15 @@ describe('room metrics', () => {
     await alice.client.next('join');
     alice.client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     alice.client.emit([
+      { eventName: SyncEvent.UPDATE, data: chatTabList() },
+      {
+        eventName: SyncEvent.UPDATE,
+        data: listedTabOf('main', { plCanView: true, guestCanView: true }),
+      },
       {
         eventName: AuthorityEvent.ROLL_REQUEST,
         data: {
-          message: contextOf('roll', 1, 0.5, {}, 'chat'),
+          message: contextOf('roll', 1, 0.5, { parentIdentifier: 'main' }, 'chat'),
           command: '1d1',
           gameSystem: 'DiceBot',
           speaker: 'Alice',
@@ -64,9 +78,9 @@ describe('room metrics', () => {
         ['flush', ''],
       ]),
     );
-    // 書いたのは2つ。それぞれの行と、その主キーの索引の行を書く
+    // 書いたのは4つ（コマ、タブの一覧、タブ、振った結果）。それぞれの行と、その主キーの索引の行を書く
     const flush = points.find((point) => point.blobs?.[1] === 'flush');
-    expect(flush?.doubles?.[0]).toBe(4);
+    expect(flush?.doubles?.[0]).toBe(8);
   });
 
   it('writes the number of changes once a minute while people play', async () => {

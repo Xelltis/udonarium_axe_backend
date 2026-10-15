@@ -3,11 +3,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
-import { contextOf, createRoom, eventually, join, stubOf } from './room-helpers';
+import {
+  chatTabList,
+  contextOf,
+  createRoom,
+  eventually,
+  join,
+  listedTabOf,
+  stubOf,
+} from './room-helpers';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** 頼むときの時刻。サーバーは、今から大きく離れた時刻を今のそばへ寄せる */
+const STAMP = Date.now();
 
 /**
  * Axe が自分で振るときと同じ形で用意した、結果の発言。発言は ObjectNode なので、
@@ -21,7 +32,7 @@ const prepared = (identifier: string, tab = 'main') =>
     {
       parentIdentifier: tab,
       value: '',
-      attributes: { to: '', messColor: '#000000', timestamp: 1 },
+      attributes: { to: '', messColor: '#000000', timestamp: STAMP },
     },
     'chat',
   );
@@ -47,13 +58,7 @@ const rollRequest = (
 });
 
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
-  contextOf(
-    identifier,
-    1,
-    0.5,
-    { attributes: { name: identifier, plCanView: true, guestCanView: true, guestCanSpeak } },
-    'chat-tab',
-  );
+  listedTabOf(identifier, { plCanView: true, guestCanView: true, guestCanSpeak });
 
 /**
  * PL の alice と bob、見学者の carol がいる部屋。タブ main は見学者も話せる。creator を
@@ -68,6 +73,7 @@ const room = async (creator?: string) => {
   await alice.client.next('join');
   await bob.client.next('join');
   alice.client.emit([
+    { eventName: SyncEvent.UPDATE, data: chatTabList() },
     { eventName: SyncEvent.UPDATE, data: tabOf('main', true) },
     { eventName: SyncEvent.UPDATE, data: tabOf('players', false) },
   ]);
@@ -200,10 +206,10 @@ describe('rolling on the server', () => {
     const { roomKey, alice, bob } = await room();
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      const holder = instance as unknown as { storeCache: { entryOf: () => never } };
+      const holder = instance as unknown as { storeCache: { put: () => never } };
       const real = holder.storeCache;
       holder.storeCache = Object.assign(Object.create(Object.getPrototypeOf(real)), real, {
-        entryOf: () => {
+        put: () => {
           holder.storeCache = real;
           throw new Error('store broke');
         },
@@ -300,29 +306,142 @@ describe('a rolled result', () => {
     expect(back.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
     const kept = back.data as Message;
     expect(kept.syncData.parentIdentifier).toBe('main');
-    expect(attributes(kept)).toMatchObject({ to: '', timestamp: 1 });
+    expect(attributes(kept)).toMatchObject({ to: '', timestamp: STAMP });
   });
 
-  it('stays out of any tab when it was rolled in none', async () => {
+  it('rolls nothing outside a tab of the tab list, where the table could not see it', async () => {
     const clients = await room();
     const loose = rollRequest('loose', '1d1');
     const syncData = Object.fromEntries(
       Object.entries(loose.data.message.syncData).filter(([field]) => field !== 'parentIdentifier'),
     );
     clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: contextOf('hideout', 1, 0.5, { attributes: {} }, 'chat-tab'),
+      },
       { ...loose, data: { ...loose.data, message: { ...loose.data.message, syncData } } },
+      rollRequest('tucked', '1d1', {}, 'hideout'),
     ]);
+
+    const answers = await clients.alice.events();
+    if (answers.length < 2) answers.push(...(await clients.alice.events()));
+    expect(answers).toEqual([
+      {
+        eventName: AuthorityEvent.ROLL_REJECTED,
+        data: { identifier: 'loose', reason: 'invalid' },
+        sendFrom: AUTHORITY_PEER_ID,
+      },
+      {
+        eventName: AuthorityEvent.ROLL_REJECTED,
+        data: { identifier: 'tucked', reason: 'invalid' },
+        sendFrom: AUTHORITY_PEER_ID,
+      },
+    ]);
+  });
+
+  it('stays in place, though the one who rolled it moves it or dates it differently', async () => {
+    const clients = await room();
+    const original = await rolledIn(clients);
+
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: edited(original, original.syncData.value, {
+          minorIndex: 0.99,
+          majorIndex: 999,
+          disclosedAt: STAMP + 60_000,
+        }),
+      },
+    ]);
+
+    const [seen] = await clients.bob.events();
+    expect(attributes(seen.data)).not.toHaveProperty('majorIndex');
+    expect(attributes(seen.data)).not.toHaveProperty('minorIndex');
+    expect(attributes(seen.data)).not.toHaveProperty('disclosedAt');
+  });
+
+  it('is dated near the server’s time, however far the request dates it', async () => {
+    const clients = await room();
+
+    clients.alice.emit([
+      {
+        ...rollRequest('buried', '1d1'),
+        data: {
+          ...rollRequest('buried', '1d1').data,
+          message: {
+            ...prepared('buried'),
+            syncData: { ...prepared('buried').syncData, attributes: { to: '', timestamp: 1 } },
+          },
+        },
+      },
+    ]);
+
     const [{ data }] = await clients.alice.events();
-    const rolled = data as Message;
+    expect(attributes(data).timestamp).toBeGreaterThan(Date.now() - 11 * 60_000);
+  });
+
+  it('is not taken away with its tab by anyone but the GM', async () => {
+    const clients = await room();
+    const original = await rolledIn(clients);
+    // alice に見えない秘話は、返すものに入れない
+    clients.bob.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: contextOf(
+          'aside',
+          1,
+          0.5,
+          {
+            parentIdentifier: 'main',
+            value: 'psst',
+            attributes: { from: 'user-bob', to: 'user-carol' },
+          },
+          'chat',
+        ),
+      },
+    ]);
+    await clients.carol.events();
+
+    clients.alice.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
+    ]);
+
+    const back = await clients.alice.events();
+    expect(back.map((event) => [event.eventName, (event.data as Message).identifier])).toEqual(
+      expect.arrayContaining([
+        [AuthorityEvent.AUTHORITATIVE, 'main'],
+        [AuthorityEvent.AUTHORITATIVE, original.identifier],
+      ]),
+    );
+    expect(back.map((event) => (event.data as Message).identifier)).not.toContain('aside');
+    await clients.bob.expectQuiet();
+  });
+
+  it('is rolled once for a request sent twice before either is rolled', async () => {
+    const clients = await room();
+
+    clients.alice.emit([rollRequest('twice', '1d1'), rollRequest('twice', '1d1')]);
+
+    const [first] = await clients.alice.events();
+    expect((first.data as Message).identifier).toBe('twice');
+    await clients.alice.expectQuiet();
+  });
+
+  it('keeps its tab where the tab list holds it', async () => {
+    const clients = await room();
+    await rolledIn(clients);
 
     clients.alice.emit([
       {
         eventName: SyncEvent.UPDATE,
         data: {
-          ...edited(rolled, rolled.syncData.value, {}),
+          ...listedTabOf('main', { plCanView: true, guestCanView: true, guestCanSpeak: true }),
+          majorVersion: 2,
           syncData: {
-            ...edited(rolled, rolled.syncData.value, {}).syncData,
-            parentIdentifier: 'main',
+            ...listedTabOf('main', { plCanView: true, guestCanView: true, guestCanSpeak: true })
+              .syncData,
+            parentIdentifier: 'elsewhere',
           },
         },
       },
@@ -330,7 +449,19 @@ describe('a rolled result', () => {
 
     const [back] = await clients.alice.events();
     expect(back.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
-    expect((back.data as Message).syncData).not.toHaveProperty('parentIdentifier');
+    expect((back.data as Message).syncData.parentIdentifier).toBe('ChatTabList');
+    await clients.bob.expectQuiet();
+  });
+
+  it('answers nothing to a request for a roll already made, whoever asks again', async () => {
+    const clients = await room();
+    await rolledIn(clients);
+    await clients.carol.events();
+
+    // 見学者が、見学者の話せないタブで、同じ識別子を頼み直す
+    clients.carol.emit([rollRequest('rolled', '1d1', {}, 'players')], AUTHORITY_PEER_ID);
+
+    await clients.carol.expectQuiet();
   });
 
   it('is taken away or marked deleted only by the GM', async () => {
@@ -399,7 +530,10 @@ describe('a rolled result', () => {
     const clients = await room();
     const original = await secretIn(clients);
 
-    const disclosed = edited(original, original.syncData.value, { tag: 'system', disclosedAt: 9 });
+    const disclosed = edited(original, original.syncData.value, {
+      tag: 'system',
+      disclosedAt: STAMP + 5,
+    });
     clients.alice.emit([{ eventName: SyncEvent.UPDATE, data: disclosed }]);
 
     for (const client of [clients.bob, clients.carol]) {

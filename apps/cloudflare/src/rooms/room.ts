@@ -11,6 +11,7 @@ import {
   CATALOG_BATCH,
   CHAT_MESSAGE_ALIAS,
   CHAT_TAB_ALIAS,
+  CHAT_TAB_LIST_IDENTIFIER,
   CLOSE_CODE,
   DICE_BOT_SENDER,
   MAX_MEMBERS,
@@ -97,6 +98,19 @@ export const HELLO_TIMEOUT_MS = 10_000;
 
 /** 1つの接続が RATE_WINDOW_MS のあいだに送れるイベントの数。1つのフレームに多くのイベントを詰めても数える */
 export const MAX_EVENTS_PER_WINDOW = 20_000;
+
+/** 振った結果の時刻を、サーバーの時刻からどこまで離してよいか（ミリ秒）。手元の時計のずれは許す */
+export const ROLL_TIME_TOLERANCE_MS = 10 * 60 * 1000;
+
+/** 時刻を、今から ROLL_TIME_TOLERANCE_MS のうちに寄せる。数でなければ今 */
+const nearNow = (timestamp: unknown): number => {
+  const now = Date.now();
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return now;
+  return Math.min(Math.max(timestamp, now - ROLL_TIME_TOLERANCE_MS), now + ROLL_TIME_TOLERANCE_MS);
+};
+
+/** 部屋を消しきれなかったとき、もう一度消しにくるまでの時間（ミリ秒） */
+export const WIPE_RETRY_MS = 60_000;
 
 /** 部屋全体で振るのを待てるダイスの数。超えたものは振らない */
 export const MAX_PENDING_ROLLS = 64;
@@ -256,14 +270,25 @@ const mayChangeView = (before: View | null, after: View | null, seat: Seat): boo
   }
 };
 
+/**
+ * タブを別の親の下へ移す書き込みか。Axe はタブを動かさないので、GM のほかには許さない。許すと、見えない
+ * ところに作ったタブで振り、よい目のときだけタブごと見えるところへ出せてしまう
+ */
+const movesTab = (existing: StoredEntry, context: ObjectContext): boolean =>
+  existing.alias === CHAT_TAB_ALIAS && describe(context).parent !== existing.parent;
+
 /** 人の名乗れないユーザー ID。Axe が発言の送り主に使う名前 */
 const RESERVED_USER_IDS: ReadonlySet<string> = new Set([DICE_BOT_SENDER, 'System']);
 
 /**
  * サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value と親のタブも）。
- * 宛先と時刻も守る。守らないと、自分だけに宛てて何度も振り、よい目だけを全員に宛て直せてしまう
+ * 宛先と時刻と並びの位置も守る。守らないと、自分だけに宛てて何度も振り、よい目だけを全員に宛て直したり、
+ * 行を好きな位置へ動かしたりできてしまう。並びの位置は、シークレットを公開したときだけ変わってよい
  */
 const ROLLED_ATTRIBUTES = [
+  'disclosedAt',
+  'majorIndex',
+  'minorIndex',
   'dicebot',
   'tag',
   'name',
@@ -1002,7 +1027,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       existing &&
       seat.role !== 'gm' &&
       (!mayChangeView(existing.view, describe(context).view, seat) ||
-        this.uncovers(context, existing, seat))
+        this.uncovers(context, existing, seat) ||
+        movesTab(existing, context))
     )
       return this.refuseWrite(identifier, seat, reply);
 
@@ -1202,7 +1228,17 @@ export class RoomDurableObject extends DurableObject<Env> {
     const disclosed =
       (original.originFrom === seat.userId || seat.role === 'gm') &&
       isDisclosureOf(original.tag, attributes.tag);
-    const kept = disclosed ? { ...original, tag: attributes.tag } : original;
+    // 公開した行は末尾へ移る（Axe の discloseMessage）。時刻は今のそばに寄せる
+    const kept = disclosed
+      ? {
+          ...original,
+          tag: attributes.tag,
+          disclosedAt:
+            attributes.disclosedAt === undefined ? undefined : nearNow(attributes.disclosedAt),
+          majorIndex: attributes.majorIndex,
+          minorIndex: attributes.minorIndex,
+        }
+      : original;
     const guarded =
       seat.role === 'gm' ? ROLLED_ATTRIBUTES : [...ROLLED_ATTRIBUTES, ...ROLLED_GM_ATTRIBUTES];
     const changed =
@@ -1218,8 +1254,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     const syncData = Object.fromEntries(
       Object.entries(context.syncData).filter(([field]) => field !== 'parentIdentifier'),
     );
-    if (stored.syncData.parentIdentifier !== undefined)
-      syncData.parentIdentifier = stored.syncData.parentIdentifier;
+    // 振った結果は、タブの一覧の直下のタブにしか置かない
+    syncData.parentIdentifier = stored.syncData.parentIdentifier;
     return {
       ...context,
       syncData: { ...syncData, value: stored.syncData.value, attributes: restored },
@@ -1247,10 +1283,13 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
     const request = parsed.output;
     const { message } = request;
+    // 同じものを頼み直されたとき（つなぎ直したあとなど）は、もう振ってあるので何も返さない
+    if (this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier)) return;
     if (
       message.aliasName !== CHAT_MESSAGE_ALIAS ||
       !fitsIndex(message) ||
-      this.store.size >= MAX_OBJECTS
+      this.store.size >= MAX_OBJECTS ||
+      !this.isListedTab(String(message.syncData.parentIdentifier ?? ''))
     ) {
       return reject(message.identifier, 'invalid');
     }
@@ -1272,7 +1311,6 @@ export class RoomDurableObject extends DurableObject<Env> {
         if (!this.room()) return;
         this.record('roll', request.gameSystem, Date.now() - started);
         // 振っているあいだに、同じ識別子のものが置かれていたら作らない
-        // 同じものを頼み直されたとき（つなぎ直したあとなど）は、もう届いているので何もしない
         const taken =
           this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
         if (taken) return;
@@ -1291,6 +1329,8 @@ export class RoomDurableObject extends DurableObject<Env> {
               : `<BCDice：${request.speaker}>`,
             from: DICE_BOT_SENDER,
             originFrom: seat.userId,
+            // 頼んだ人の時刻は、遠い過去や未来にずらして並びの奥へ埋めさせないよう、今のそばに寄せる
+            timestamp: nearNow(attributesOf(message).timestamp),
             [SERVER_ROLL_FIELD]: true,
           },
         );
@@ -1348,11 +1388,15 @@ export class RoomDurableObject extends DurableObject<Env> {
     // その人のあいだだけ置くもの（カーソル）は、その人だけが消せる
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)
       return this.refuseWrite(identifier, seat, reply);
-    // サーバーが振った結果は、GM のほかには消させない
-    if (seat.role !== 'gm' && this.isServerRoll(identifier))
-      return this.refuseWrite(identifier, seat, reply);
-
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
+    // サーバーが振った結果は、GM のほかには消させない。タブごと消すのも同じ。送り主の手元からは消えて
+    // いるので、見えるものを全部返す
+    if (seat.role !== 'gm' && doomed.some((id) => this.isServerRoll(id))) {
+      for (const id of doomed) {
+        if (delivered(this.kindOf(id, seat))) this.refuseWrite(id, seat, reply);
+      }
+      return;
+    }
     const others = this.seats(sender);
     const seen = new Map(
       others.map(({ ws, seat: other }) => [ws, doomed.map((id) => this.kindOf(id, other))]),
@@ -1372,6 +1416,12 @@ export class RoomDurableObject extends DurableObject<Env> {
         );
       });
     }
+  }
+
+  /** チャットのタブの一覧の直下にある、みんなのタブか。振った結果はそこにだけ置く */
+  private isListedTab(identifier: string): boolean {
+    const tab = this.store.entryOf(identifier);
+    return tab?.alias === CHAT_TAB_ALIAS && tab.parent === CHAT_TAB_LIST_IDENTIFIER;
   }
 
   private isServerRoll(identifier: string): boolean {

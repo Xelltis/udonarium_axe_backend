@@ -90,8 +90,11 @@ export const forgetSchema = object({ identifiers: nullish(array(identifierSchema
 
 const textSchema = pipe(string(), maxLength(MAX_ROLL_COMMAND_LENGTH));
 
-/** 結果の後ろに付ける対象の名前。1行の ` [名前]` だけ。違う形を通すと、印の付いた結果に好きな文を足せてしまう */
-const TARGET_SUFFIX = new RegExp(`^ \\[[^\\r\\n]{1,${MAX_ROLL_TARGET_NAME_LENGTH}}\\]$`);
+/**
+ * 結果の後ろに付ける対象の名前。1行の ` [名前]` だけで、名前には角括弧と矢印を含めない。違う形を通すと、
+ * 印の付いた結果に好きな文（` → 12 成功` など）を足せてしまう
+ */
+const TARGET_SUFFIX = new RegExp(`^ \\[[^\\r\\n\\[\\]→]{1,${MAX_ROLL_TARGET_NAME_LENGTH}}\\]$`);
 
 export const rollRequestSchema = object({
   message: objectContextSchema,

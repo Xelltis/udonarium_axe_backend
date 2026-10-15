@@ -355,7 +355,7 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 | `command`    | 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい。4000文字まで                     |
 | `gameSystem` | ゲームシステムのID。知らないものなら`DiceBot`で振る                                                         |
 | `speaker`    | 発言した人の名前                                                                                            |
-| `suffix`     | 結果の文面の後ろに付ける対象のキャラの名前。` [名前]`の1行だけで、名前は改行を含まず128文字まで。省いてよい |
+| `suffix`     | 結果の文面の後ろに付ける対象のキャラの名前。` [名前]`の1行だけで、名前は改行と角括弧と`→`を含まず128文字まで。省いてよい |
 
 サーバーは振った結果で、発言の次の項目を埋め、新しい発言として全員に配ります（振った人にも届きます）。
 `value`は`syncData`の直下、ほかはChatMessageのSyncVarなので`syncData.attributes`に入ります。
@@ -370,21 +370,23 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 | `originFrom` | 振った人の`userId`                                                   |
 | `serverRoll` | `true`                                                               |
 
+- 振れるのは、タブの一覧（`ChatTabList`）の直下にあるタブだけです。ほかのところに置こうとした結果は`invalid`で断ります。見えないところで振り、よい目のときだけ見えるところへ移せないようにするためです。同じ理由で、GMのほかはタブを別の親の下へ移せません。
 - 見学者は、見学者も話せるタブでだけ振れます。
-- サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`editHistory`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
-- ただし、振った人（`originFrom`の人）とGMは、シークレットを公開できます。`tag`から`secret`の語を外すこと（`system secret`を`system`に）だけを受け付けます。公開すると、伏せて届けていた人にも結果の全体が届きます。
-- 消したことにする印（`pseudoDeletedAt`）を付けられるのはGMだけで、結果の発言そのものを消せるのもGMだけです。
+- 結果の時刻（`timestamp`）は、サーバーの時刻から10分より離れていれば10分のところへ寄せます。手元の時計のずれは許しつつ、行を並びの奥へ埋めさせないためです。
+- サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`disclosedAt`・`majorIndex`・`minorIndex`（並びの位置）・`editHistory`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
+- ただし、振った人（`originFrom`の人）とGMは、シークレットを公開できます。`tag`から`secret`の語を外すこと（`system secret`を`system`に）と、そのときに末尾へ移すこと（`disclosedAt`・`majorIndex`・`minorIndex`。`disclosedAt`はサーバーの時刻のそばへ寄せる）だけを受け付けます。公開すると、伏せて届けていた人にも結果の全体が届きます。
+- 消したことにする印（`pseudoDeletedAt`）を付けられるのはGMだけで、結果の発言そのものを消せるのもGMだけです。結果の入ったタブを消せるのもGMだけで、ほかの人が消そうとすると、その人に見えていたものを`AUTHORITATIVE_OBJECT`で返します。
 - `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。
 - ダイス表やリソースの操作は、これまでどおりAxeが手元で処理します。
 - BCDiceの版は、Axeと揃えます（いまは4.10.0）。
 
 振らなかったときは、頼んだ人に`ROLL_REJECTED`（`{ identifier, reason }`）を返します。
 `identifier`は、頼まれた結果の発言の識別子です。
-同じ識別子の結果がもうあるときは、頼み直したものとみなして何も返しません。
+同じ識別子の結果がもうある（か消してある）ときは、頼み直したものとみなして、ほかの確かめより先に、何も返さずに終えます。
 
 | `reason`        | 起きるとき                                                              |
 | --------------- | ----------------------------------------------------------------------- |
-| `invalid`       | 頼み方の形が違う（結果の発言の形、`suffix`の形、大きすぎるもの）        |
+| `invalid`       | 頼み方の形が違う（結果の発言の形、`suffix`の形、大きすぎるもの）か、タブの一覧の直下のタブでないところに置こうとした |
 | `not-allowed`   | 見学者が、見学者の話せないタブで振ろうとした                            |
 | `rate-limited`  | 1つの接続から10秒に20回（`MAX_ROLLS_PER_WINDOW`）を超えて頼んだ         |
 | `busy`          | 部屋で振るのを待っているダイスが64個ある                                |

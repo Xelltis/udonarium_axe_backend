@@ -16,7 +16,16 @@ import {
 import type { RoomDurableObject } from '../src/rooms/room';
 import type { RoomStore } from '../src/rooms/store';
 import { accessTokenFor } from './helpers';
-import { connect, contextOf, createRoom, join, refusalOf, stubOf } from './room-helpers';
+import {
+  chatTabList,
+  connect,
+  contextOf,
+  createRoom,
+  join,
+  listedTabOf,
+  refusalOf,
+  stubOf,
+} from './room-helpers';
 
 // 部屋のサーバーを、名乗り・書き込み・送りすぎで壊させないための守り
 
@@ -313,13 +322,26 @@ describe('sending too much', () => {
     const ask = (identifier: string) => ({
       eventName: AuthorityEvent.ROLL_REQUEST,
       data: {
-        message: contextOf(identifier, 1, 0.5, { value: '', attributes: {} }, 'chat'),
+        message: contextOf(
+          identifier,
+          1,
+          0.5,
+          { parentIdentifier: 'main', value: '', attributes: {} },
+          'chat',
+        ),
         command: '1d6',
         gameSystem: 'DiceBot',
         speaker: 'roller',
       },
     });
 
+    roller.client.emit([
+      { eventName: SyncEvent.UPDATE, data: chatTabList() },
+      {
+        eventName: SyncEvent.UPDATE,
+        data: listedTabOf('main', { plCanView: true, guestCanView: true }),
+      },
+    ]);
     roller.client.emit(
       Array.from({ length: MAX_ROLLS_PER_WINDOW + 1 }, (_, i) => ask(`r${i}`)),
       '@authority',

@@ -62,6 +62,9 @@ export const ACCOUNT_USER_ID_PREFIX = 'acct_';
  */
 export const ROOM_PEER_ID_PATTERN = /^(\w{6})\w{3}\w{8}-(?:\w{7})?$/;
 
+/** Axe のチャットのタブをまとめる親の識別子。タブはこの直下に置く */
+export const CHAT_TAB_LIST_IDENTIFIER = 'ChatTabList';
+
 /** ピア ID の頭に置く、ユーザー ID のダイジェストの長さ（SHA-256 を toBase62 にした頭） */
 export const PEER_ID_USER_DIGEST_LENGTH = 6;
 

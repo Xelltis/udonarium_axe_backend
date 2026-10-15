@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
-import { contextOf, createRoom, join } from './room-helpers';
+import { chatTabList, contextOf, createRoom, join, listedTabOf } from './room-helpers';
 
 type Client = Awaited<ReturnType<typeof join>>['client'];
 interface Event {
@@ -401,6 +401,8 @@ describe('whispers and secrets', () => {
     { attributes: { name: 'main', plCanView: true, guestCanView: true } },
     'chat-tab',
   );
+  // 振った結果は、タブの一覧の直下のタブにだけ置ける
+  const listedTab = listedTabOf('tab', { name: 'main', plCanView: true, guestCanView: true });
   const line = (id: string, attributes: Record<string, unknown>, version = 1) =>
     contextOf(
       id,
@@ -487,7 +489,7 @@ describe('whispers and secrets', () => {
 
   it('hands a whispered roll only to the ones it is whispered to', async () => {
     const t = await table();
-    await place(t, [tab]);
+    await place(t, [chatTabList(), listedTab]);
 
     t.alice.emit([
       {
@@ -534,7 +536,7 @@ describe('whispers and secrets', () => {
 
   it('hands a secret roll to the others with its result taken out', async () => {
     const t = await table();
-    await place(t, [tab]);
+    await place(t, [chatTabList(), listedTab]);
 
     t.alice.emit([
       {
