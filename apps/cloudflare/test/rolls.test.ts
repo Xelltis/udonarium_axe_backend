@@ -226,6 +226,19 @@ describe('rolling on the server', () => {
       sendFrom: AUTHORITY_PEER_ID,
     });
   });
+
+  it('hands on nothing a client sends in the name of the server', async () => {
+    const { alice, bob } = await room();
+
+    alice.emit([
+      { eventName: AuthorityEvent.AUTHORITATIVE, data: prepared('forged') },
+      { eventName: AuthorityEvent.WITHDRAW, data: { identifier: 'main' } },
+      { eventName: AuthorityEvent.ROLL_REJECTED, data: { identifier: 'x', reason: 'busy' } },
+      { eventName: AuthorityEvent.ROLE_REJECTED, data: { peerId: 'bob', reason: 'unknown-peer' } },
+    ]);
+
+    await bob.expectQuiet();
+  });
 });
 
 describe('a rolled result', () => {

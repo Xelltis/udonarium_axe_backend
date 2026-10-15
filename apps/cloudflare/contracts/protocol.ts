@@ -347,6 +347,9 @@ export const SyncEvent = {
  * - ROLL_REQUEST（サーバーへ）：data は RollRequest。サーバーが BCDice で振り、結果の発言を全員に配る
  * - ROLL_REJECTED（サーバーから）：data は { identifier, reason }。ROLL_REQUEST を振らなかった。
  *   identifier は頼まれた結果の発言の識別子
+ *
+ * サーバーからだけ届くもの（AUTHORITATIVE・WITHDRAW・ROLE_REJECTED・ROLL_REJECTED）をクライアントが送っても、
+ * サーバーはだれにも届けない
  */
 export const AuthorityEvent = {
   AUTHORITATIVE: 'AUTHORITATIVE_OBJECT',
@@ -356,6 +359,14 @@ export const AuthorityEvent = {
   ROLL_REQUEST: 'ROLL_REQUEST',
   ROLL_REJECTED: 'ROLL_REJECTED',
 } as const;
+
+/** サーバーだけが送るイベント。クライアントから来たものは届けない */
+export const AUTHORITY_ONLY_EVENTS: readonly string[] = [
+  AuthorityEvent.AUTHORITATIVE,
+  AuthorityEvent.WITHDRAW,
+  AuthorityEvent.ROLE_REJECTED,
+  AuthorityEvent.ROLL_REJECTED,
+];
 
 /**
  * ダイスを振ってもらう。Axe は、自分で振るときと同じ形で結果の発言（alias 'chat'）を用意して送る。

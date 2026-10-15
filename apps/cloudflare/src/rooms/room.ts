@@ -3,6 +3,7 @@ import { safeParse } from 'valibot';
 
 import {
   ACCOUNT_USER_ID_PREFIX,
+  AUTHORITY_ONLY_EVENTS,
   AUTHORITY_PEER_ID,
   AuthorityEvent,
   CATALOG_BATCH,
@@ -835,6 +836,8 @@ export class RoomDurableObject extends DurableObject<Env> {
         if (to === undefined) for (const other of others) push(other.ws, event);
         else if (target) push(target.ws, event);
       };
+      // サーバーだけが送るものは、クライアントから来ても届けない
+      if (AUTHORITY_ONLY_EVENTS.includes(eventName)) continue;
       switch (eventName) {
         case SyncEvent.UPDATE:
           this.update(data, seat, sender, push);
