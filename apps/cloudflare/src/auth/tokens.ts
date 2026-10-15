@@ -83,12 +83,16 @@ export const signToken = <A extends Audience>(
   return `${body}.${base64url(hmac(body, secret))}`;
 };
 
-/** 署名と期限と種類を確かめて、中身を返す。どれかが合わなければ null */
+/**
+ * 署名と期限と種類を確かめて、中身を返す。どれかが合わなければ null。
+ * 鍵が空なら何も通さない。空の鍵の署名は、だれにでも作れる
+ */
 export const readToken = <A extends Audience>(
   token: string,
   audience: A,
   secret: string,
 ): Claims<A> | null => {
+  if (!secret) return null;
   const [header, payload, signature, ...rest] = token.split('.');
   if (header !== HEADER || rest.length > 0) return null;
   try {

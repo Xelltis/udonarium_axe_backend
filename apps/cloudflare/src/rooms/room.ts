@@ -510,8 +510,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (RESERVED_USER_IDS.has(hello.userId)) return this.refuse(ws, 'bad-message');
     if (hello.accessToken) {
       const secret = this.sessionSecret();
-      const claims = readToken(hello.accessToken, 'access', secret);
-      if (!claims || claims.uid !== hello.userId) return this.refuse(ws, 'unauthorized');
+      const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
+      if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(ws, 'unauthorized');
       seat.role = this.roleOf(hello.userId, hello.invite ?? null, room.room_key, secret);
       seat.account = true;
       seat.expiresAt = claims.exp * 1000;
@@ -543,26 +543,31 @@ export class RoomDurableObject extends DurableObject<Env> {
     seat: Seat,
     expiresAt: K,
   ): { assetToken: string } & Record<K, number> {
+    const secret = this.sessionSecret();
+    // ログインを外した Worker では、アセットの経路もトークンを受けないので、空にしておく
+    if (!secret)
+      return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
     const assetToken = signToken<'asset'>(
       { aud: 'asset', room: seat.roomKey, role: seat.role },
       ASSET_TOKEN_SECONDS,
-      this.sessionSecret(),
+      secret,
     );
     return { assetToken, [expiresAt]: Date.now() + ASSET_TOKEN_SECONDS * 1000 } as {
       assetToken: string;
     } & Record<K, number>;
   }
 
-  /** GM に頼まれて、招待を作る。GM でなければ invite を null にして返す */
+  /** GM に頼まれて、招待を作る。GM でないか、ログインを外した Worker なら invite を null にして返す */
   private invite(ws: WebSocket, seat: Seat, role: PeerRole): void {
-    if (seat.role !== 'gm') {
+    const secret = this.sessionSecret();
+    if (seat.role !== 'gm' || !secret) {
       this.post(ws, { type: 'invite', role, invite: null, expiresAt: null });
       return;
     }
     const invite = signToken<'invite'>(
       { aud: 'invite', room: seat.roomKey, role },
       INVITE_SECONDS,
-      this.sessionSecret(),
+      secret,
     );
     this.post(ws, { type: 'invite', role, invite, expiresAt: Date.now() + INVITE_SECONDS * 1000 });
   }
@@ -573,7 +578,7 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   private renew(ws: WebSocket, seat: Seat, accessToken: string): void {
     if (!seat.account) return;
-    const claims = readToken(accessToken, 'access', this.sessionSecret());
+    const claims = readToken(accessToken, 'access', this.sessionSecret() ?? '');
     if (!claims || claims.uid !== seat.userId) return this.refuse(ws, 'unauthorized');
     ws.serializeAttachment({ ...seat, expiresAt: claims.exp * 1000 });
   }
@@ -1299,10 +1304,10 @@ export class RoomDurableObject extends DurableObject<Env> {
 
   /**
    * トークンを確かめる鍵。部屋はログインを置いた Worker でしか作れないが、あとでログインを外すと
-   * 空になり、どのトークンも通らなくなる（見学では入れる）
+   * null になる。そのあいだはトークンを確かめも作りもしない（見学では入れる）
    */
-  private sessionSecret(): string {
-    return parseConfig(this.env).login?.sessionSecret ?? '';
+  private sessionSecret(): string | null {
+    return parseConfig(this.env).login?.sessionSecret ?? null;
   }
 
   private lobby() {

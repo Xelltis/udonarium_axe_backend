@@ -71,6 +71,10 @@ describe('signed tokens', () => {
   ])('turns away a token %s', (_name, make) => {
     expect(readToken(make(), 'access', SECRET)).toBeNull();
   });
+
+  it('takes nothing with an empty secret, which anybody could sign with', () => {
+    expect(readToken(access(60, ''), 'access', '')).toBeNull();
+  });
 });
 
 describe('packed secrets', () => {

@@ -151,6 +151,38 @@ describe('roles', () => {
     expect(anonymous.welcome.role).toBe('guest');
     expect((await member.next('error')).code).toBe('unauthorized');
   });
+
+  it('takes no token signed with an empty secret once login is taken away', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
+      (instance as unknown as { env: Env }).env = {
+        ...env,
+        DISCORD_CLIENT_ID: undefined,
+        DISCORD_CLIENT_SECRET: undefined,
+        SESSION_SECRET: undefined,
+      } as Env;
+    });
+    const forged = signToken<'access'>(
+      { aud: 'access', sub: 'discord:gm', uid: 'user-gm', name: 'gm' },
+      60,
+      '',
+    );
+
+    const impostor = await connect(roomKey);
+    impostor.hello('impostor', { userId: 'user-gm', accessToken: forged });
+    const anonymous = await join(roomKey, 'anon', { accessToken: null });
+    gm.client.send({ type: 'invite', role: 'gm' });
+    gm.client.send({ type: 'asset-token' });
+
+    expect((await impostor.next('error')).code).toBe('unauthorized');
+    expect(anonymous.welcome.assetToken).toBe('');
+    await gm.client.next('join');
+    expect((await gm.client.next('invite')).invite).toBeNull();
+    expect((await gm.client.next('asset-token')).assetToken).toBe('');
+    gm.client.send({ type: 'auth', accessToken: forged });
+    expect((await gm.client.next('error')).code).toBe('unauthorized');
+  });
 });
 
 describe('invites', () => {
