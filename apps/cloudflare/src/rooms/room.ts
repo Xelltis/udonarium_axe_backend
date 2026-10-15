@@ -108,7 +108,7 @@ export interface RoomInit {
 }
 
 /** Workers Analytics Engine に書く出来事 */
-type RoomEvent = 'join' | 'leave' | 'refuse' | 'flush' | 'roll';
+type RoomEvent = 'join' | 'leave' | 'refuse' | 'flush' | 'roll' | 'delete';
 
 /**
  * 接続ごとの情報。WebSocket に添えて置くので、Hibernation から起き直しても残る。
@@ -309,6 +309,38 @@ export class RoomDurableObject extends DurableObject<Env> {
       hasPassword: password !== null,
       members: 0,
     });
+    await this.lobby().setGameMasters(init.roomKey, [init.creatorUserId]);
+  }
+
+  /**
+   * 部屋を削除する。Worker の DELETE /v1/rooms/:roomKey から呼ぶ。削除できるのはその部屋の GM だけ。
+   * 入っている人には room-deleted を送ってから閉じ、保持期間が過ぎたときと同じく、一覧から外して
+   * 置いたものをすべて消す
+   */
+  async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
+    const room = this.room();
+    if (!room) return 'not-found';
+    const known = this.ctx.storage.sql
+      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
+      .toArray()[0];
+    if (known?.role !== 'gm') return 'not-game-master';
+
+    this.record('delete', 'gm', this.seats().length);
+    for (const ws of this.ctx.getWebSockets()) {
+      if (this.gone.has(ws) || this.refused.has(ws)) continue;
+      this.refused.add(ws);
+      // 出たことにはしない（知らせる相手も、書き残す部屋も無くなる）
+      const seat = seatOf(ws);
+      if (seat) ws.serializeAttachment({ ...seat, closed: true });
+      this.post(ws, { type: 'error', code: 'room-deleted', protocolVersion: PROTOCOL_VERSION });
+      try {
+        ws.close(CLOSE_CODE, 'room-deleted');
+      } catch {
+        // もう閉じている
+      }
+    }
+    await this.wipe(room.room_key);
+    return 'deleted';
   }
 
   /** WebSocket の接続を受ける。Worker が Origin とレート制限を確かめてから回してくる */
@@ -417,11 +449,17 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.notifyLobby(room.room_key);
       return;
     }
-    if (room) await this.lobby().remove(room.room_key);
+    await this.wipe(room?.room_key ?? null);
+  }
+
+  /** 部屋を一覧から外し、置いたものと時計をすべて消す */
+  private async wipe(roomKey: string | null): Promise<void> {
+    if (roomKey) await this.lobby().remove(roomKey);
     if (this.flushTimer !== null) clearTimeout(this.flushTimer);
     this.flushTimer = null;
     this.storeCache = null;
     await this.ctx.storage.deleteAll();
+    await this.ctx.storage.deleteAlarm();
   }
 
   // ---- 入退室 ----
@@ -935,6 +973,8 @@ export class RoomDurableObject extends DurableObject<Env> {
         await new Promise((resolve) => setTimeout(resolve, 0));
         const started = Date.now();
         const rolled = await rollLine(request.gameSystem, request.command);
+        // 振っているあいだに部屋が削除されていたら、置く先が無い
+        if (!this.room()) return;
         this.record('roll', request.gameSystem, Date.now() - started);
         // 振っているあいだに、同じ識別子のものが置かれていたら作らない
         const taken =
@@ -1059,6 +1099,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       return reject('last-game-master');
 
     sql.exec('UPDATE seats SET role = ? WHERE user_id = ?', role, target.userId);
+    this.notifyLobby(seat.roomKey);
     const outbox = new Map<WebSocket, EventContext[]>();
     const push: Push = (ws, event) => outbox.set(ws, [...(outbox.get(ws) ?? []), event]);
     const updates: EventContext[] = [];
@@ -1233,10 +1274,21 @@ export class RoomDurableObject extends DurableObject<Env> {
     return this.env.LOBBY.getByName(LOBBY_NAME);
   }
 
-  /** 一覧の人数を直す。知らせる順に並べ、人数は知らせるときに数える */
+  /**
+   * 一覧の人数と GM を直す。知らせる順に並べ、どちらも知らせるときに数える。
+   * それまでに部屋が削除されていれば知らせない
+   */
   private notifyLobby(roomKey: string): void {
     this.lobbyQueue = this.lobbyQueue
-      .then(() => this.lobby().setMembers(roomKey, this.seats().length))
+      .then(async () => {
+        if (!this.room()) return;
+        const gameMasters = this.ctx.storage.sql
+          .exec<{ user_id: string }>("SELECT user_id FROM seats WHERE role = 'gm'")
+          .toArray()
+          .map((row) => row.user_id);
+        await this.lobby().setMembers(roomKey, this.seats().length);
+        await this.lobby().setGameMasters(roomKey, gameMasters);
+      })
       .catch((err: unknown) => console.error('Lobby update failed:', err));
     this.ctx.waitUntil(this.lobbyQueue);
   }

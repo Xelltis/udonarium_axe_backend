@@ -13,6 +13,8 @@ export type ErrorCode =
   | 'hash-mismatch'
   | 'origin-not-allowed'
   | 'not-found'
+  | 'not-game-master'
+  | 'room-not-found'
   | 'length-required'
   | 'precondition-failed'
   | 'too-large'

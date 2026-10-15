@@ -14,11 +14,12 @@ interface RoomRow extends Record<string, SqlStorageValue> {
   name: string;
   has_password: number;
   members: number;
+  game_master: number;
 }
 
 /**
- * 部屋の一覧。部屋（RoomDurableObject）が、作られたとき・人が出入りしたとき・消えたときに知らせてくる。
- * D1 を使わないので、デプロイのときに作るものが増えない。
+ * 部屋の一覧。部屋（RoomDurableObject）が、作られたとき・人が出入りしたとき・役割が変わったとき・
+ * 消えたときに知らせてくる。D1 を使わないので、デプロイのときに作るものが増えない。
  */
 export class LobbyDurableObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -30,6 +31,12 @@ export class LobbyDurableObject extends DurableObject<Env> {
       has_password INTEGER NOT NULL,
       members INTEGER NOT NULL,
       created_at INTEGER NOT NULL
+    )`);
+    // 部屋ごとの GM のユーザー ID。一覧を取った人が GM の部屋に印を付ける
+    ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS game_masters (
+      room_key TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      PRIMARY KEY (room_key, user_id)
     )`);
   }
 
@@ -50,16 +57,35 @@ export class LobbyDurableObject extends DurableObject<Env> {
     this.ctx.storage.sql.exec('UPDATE rooms SET members = ? WHERE room_key = ?', members, roomKey);
   }
 
-  remove(roomKey: string): void {
-    this.ctx.storage.sql.exec('DELETE FROM rooms WHERE room_key = ?', roomKey);
+  /** 部屋の GM を置き換える。一覧に無い部屋（消えたあとに届いた知らせ）のものは置かない */
+  setGameMasters(roomKey: string, userIds: string[]): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec('DELETE FROM game_masters WHERE room_key = ?', roomKey);
+    for (const userId of userIds) {
+      sql.exec(
+        `INSERT INTO game_masters (room_key, user_id)
+         SELECT ?, ? WHERE EXISTS (SELECT 1 FROM rooms WHERE room_key = ?)`,
+        roomKey,
+        userId,
+        roomKey,
+      );
+    }
   }
 
-  /** 作られた順 */
-  list(): RoomSummary[] {
+  remove(roomKey: string): void {
+    this.ctx.storage.sql.exec('DELETE FROM rooms WHERE room_key = ?', roomKey);
+    this.ctx.storage.sql.exec('DELETE FROM game_masters WHERE room_key = ?', roomKey);
+  }
+
+  /** 作られた順。userId を渡せば、その人が GM の部屋に deletable を付ける */
+  list(userId?: string): RoomSummary[] {
     return this.ctx.storage.sql
       .exec<RoomRow>(
-        `SELECT room_key, room_id, name, has_password, members FROM rooms
-         ORDER BY created_at, room_key LIMIT ?`,
+        `SELECT room_key, room_id, name, has_password, members,
+           EXISTS (SELECT 1 FROM game_masters
+                   WHERE game_masters.room_key = rooms.room_key AND user_id = ?) AS game_master
+         FROM rooms ORDER BY created_at, room_key LIMIT ?`,
+        userId ?? '',
         MAX_LISTED_ROOMS,
       )
       .toArray()
@@ -69,6 +95,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
         name: row.name,
         hasPassword: row.has_password === 1,
         members: row.members,
+        ...(row.game_master === 1 ? { deletable: true } : {}),
       }));
   }
 }

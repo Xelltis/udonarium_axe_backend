@@ -185,6 +185,7 @@ export interface InviteMessage {
  * - unauthorized：アクセストークンが無効か期限切れ、または userId がトークンと違う。トークンを更新してつなぎ直す。
  *   つながったあと、トークンが切れて1分のうちに新しいもの（auth）が届かなかったときも。
  *   トークンを付けずに、ログインした人のユーザー ID（ACCOUNT_USER_ID_PREFIX で始まるもの）を名乗ったときも
+ * - room-deleted：GM が部屋を削除した。部屋はもう無いので、つなぎ直さないこと
  */
 export const ERROR_CODES = [
   'protocol-mismatch',
@@ -196,6 +197,7 @@ export const ERROR_CODES = [
   'too-many-messages',
   'replaced',
   'unauthorized',
+  'room-deleted',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -243,6 +245,11 @@ export interface RoomSummary {
   hasPassword: boolean;
   /** いま入っている人数 */
   members: number;
+  /**
+   * アクセストークンを付けて一覧を取った人が、この部屋の GM なら true（そうでなければ付かない）。
+   * DELETE /v1/rooms/:roomKey で削除できる部屋
+   */
+  deletable?: boolean;
 }
 
 export interface RoomListResponse {

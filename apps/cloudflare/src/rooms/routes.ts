@@ -30,8 +30,11 @@ const randomRoomId = (): string =>
 
 export const roomRoutes = new Hono<AppEnv>();
 
+/** 部屋の一覧。アクセストークンが付いていれば、その人が GM の部屋に deletable を付ける */
 roomRoutes.get('/', async (c) => {
-  const rooms = await c.env.LOBBY.getByName(LOBBY_NAME).list();
+  const login = c.var.config.login;
+  const claims = login ? bearerOf(c, login) : null;
+  const rooms = await c.env.LOBBY.getByName(LOBBY_NAME).list(claims?.uid);
   return c.json<RoomListResponse>({ rooms });
 });
 
@@ -58,6 +61,23 @@ roomRoutes.post('/', async (c) => {
     host: new URL(c.req.url).host,
   });
   return c.json<CreateRoomResponse>({ roomKey, roomId }, 201);
+});
+
+/** 部屋を削除する。その部屋の GM だけが削除でき、入っている人は room-deleted で閉じられる */
+roomRoutes.delete('/:roomKey', async (c) => {
+  const login = c.var.config.login;
+  if (!login) return fail(c, 503, 'login-unavailable');
+  const roomKey = c.req.param('roomKey');
+  if (!ROOM_KEY.test(roomKey)) return fail(c, 400, 'invalid-id');
+  const claims = bearerOf(c, login);
+  if (!claims) return fail(c, 401, 'login-required');
+  if (!(await withinLimits(c, c.env.ROOM_LIMITER, [networkOfRequest(c)]))) {
+    return fail(c, 429, 'rate-limited');
+  }
+  const result = await c.env.ROOMS.getByName(roomKey).deleteRoom(claims.uid);
+  if (result === 'not-found') return fail(c, 404, 'room-not-found');
+  if (result === 'not-game-master') return fail(c, 403, 'not-game-master');
+  return c.body(null, 204);
 });
 
 roomRoutes.get('/:roomKey/ws', async (c) => {
