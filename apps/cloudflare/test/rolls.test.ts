@@ -31,6 +31,9 @@ const prepared = (identifier: string, tab = 'main') =>
     0.5,
     {
       parentIdentifier: tab,
+      // Axe は並びの位置を、発言の attributes ではなく syncData の直下に置く
+      majorIndex: 3,
+      minorIndex: 0.25,
       value: '',
       attributes: { to: '', messColor: '#000000', timestamp: STAMP },
     },
@@ -343,22 +346,61 @@ describe('a rolled result', () => {
   it('stays in place, though the one who rolled it moves it or dates it differently', async () => {
     const clients = await room();
     const original = await rolledIn(clients);
+    const moved = edited(original, original.syncData.value, { disclosedAt: STAMP + 60_000 });
 
     clients.alice.emit([
       {
         eventName: SyncEvent.UPDATE,
-        data: edited(original, original.syncData.value, {
-          minorIndex: 0.99,
-          majorIndex: 999,
-          disclosedAt: STAMP + 60_000,
-        }),
+        data: { ...moved, syncData: { ...moved.syncData, majorIndex: 999, minorIndex: 0.99 } },
       },
     ]);
 
     const [seen] = await clients.bob.events();
-    expect(attributes(seen.data)).not.toHaveProperty('majorIndex');
-    expect(attributes(seen.data)).not.toHaveProperty('minorIndex');
+    const syncData = (seen.data as Message).syncData as Record<string, unknown>;
+    expect([syncData.majorIndex, syncData.minorIndex]).toEqual([3, 0.25]);
     expect(attributes(seen.data)).not.toHaveProperty('disclosedAt');
+  });
+
+  it('gains no place of its own when it was asked for without one', async () => {
+    const clients = await room();
+    const request = rollRequest('placeless', '1d1');
+    const syncData = Object.fromEntries(
+      Object.entries(request.data.message.syncData).filter(
+        ([field]) => field !== 'majorIndex' && field !== 'minorIndex',
+      ),
+    );
+    clients.alice.emit([
+      { ...request, data: { ...request.data, message: { ...request.data.message, syncData } } },
+    ]);
+    const [{ data }] = await clients.alice.events();
+    await clients.bob.events();
+
+    clients.alice.emit([
+      { eventName: SyncEvent.UPDATE, data: edited(data as Message, 'rewritten', {}) },
+    ]);
+
+    const [seen] = await clients.bob.events();
+    expect((seen.data as Message).syncData).not.toHaveProperty('majorIndex');
+  });
+
+  it('moves to the end only as its secret is disclosed', async () => {
+    const clients = await room();
+    const original = await secretIn(clients);
+    const disclosed = edited(original, original.syncData.value, {
+      tag: 'system',
+      disclosedAt: STAMP + 5,
+    });
+
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: { ...disclosed, syncData: { ...disclosed.syncData, majorIndex: 9, minorIndex: 0.5 } },
+      },
+    ]);
+
+    const [seen] = await clients.bob.events();
+    const syncData = (seen.data as Message).syncData as Record<string, unknown>;
+    expect([syncData.majorIndex, syncData.minorIndex]).toEqual([9, 0.5]);
   });
 
   it('is dated near the server’s time, however far the request dates it', async () => {

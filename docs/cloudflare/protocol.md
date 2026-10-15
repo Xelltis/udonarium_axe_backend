@@ -373,7 +373,7 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 - 振れるのは、タブの一覧（`ChatTabList`）の直下にあるタブだけです。ほかのところに置こうとした結果は`invalid`で断ります。見えないところで振り、よい目のときだけ見えるところへ移せないようにするためです。同じ理由で、GMのほかはタブを別の親の下へ移せません。
 - 見学者は、見学者も話せるタブでだけ振れます。
 - 結果の時刻（`timestamp`）は、サーバーの時刻から10分より離れていれば10分のところへ寄せます。手元の時計のずれは許しつつ、行を並びの奥へ埋めさせないためです。
-- サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`disclosedAt`・`majorIndex`・`minorIndex`（並びの位置）・`editHistory`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
+- サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`disclosedAt`（並びの時刻）・`editHistory`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません。`syncData`の直下にある並びの位置（`majorIndex`・`minorIndex`）も同じです（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
 - ただし、振った人（`originFrom`の人）とGMは、シークレットを公開できます。`tag`から`secret`の語を外すこと（`system secret`を`system`に）と、そのときに末尾へ移すこと（`disclosedAt`・`majorIndex`・`minorIndex`。`disclosedAt`はサーバーの時刻のそばへ寄せる）だけを受け付けます。公開すると、伏せて届けていた人にも結果の全体が届きます。
 - 消したことにする印（`pseudoDeletedAt`）を付けられるのはGMだけで、結果の発言そのものを消せるのもGMだけです。結果の入ったタブを消せるのもGMだけで、ほかの人が消そうとすると、その人に見えていたものを`AUTHORITATIVE_OBJECT`で返します。
 - `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。

@@ -289,14 +289,13 @@ const movesTab = (existing: StoredEntry, context: ObjectContext): boolean =>
 const RESERVED_USER_IDS: ReadonlySet<string> = new Set([DICE_BOT_SENDER, 'System']);
 
 /**
- * サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData.value と親のタブも）。
- * 宛先と時刻と並びの位置も守る。守らないと、自分だけに宛てて何度も振り、よい目だけを全員に宛て直したり、
- * 行を好きな位置へ動かしたりできてしまう。並びの位置は、シークレットを公開したときだけ変わってよい
+ * サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData の value と親のタブと並びの
+ * 位置 ROLLED_PLACE も）。宛先と時刻と並びの位置も守る。守らないと、自分だけに宛てて何度も振り、よい目だけを
+ * 全員に宛て直したり、行を好きな位置へ動かしたりできてしまう。並びの位置（disclosedAt と ROLLED_PLACE）は、
+ * シークレットを公開したときだけ変わってよい
  */
 const ROLLED_ATTRIBUTES = [
   'disclosedAt',
-  'majorIndex',
-  'minorIndex',
   'dicebot',
   'tag',
   'name',
@@ -310,6 +309,9 @@ const ROLLED_ATTRIBUTES = [
   'afterWhisperTo',
   'afterWhisperName',
 ];
+
+/** 発言の並びの位置。ObjectNode そのものの SyncVar なので、attributes ではなく syncData の直下にある */
+const ROLLED_PLACE = ['majorIndex', 'minorIndex'];
 
 /** サーバーが振った結果の発言で、GM のほかには書き換えさせない attributes（消したことにする印） */
 const ROLLED_GM_ATTRIBUTES = ['pseudoDeletedAt'];
@@ -1277,15 +1279,15 @@ export class RoomDurableObject extends DurableObject<Env> {
           tag: attributes.tag,
           disclosedAt:
             attributes.disclosedAt === undefined ? undefined : nearNow(attributes.disclosedAt),
-          majorIndex: attributes.majorIndex,
-          minorIndex: attributes.minorIndex,
         }
       : original;
+    const place = disclosed ? context.syncData : stored.syncData;
     const guarded =
       seat.role === 'gm' ? ROLLED_ATTRIBUTES : [...ROLLED_ATTRIBUTES, ...ROLLED_GM_ATTRIBUTES];
     const changed =
       context.syncData.value !== stored.syncData.value ||
       context.syncData.parentIdentifier !== stored.syncData.parentIdentifier ||
+      ROLLED_PLACE.some((field) => context.syncData[field] !== place[field]) ||
       guarded.some((field) => attributes[field] !== kept[field]);
     if (!changed) return context;
     // 元の発言に無かった項目は、undefined を置かずに外す（MessagePack では null になって届く）
@@ -1294,8 +1296,12 @@ export class RoomDurableObject extends DurableObject<Env> {
     );
     for (const field of guarded) if (kept[field] !== undefined) restored[field] = kept[field];
     const syncData = Object.fromEntries(
-      Object.entries(context.syncData).filter(([field]) => field !== 'parentIdentifier'),
+      Object.entries(context.syncData).filter(
+        ([field]) => field !== 'parentIdentifier' && !ROLLED_PLACE.includes(field),
+      ),
     );
+    for (const field of ROLLED_PLACE)
+      if (place[field] !== undefined) syncData[field] = place[field];
     // 振った結果は、タブの一覧の直下のタブにしか置かない
     syncData.parentIdentifier = stored.syncData.parentIdentifier;
     return {
