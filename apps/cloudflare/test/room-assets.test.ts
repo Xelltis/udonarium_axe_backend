@@ -186,4 +186,26 @@ describe('the lobby’s view of which rooms are still there', () => {
     expect(await lobby.known([roomKey, 'f'.repeat(32)])).toEqual([roomKey]);
     expect(await lobby.known([])).toEqual([]);
   });
+
+  it('answers for more rooms than one statement can name', async () => {
+    const lobby = env.LOBBY.getByName('lobby');
+    const keys = Array.from({ length: 250 }, (_, i) => `known-${String(i).padStart(3, '0')}`);
+    await runInDurableObject(lobby, (_instance, state) => {
+      for (const key of keys) {
+        state.storage.sql.exec(
+          `INSERT INTO rooms (room_key, room_id, name, has_password, members, created_at)
+           VALUES (?, 'abc', 'r', 0, 0, 0)`,
+          key,
+        );
+      }
+    });
+
+    try {
+      expect(await lobby.known([...keys, 'f'.repeat(32)])).toEqual(keys);
+    } finally {
+      await runInDurableObject(lobby, (_instance, state) => {
+        state.storage.sql.exec("DELETE FROM rooms WHERE room_key LIKE 'known-%'");
+      });
+    }
+  });
 });

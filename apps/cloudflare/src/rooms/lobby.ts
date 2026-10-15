@@ -8,6 +8,9 @@ export const LOBBY_NAME = 'lobby';
 /** 一覧で返す部屋の数の上限 */
 const MAX_LISTED_ROOMS = 1000;
 
+/** 1つの文で束ねられる値の数。Durable Objects の SQLite は 100 まで */
+const MAX_BINDINGS = 100;
+
 interface RoomRow extends Record<string, SqlStorageValue> {
   room_key: string;
   room_id: string;
@@ -77,16 +80,23 @@ export class LobbyDurableObject extends DurableObject<Env> {
     this.ctx.storage.sql.exec('DELETE FROM game_masters WHERE room_key = ?', roomKey);
   }
 
-  /** 渡した鍵のうち、一覧にある部屋のもの。部屋がもう無いアセットを掃除するときに使う */
+  /**
+   * 渡した鍵のうち、一覧にある部屋のもの。部屋がもう無いアセットを掃除するときに使う。
+   * 1ページに並ぶ部屋は 100 を超えうるので、MAX_BINDINGS ずつに分けて尋ねる
+   */
   known(roomKeys: string[]): string[] {
-    if (roomKeys.length === 0) return [];
-    return this.ctx.storage.sql
-      .exec<{ room_key: string }>(
-        `SELECT room_key FROM rooms WHERE room_key IN (${roomKeys.map(() => '?').join(', ')})`,
-        ...roomKeys,
-      )
-      .toArray()
-      .map((row) => row.room_key);
+    const found: string[] = [];
+    for (let start = 0; start < roomKeys.length; start += MAX_BINDINGS) {
+      const part = roomKeys.slice(start, start + MAX_BINDINGS);
+      const rows = this.ctx.storage.sql
+        .exec<{ room_key: string }>(
+          `SELECT room_key FROM rooms WHERE room_key IN (${part.map(() => '?').join(', ')})`,
+          ...part,
+        )
+        .toArray();
+      found.push(...rows.map((row) => row.room_key));
+    }
+    return found;
   }
 
   /** 作られた順。userId を渡せば、その人が GM の部屋に deletable を付ける */
