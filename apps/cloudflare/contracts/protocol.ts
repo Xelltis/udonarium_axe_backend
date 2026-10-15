@@ -63,10 +63,18 @@ export const ACCOUNT_USER_ID_PREFIX = 'acct_';
 export const ROOM_PEER_ID_PATTERN = /^(\w{6})\w{3}\w{8}-(?:\w{7})?$/;
 
 /**
- * オブジェクトの版（majorVersion と minorVersion）の上限。これより大きい版の UPDATE は受けない。
+ * オブジェクトの majorVersion の上限。これより大きい版の UPDATE は受けない。
  * 版は書くたびに 1 足すので、大きすぎると足しても変わらず、だれも書き換えられなくなる
  */
 export const MAX_OBJECT_VERSION = 2 ** 50;
+
+/**
+ * 1つの書き込みで majorVersion を上げてよい幅。初めて置くものは、この値まで。Axe は書くたびに 1 足すので、
+ * 届かなかった書き込みがあってもこの幅には届かない。大きく跳ばさせると、上限まで上げて、だれにも書き換え
+ * られなくできる。minorVersion は -1 より大きく 1 より小さい（Axe は 0 以上 1 未満の乱数を付け、伏せた形には
+ * サーバーが -0.5 を付けることがある）
+ */
+export const MAX_VERSION_STEP = 2 ** 20;
 
 /** Axe のチャットのタブをまとめる親の識別子。タブはこの直下に置く */
 export const CHAT_TAB_LIST_IDENTIFIER = 'ChatTabList';

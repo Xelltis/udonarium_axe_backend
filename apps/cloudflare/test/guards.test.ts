@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthorityEvent,
   MAX_OBJECT_VERSION,
+  MAX_VERSION_STEP,
   MAX_ROLLS_PER_WINDOW,
   SyncEvent,
   toBase62,
@@ -66,6 +67,41 @@ describe('versions', () => {
     alice.client.emit([update(contextOf('frozen', MAX_OBJECT_VERSION * 2, 0.5))]);
 
     await bob.client.expectQuiet();
+  });
+
+  it('takes no version below zero, nor a minor version outside the range Axe gives it', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+    await alice.client.next('join');
+
+    alice.client.emit([
+      update(contextOf('sunk', -(2 ** 60), 0.5)),
+      update(contextOf('wide', 1, 2 ** 50)),
+      update(contextOf('deep', 1, -2)),
+    ]);
+
+    await bob.client.expectQuiet();
+  });
+
+  it('lets no write raise the version further than writing one at a time ever could', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+    await alice.client.next('join');
+
+    alice.client.emit([update(contextOf('leapt', MAX_VERSION_STEP + 1, 0.5))]);
+    alice.client.emit([update(contextOf('climbing', 1, 0.5))]);
+    expect(
+      (await bob.client.events()).map(({ data }) => (data as ObjectContext).identifier),
+    ).toEqual(['climbing']);
+
+    alice.client.emit([update(contextOf('climbing', MAX_VERSION_STEP + 2, 0.5))]);
+    await bob.client.expectQuiet();
+    alice.client.emit([update(contextOf('climbing', MAX_VERSION_STEP + 1, 0.5))]);
+    expect(
+      (await bob.client.events()).map(({ data }) => (data as ObjectContext).majorVersion),
+    ).toEqual([MAX_VERSION_STEP + 1]);
   });
 });
 

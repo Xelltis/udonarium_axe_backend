@@ -2,10 +2,13 @@ import {
   array,
   custom,
   finite,
+  gtValue,
   literal,
+  ltValue,
   maxLength,
   maxValue,
   minLength,
+  minValue,
   nullish,
   number,
   object,
@@ -71,9 +74,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const objectContextSchema = object({
   aliasName: pipe(string(), maxLength(128)),
   identifier: identifierSchema,
-  // 大きすぎる版は、あとから +1 しても変わらず、だれも書き換えられなくなる
-  majorVersion: pipe(number(), finite(), maxValue(MAX_OBJECT_VERSION)),
-  minorVersion: pipe(number(), finite(), maxValue(MAX_OBJECT_VERSION)),
+  // 大きすぎる版は、あとから +1 しても変わらず、だれも書き換えられなくなる。負の版も +1 で追い越せない
+  majorVersion: pipe(number(), finite(), minValue(0), maxValue(MAX_OBJECT_VERSION)),
+  minorVersion: pipe(number(), finite(), gtValue(-1), ltValue(1)),
   // 中身は読まないので、写さずにそのまま持つ
   syncData: custom<Record<string, unknown>>(isRecord),
 });

@@ -1,7 +1,12 @@
 import { runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../contracts/protocol';
+import {
+  AUTHORITY_PEER_ID,
+  AuthorityEvent,
+  MAX_VERSION_STEP,
+  SyncEvent,
+} from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import {
   chatTabList,
@@ -194,6 +199,25 @@ describe('rolling on the server', () => {
     expect(told).toEqual([
       { identifier: 'added', reason: 'invalid' },
       { identifier: 'long', reason: 'invalid' },
+    ]);
+  });
+
+  it('rolls nothing whose line comes with a version no line of Axe starts at', async () => {
+    const { alice } = await room();
+    const request = rollRequest('leapt', '1d1');
+
+    alice.emit([
+      {
+        ...request,
+        data: {
+          ...request.data,
+          message: { ...request.data.message, majorVersion: MAX_VERSION_STEP + 1 },
+        },
+      },
+    ]);
+
+    expect((await alice.events()).map((event) => event.data)).toEqual([
+      { identifier: 'leapt', reason: 'invalid' },
     ]);
   });
 

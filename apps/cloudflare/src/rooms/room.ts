@@ -16,6 +16,7 @@ import {
   DICE_BOT_SENDER,
   MAX_MEMBERS,
   MAX_ROLLS_PER_WINDOW,
+  MAX_VERSION_STEP,
   PEER_CURSOR_ALIAS,
   PEER_ID_USER_DIGEST_LENGTH,
   PING,
@@ -1094,8 +1095,13 @@ export class RoomDurableObject extends DurableObject<Env> {
     // 置いてあるものの種類は変えさせない。カーソルを名乗って、ほかのものを上書きさせないため
     const existing = this.store.entryOf(identifier);
     if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
-    // 大きすぎる見え方の手がかりは、索引にも SQLite の1行にも置けない。新しいものは数も絞る
-    if (!fitsIndex(context) || (!existing && this.store.size >= MAX_OBJECTS))
+    // 大きすぎる見え方の手がかりは、索引にも SQLite の1行にも置けない。新しいものは数も絞る。版を一度に
+    // 大きく跳ばさせない
+    if (
+      !fitsIndex(context) ||
+      (!existing && this.store.size >= MAX_OBJECTS) ||
+      context.majorVersion > (existing?.majorVersion ?? 0) + MAX_VERSION_STEP
+    )
       return this.refuseWrite(identifier, seat, reply);
 
     const seen = this.kindOf(identifier, seat);
@@ -1384,6 +1390,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (
       message.aliasName !== CHAT_MESSAGE_ALIAS ||
       !fitsIndex(message) ||
+      message.majorVersion > MAX_VERSION_STEP ||
       this.store.size >= MAX_OBJECTS ||
       !this.isListedTab(String(message.syncData.parentIdentifier ?? ''))
     ) {
