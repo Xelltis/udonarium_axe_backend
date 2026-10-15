@@ -168,6 +168,24 @@ describe('deleting a room', () => {
     expect(await res.json()).toEqual({ error: 'login-unavailable' });
   });
 
+  it('takes nobody in and hands out nothing while it is being deleted', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    const late = await connect(roomKey);
+    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
+      (instance as unknown as { wiping: boolean }).wiping = true;
+    });
+
+    late.hello('late');
+    gm.client.send({ type: 'asset-token' });
+
+    expect((await late.next('error')).code).toBe('room-not-found');
+    expect((await gm.client.next('error')).code).toBe('room-deleted');
+    expect((await upgrade(roomKey)).status).toBe(404);
+    expect(await stubOf(roomKey).canUpload('user-gm')).toBe('room-not-found');
+    expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(404);
+  });
+
   it('tells nothing to a socket already counted as gone', async () => {
     const roomKey = await createRoom({}, 'gm');
     const gm = await join(roomKey, 'gm');

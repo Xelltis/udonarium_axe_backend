@@ -156,6 +156,11 @@ export const putRoomAsset = async (c: Context<AppEnv>) => {
   const key = roomAssetKey(roomKey, id);
   if (await c.env.ASSETS.head(key)) return c.json({ id, status: 'exists' }, 200);
 
+  // トークンは15分使えるので、いまも部屋があり、その人が置ける役割かを部屋に尋ねる
+  const allowed = await c.env.ROOMS.getByName(roomKey).canUpload(claims.uid);
+  if (allowed === 'room-not-found') return fail(c, 404, 'room-not-found');
+  if (allowed === 'not-a-player') return fail(c, 403, 'not-a-player');
+
   // IPv6 は /64 ごとに数える。アドレスを替えるだけでは増やせない
   if (!(await withinLimits(c, c.env.UPLOAD_LIMITER, [networkOfRequest(c)]))) {
     return fail(c, 429, 'rate-limited');

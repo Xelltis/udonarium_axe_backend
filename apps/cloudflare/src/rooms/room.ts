@@ -293,6 +293,11 @@ export class RoomDurableObject extends DurableObject<Env> {
   private readonly connectedAt = new WeakMap<WebSocket, number>();
   /** 振るのを待っているダイスの数 */
   private pendingRolls = 0;
+  /**
+   * 部屋を消している最中。消すあいだに一覧や R2 を待つので、そのあいだに来たものを受けないための印。
+   * 消し終われば部屋の行も無くなるので、メモリだけに置けばよい
+   */
+  private wiping = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -358,7 +363,7 @@ export class RoomDurableObject extends DurableObject<Env> {
    */
   async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const room = this.room();
-    if (!room) return 'not-found';
+    if (!room || this.wiping) return 'not-found';
     const known = this.ctx.storage.sql
       .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
       .toArray()[0];
@@ -382,9 +387,22 @@ export class RoomDurableObject extends DurableObject<Env> {
     return 'deleted';
   }
 
+  /**
+   * アセットを置こうとしている人が、いまもこの部屋で置ける役割（GM か PL）か。アセットの PUT から尋ねる。
+   * トークンは15分使えるので、そのあいだに部屋が消えたり、見学に変えられたりしていれば断る
+   */
+  canUpload(userId: string): 'ok' | 'room-not-found' | 'not-a-player' {
+    if (this.wiping || !this.room()) return 'room-not-found';
+    const known = this.ctx.storage.sql
+      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
+      .toArray()[0];
+    return known?.role === 'gm' || known?.role === 'pl' ? 'ok' : 'not-a-player';
+  }
+
   /** WebSocket の接続を受ける。Worker が Origin とレート制限を確かめてから回してくる */
   override async fetch(): Promise<Response> {
-    if (!this.room()) return Response.json({ error: 'room-not-found' }, { status: 404 });
+    if (this.wiping || !this.room())
+      return Response.json({ error: 'room-not-found' }, { status: 404 });
     this.closeSilentSockets();
     const open = this.ctx
       .getWebSockets()
@@ -430,6 +448,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     this.expireSeats();
     const seat = seatOf(ws);
     if (seat?.closed || this.refused.has(ws)) return;
+    // 消しているあいだに届いたものは受けない（席を作らせず、トークンも渡し直さない）
+    if (this.wiping) return this.refuse(ws, seat ? 'room-deleted' : 'room-not-found');
     if (!this.withinRate(ws)) return this.refuse(ws, 'too-many-messages');
 
     let decoded: unknown;
@@ -499,6 +519,7 @@ export class RoomDurableObject extends DurableObject<Env> {
    * 部屋が一覧に無いので、アップロードのついでの掃除が拾う
    */
   private async wipe(roomKey: string | null): Promise<void> {
+    this.wiping = true;
     if (roomKey) {
       await this.lobby().remove(roomKey);
       await deleteRoomAssets(this.env.ASSETS, roomKey).catch((err: unknown) =>
@@ -510,6 +531,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     this.storeCache = null;
     await this.ctx.storage.deleteAll();
     await this.ctx.storage.deleteAlarm();
+    this.wiping = false;
   }
 
   // ---- 入退室 ----
@@ -616,7 +638,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (!secret)
       return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
     const assetToken = signToken<'asset'>(
-      { aud: 'asset', room: seat.roomKey, role: seat.role },
+      { aud: 'asset', room: seat.roomKey, role: seat.role, uid: seat.userId },
       ASSET_TOKEN_SECONDS,
       secret,
     );

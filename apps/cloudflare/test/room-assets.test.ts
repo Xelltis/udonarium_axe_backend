@@ -17,8 +17,8 @@ afterEach(() => {
 
 const claimsOf = (token: string) => readToken(token, 'asset', SESSION_SECRET);
 
-/** 部屋のアセットを、そのトークンで置く */
-const putIn = async (roomKey: string, token: string) => {
+/** 部屋のアセットを、そのトークンで置こうとする */
+const tryPut = async (roomKey: string, token: string) => {
   const { file, id } = await freshFile(PNG_HEAD, 128);
   const res = await exports.default.fetch(
     new Request(`${ROOMS}/${roomKey}/assets/${id}`, {
@@ -32,6 +32,12 @@ const putIn = async (roomKey: string, token: string) => {
       },
     }),
   );
+  return { res, id };
+};
+
+/** 部屋のアセットを、そのトークンで置く */
+const putIn = async (roomKey: string, token: string) => {
+  const { res, id } = await tryPut(roomKey, token);
   expect(res.status).toBe(201);
   return id;
 };
@@ -81,6 +87,31 @@ describe('the asset token a room hands its seats', () => {
     const id = await putIn(roomKey, welcome.assetToken);
 
     expect(await env.ASSETS.head(roomAssetKey(roomKey, id))).not.toBeNull();
+  });
+
+  it('puts nothing up for a seat made a guest, whatever its token says', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    const pl = await join(roomKey, 'pl');
+    gm.client.emit([{ eventName: 'ROLE_REQUEST', data: { peerId: 'pl', role: 'guest' } }]);
+    await pl.client.next('asset-token');
+
+    const { res } = await tryPut(roomKey, pl.welcome.assetToken);
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'not-a-player' });
+  });
+
+  it('puts nothing up once the room is gone, whatever the token says', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const { welcome } = await join(roomKey, 'gm');
+    await stubOf(roomKey).deleteRoom('user-gm');
+
+    const { res, id } = await tryPut(roomKey, welcome.assetToken);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'room-not-found' });
+    expect(await env.ASSETS.head(roomAssetKey(roomKey, id))).toBeNull();
   });
 });
 

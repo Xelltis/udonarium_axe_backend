@@ -63,6 +63,8 @@ const claimSchemas = {
     aud: literal('asset'),
     room: string(),
     role: picklist(PEER_ROLES),
+    /** 席のユーザー ID。置くときに、その人がいまも置ける役割かを部屋に尋ねる */
+    uid: string(),
     exp: number(),
   }),
 } satisfies Record<string, GenericSchema>;

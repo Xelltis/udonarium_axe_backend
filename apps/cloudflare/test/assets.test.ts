@@ -1,6 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { roomAssetKey } from '../src/assets/keys';
 import { MAX_BYTES } from '../src/assets/routes';
@@ -19,10 +19,13 @@ import {
   fileOf,
   freshFile,
   freshIp,
+  prepareAssetRooms,
   put,
   sha256Hex,
   storedKeyOf,
 } from './helpers';
+
+beforeAll(prepareAssetRooms);
 
 // 部屋のアセット。置き場所は部屋ごとに分かれ、読むのも置くのも、部屋のサーバーが席に渡した
 // トークンを持つ人だけ。置けるのは GM と PL
