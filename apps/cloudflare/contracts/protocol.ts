@@ -428,7 +428,10 @@ export const MAX_ROLL_COMMAND_LENGTH = 4000;
 /** RollRequest の suffix に入れる名前の最長（文字数） */
 export const MAX_ROLL_TARGET_NAME_LENGTH = 128;
 
-/** 1つの接続が10秒のあいだに頼めるダイスの数。超えたものは rate-limited で断る */
+/** 1つの接続について、送れるものや頼めるダイスを数える窓の長さ（秒）。つないだ時からこの長さごとに数え直す */
+export const RATE_WINDOW_SECONDS = 10;
+
+/** 1つの接続が RATE_WINDOW_SECONDS のあいだに頼めるダイスの数。超えたものは rate-limited で断る */
 export const MAX_ROLLS_PER_WINDOW = 20;
 
 /**

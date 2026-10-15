@@ -17,6 +17,7 @@ import {
   PING,
   PONG,
   PROTOCOL_VERSION,
+  RATE_WINDOW_SECONDS,
   SERVER_ROLL_FIELD,
   SyncEvent,
   judgeUpdate,
@@ -73,7 +74,7 @@ export const FLUSH_DELAY_MS = 1000;
 export const FLUSH_TALLY_MS = 60_000;
 
 /** 1つの接続が RATE_WINDOW_MS のあいだに送れるフレームの数。超えたら切る */
-export const RATE_WINDOW_MS = 10_000;
+export const RATE_WINDOW_MS = RATE_WINDOW_SECONDS * 1000;
 export const MAX_FRAMES_PER_WINDOW = 2000;
 
 /**
