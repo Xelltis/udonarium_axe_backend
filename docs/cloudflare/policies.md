@@ -49,6 +49,10 @@ npx wrangler r2 object delete <Workerの名前>-assets/<SHA-256> --remote
 npx wrangler r2 object put <Workerの名前>-assets/blocked/<SHA-256> --file empty --remote
 ```
 
+4. 独自ドメインでWorkerを動かしているなら、Cloudflareのダッシュボードの「キャッシュを削除」で、その画像のURLを消します。
+   Workerは、一度配った画像を各地のキャッシュに置いて、最大7日そこから配ります。消さないと、そのあいだ配り続けます。
+   すでに受け取ったブラウザの手元にあるものは、こちらからは消せません。
+
 印を置いたものを誰かがまた上げようとすると、`451 blocked`で断ります。
 印は、保持期間の掃除でも消えません。
 同じ画像でも、1バイトでも違えば名前（SHA-256）が変わるので、別のものとして置けてしまいます。
