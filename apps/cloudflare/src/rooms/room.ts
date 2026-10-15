@@ -99,15 +99,22 @@ export const HELLO_TIMEOUT_MS = 10_000;
 /** 1つの接続が RATE_WINDOW_MS のあいだに送れるイベントの数。1つのフレームに多くのイベントを詰めても数える */
 export const MAX_EVENTS_PER_WINDOW = 20_000;
 
-/** 振った結果の時刻を、サーバーの時刻からどこまで離してよいか（ミリ秒）。手元の時計のずれは許す */
+/** 振った結果の時刻を、サーバーの時刻よりどこまで前にしてよいか（ミリ秒）。手元の時計のずれは許す */
 export const ROLL_TIME_TOLERANCE_MS = 10 * 60 * 1000;
 
-/** 時刻を、今から ROLL_TIME_TOLERANCE_MS のうちに寄せる。数でなければ今 */
-const nearNow = (timestamp: unknown): number => {
+/**
+ * 時刻を、今から ROLL_TIME_TOLERANCE_MS より前へはずらさせない。数でなければ今。先へは寄せない。
+ * Axe は次の発言をタブの最後の行より後ろに置くので、先の時刻の行があるタブでは、結果もその後ろに来る
+ */
+const notLongAgo = (timestamp: unknown): number => {
   const now = Date.now();
   if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return now;
-  return Math.min(Math.max(timestamp, now - ROLL_TIME_TOLERANCE_MS), now + ROLL_TIME_TOLERANCE_MS);
+  return Math.max(timestamp, now - ROLL_TIME_TOLERANCE_MS);
 };
+
+/** 並びの位置の端数。Axe は 0 以上 1 未満を付ける。その外のものと数でないものは 0 */
+const indexFraction = (value: unknown): number =>
+  typeof value === 'number' && value >= 0 && value < 1 ? value : 0;
 
 /** 部屋を消しきれなかったとき、もう一度消しにくるまでの時間（ミリ秒） */
 export const WIPE_RETRY_MS = 60_000;
@@ -305,10 +312,45 @@ const ROLLED_ATTRIBUTES = [
   'to',
   'timestamp',
   'editHistory',
+  'fixd',
+  'stamp',
+  'attachmentImageIdentifiers',
+  'replyTo',
+  'quoteOf',
   'afterWhisperAt',
   'afterWhisperTo',
   'afterWhisperName',
 ];
+
+/**
+ * 振った結果に、頼んだ人が付けてきても持ち込ませない attributes と、その代わりに置く値（undefined は外す）。
+ * 本文のほかに見えるもの（スタンプ・添付の画像・返信や引用）、手を加えた印、並びの位置と、後からだけ
+ * 付く印。Axe が結果に付けるのは、どれも既定の値だけ
+ */
+const ROLL_NEUTRAL_ATTRIBUTES: Readonly<Record<string, unknown>> = {
+  stamp: '',
+  attachmentImageIdentifiers: '',
+  replyTo: '',
+  quoteOf: '',
+  fixd: false,
+  editHistory: undefined,
+  disclosedAt: undefined,
+  pseudoDeletedAt: undefined,
+  afterWhisperAt: undefined,
+  afterWhisperTo: undefined,
+  afterWhisperName: undefined,
+};
+
+/** 頼まれた結果の attributes から、持ち込ませないものを既定の値にする。もとから無いものは足さない */
+const neutralRollAttributes = (attributes: Record<string, unknown>): Record<string, unknown> => {
+  const kept: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(attributes)) {
+    if (!(field in ROLL_NEUTRAL_ATTRIBUTES)) kept[field] = value;
+    else if (ROLL_NEUTRAL_ATTRIBUTES[field] !== undefined)
+      kept[field] = ROLL_NEUTRAL_ATTRIBUTES[field];
+  }
+  return kept;
+};
 
 /** 発言の並びの位置。ObjectNode そのものの SyncVar なので、attributes ではなく syncData の直下にある */
 const ROLLED_PLACE = ['majorIndex', 'minorIndex'];
@@ -1272,16 +1314,22 @@ export class RoomDurableObject extends DurableObject<Env> {
     const disclosed =
       (original.originFrom === seat.userId || seat.role === 'gm') &&
       isDisclosureOf(original.tag, attributes.tag);
-    // 公開した行は末尾へ移る（Axe の discloseMessage）。時刻は今のそばに寄せる
+    // 公開した行は末尾へ移る（Axe の discloseMessage）。時刻は遠い過去へずらさせず、並びの位置は
+    // 端数だけ受ける
     const kept = disclosed
       ? {
           ...original,
           tag: attributes.tag,
           disclosedAt:
-            attributes.disclosedAt === undefined ? undefined : nearNow(attributes.disclosedAt),
+            attributes.disclosedAt === undefined ? undefined : notLongAgo(attributes.disclosedAt),
         }
       : original;
-    const place = disclosed ? context.syncData : stored.syncData;
+    const place = disclosed
+      ? {
+          majorIndex: stored.syncData.majorIndex,
+          minorIndex: indexFraction(context.syncData.minorIndex),
+        }
+      : stored.syncData;
     const guarded =
       seat.role === 'gm' ? ROLLED_ATTRIBUTES : [...ROLLED_ATTRIBUTES, ...ROLLED_GM_ATTRIBUTES];
     const changed =
@@ -1363,11 +1411,18 @@ export class RoomDurableObject extends DurableObject<Env> {
           this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
         if (taken) return;
         if (!rolled) return reject(message.identifier, 'not-a-command');
-        // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる
+        // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる。並びの位置は
+        // 頼まれたタブの中の端数だけ受け、頼んだ人が足した飾りや印は外す
         const result = withAttributes(
           {
             ...message,
-            syncData: { ...message.syncData, value: `${rolled.text}${request.suffix ?? ''}` },
+            syncData: {
+              ...message.syncData,
+              value: `${rolled.text}${request.suffix ?? ''}`,
+              majorIndex: 0,
+              minorIndex: indexFraction(message.syncData.minorIndex),
+              attributes: neutralRollAttributes(attributesOf(message)),
+            },
           },
           {
             dicebot: rolled.dicebot,
@@ -1377,8 +1432,8 @@ export class RoomDurableObject extends DurableObject<Env> {
               : `<BCDice：${request.speaker}>`,
             from: DICE_BOT_SENDER,
             originFrom: seat.userId,
-            // 頼んだ人の時刻は、遠い過去や未来にずらして並びの奥へ埋めさせないよう、今のそばに寄せる
-            timestamp: nearNow(attributesOf(message).timestamp),
+            // 頼んだ人の時刻は、遠い過去にずらして並びの奥へ埋めさせない
+            timestamp: notLongAgo(attributesOf(message).timestamp),
             [SERVER_ROLL_FIELD]: true,
           },
         );

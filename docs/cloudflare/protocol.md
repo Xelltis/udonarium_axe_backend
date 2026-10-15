@@ -372,9 +372,11 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 
 - 振れるのは、タブの一覧（`ChatTabList`）の直下にあるタブだけです。ほかのところに置こうとした結果は`invalid`で断ります。見えないところで振り、よい目のときだけ見えるところへ移せないようにするためです。同じ理由で、GMのほかはタブを別の親の下へ移せません。
 - 見学者は、見学者も話せるタブでだけ振れます。
-- 結果の時刻（`timestamp`）は、サーバーの時刻から10分より離れていれば10分のところへ寄せます。手元の時計のずれは許しつつ、行を並びの奥へ埋めさせないためです。
-- サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`disclosedAt`（並びの時刻）・`editHistory`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません。`syncData`の直下にある並びの位置（`majorIndex`・`minorIndex`）も同じです（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
-- ただし、振った人（`originFrom`の人）とGMは、シークレットを公開できます。`tag`から`secret`の語を外すこと（`system secret`を`system`に）と、そのときに末尾へ移すこと（`disclosedAt`・`majorIndex`・`minorIndex`。`disclosedAt`はサーバーの時刻のそばへ寄せる）だけを受け付けます。公開すると、伏せて届けていた人にも結果の全体が届きます。
+- 結果の時刻（`timestamp`）は、サーバーの時刻より10分以上前なら、10分前のところへ寄せます。手元の時計のずれは許しつつ、行を並びの奥へ埋めさせないためです。先の時刻は寄せません。Axeは次の発言をタブの最後の行より後ろの時刻に置くので、先の時刻の行があるタブでも、結果は頼んだ発言のすぐ後ろに並びます。
+- 並びの位置は、`majorIndex`を0にし、`minorIndex`は0以上1未満のときだけ受けます（その外なら0）。Axeが発言に付けるのはこの範囲だけです。
+- 頼んだ結果に付いてきた飾りと印は持ち込みません。`stamp`・`attachmentImageIdentifiers`・`replyTo`・`quoteOf`は空に、`fixd`は`false`にし、`editHistory`・`disclosedAt`・`pseudoDeletedAt`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`は外します。
+- サーバーが振った発言は、あとから`value`、親のタブ（`parentIdentifier`）、`attributes`の`dicebot`・`tag`・`name`・`from`・`originFrom`・`serverRoll`・`to`（宛先）・`timestamp`（時刻）・`disclosedAt`（並びの時刻）・`editHistory`・`fixd`・`stamp`・`attachmentImageIdentifiers`・`replyTo`・`quoteOf`・`afterWhisperAt`・`afterWhisperTo`・`afterWhisperName`を書き換えられません。`syncData`の直下にある並びの位置（`majorIndex`・`minorIndex`）も同じです（ほかの項目は書き換えられる）。書き換えて送ってきたら、元に戻したものを`AUTHORITATIVE_OBJECT`で返します。
+- ただし、振った人（`originFrom`の人）とGMは、シークレットを公開できます。`tag`から`secret`の語を外すこと（`system secret`を`system`に）と、そのときに末尾へ移すこと（`disclosedAt`と`minorIndex`。`disclosedAt`は10分以上前なら10分前へ寄せ、`minorIndex`は0以上1未満だけを受ける）だけを受け付けます。公開すると、伏せて届けていた人にも結果の全体が届きます。
 - 消したことにする印（`pseudoDeletedAt`）を付けられるのはGMだけで、結果の発言そのものを消せるのもGMだけです。結果の入ったタブを消せるのもGMだけで、ほかの人が消そうとすると、その人に見えていたものを`AUTHORITATIVE_OBJECT`で返します。
 - `serverRoll`は、サーバーが振った発言にしか付きません。クライアントが付けて送ってきても外します。Axeはこれを見て、サーバーで振った結果だとわかるように見せられます。
 - ダイス表やリソースの操作は、これまでどおりAxeが手元で処理します。

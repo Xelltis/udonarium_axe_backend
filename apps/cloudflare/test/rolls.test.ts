@@ -17,7 +17,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 頼むときの時刻。サーバーは、今から大きく離れた時刻を今のそばへ寄せる */
+/** 頼むときの時刻。サーバーは、今より大きく前の時刻を今のそばへ寄せる */
 const STAMP = Date.now();
 
 /**
@@ -31,8 +31,8 @@ const prepared = (identifier: string, tab = 'main') =>
     0.5,
     {
       parentIdentifier: tab,
-      // Axe は並びの位置を、発言の attributes ではなく syncData の直下に置く
-      majorIndex: 3,
+      // Axe は並びの位置を、発言の attributes ではなく syncData の直下に置く。発言の majorIndex は 0
+      majorIndex: 0,
       minorIndex: 0.25,
       value: '',
       attributes: { to: '', messColor: '#000000', timestamp: STAMP },
@@ -280,6 +280,11 @@ describe('a rolled result', () => {
         data: edited(original, 'DiceBot : (1D1) → 6', {
           tag: 'system',
           name: 'x',
+          stamp: 'img:a-picture',
+          attachmentImageIdentifiers: 'a-picture',
+          replyTo: 'another-line',
+          quoteOf: 'another-line',
+          fixd: true,
           bookmarkedAt: 5,
         }),
       },
@@ -357,30 +362,99 @@ describe('a rolled result', () => {
 
     const [seen] = await clients.bob.events();
     const syncData = (seen.data as Message).syncData as Record<string, unknown>;
-    expect([syncData.majorIndex, syncData.minorIndex]).toEqual([3, 0.25]);
+    expect([syncData.majorIndex, syncData.minorIndex]).toEqual([0, 0.25]);
     expect(attributes(seen.data)).not.toHaveProperty('disclosedAt');
   });
 
-  it('gains no place of its own when it was asked for without one', async () => {
+  it('takes no place in the tab but the fraction Axe gives a line, whatever the request asks', async () => {
     const clients = await room();
-    const request = rollRequest('placeless', '1d1');
-    const syncData = Object.fromEntries(
-      Object.entries(request.data.message.syncData).filter(
-        ([field]) => field !== 'majorIndex' && field !== 'minorIndex',
-      ),
-    );
+    const asked = (identifier: string, place: Record<string, unknown>) => {
+      const request = rollRequest(identifier, '1d1');
+      const syncData = Object.fromEntries(
+        Object.entries(request.data.message.syncData).filter(
+          ([field]) => field !== 'majorIndex' && field !== 'minorIndex',
+        ),
+      );
+      return {
+        ...request,
+        data: {
+          ...request.data,
+          message: { ...request.data.message, syncData: { ...syncData, ...place } },
+        },
+      };
+    };
+
     clients.alice.emit([
-      { ...request, data: { ...request.data, message: { ...request.data.message, syncData } } },
+      asked('placeless', {}),
+      asked('buried', { majorIndex: -1e12, minorIndex: -1e12 }),
+      asked('raised', { majorIndex: 1e12, minorIndex: 1 }),
     ]);
+
+    const places = [];
+    for (let i = 0; i < 3; i++) {
+      const [{ data }] = await clients.alice.events();
+      const syncData = (data as Message).syncData as Record<string, unknown>;
+      places.push([syncData.majorIndex, syncData.minorIndex]);
+    }
+    expect(places).toEqual([
+      [0, 0],
+      [0, 0],
+      [0, 0],
+    ]);
+  });
+
+  it('brings in none of the decorations or marks its request carries', async () => {
+    const clients = await room();
+    const request = rollRequest('decorated', '1d1');
+    const message = request.data.message;
+
+    clients.alice.emit([
+      {
+        ...request,
+        data: {
+          ...request.data,
+          message: {
+            ...message,
+            syncData: {
+              ...message.syncData,
+              attributes: {
+                ...attributes(message),
+                stamp: 'img:a-picture',
+                attachmentImageIdentifiers: 'a-picture',
+                replyTo: 'another-line',
+                quoteOf: 'another-line',
+                fixd: true,
+                editHistory: '6',
+                disclosedAt: 1,
+                pseudoDeletedAt: 5,
+                afterWhisperAt: 3,
+                afterWhisperTo: 'user-bob',
+                afterWhisperName: 'Bob',
+              },
+            },
+          },
+        },
+      },
+    ]);
+
     const [{ data }] = await clients.alice.events();
-    await clients.bob.events();
-
-    clients.alice.emit([
-      { eventName: SyncEvent.UPDATE, data: edited(data as Message, 'rewritten', {}) },
-    ]);
-
-    const [seen] = await clients.bob.events();
-    expect((seen.data as Message).syncData).not.toHaveProperty('majorIndex');
+    const brought = attributes(data);
+    expect(brought).toMatchObject({
+      stamp: '',
+      attachmentImageIdentifiers: '',
+      replyTo: '',
+      quoteOf: '',
+      fixd: false,
+    });
+    for (const field of [
+      'editHistory',
+      'disclosedAt',
+      'pseudoDeletedAt',
+      'afterWhisperAt',
+      'afterWhisperTo',
+      'afterWhisperName',
+    ])
+      expect(brought).not.toHaveProperty(field);
   });
 
   it('moves to the end only as its secret is disclosed', async () => {
@@ -400,7 +474,24 @@ describe('a rolled result', () => {
 
     const [seen] = await clients.bob.events();
     const syncData = (seen.data as Message).syncData as Record<string, unknown>;
-    expect([syncData.majorIndex, syncData.minorIndex]).toEqual([9, 0.5]);
+    expect([syncData.majorIndex, syncData.minorIndex]).toEqual([0, 0.5]);
+  });
+
+  it('is disclosed no further back than the server’s time allows, nor out of its fraction', async () => {
+    const clients = await room();
+    const original = await secretIn(clients);
+    const disclosed = edited(original, original.syncData.value, { tag: 'system', disclosedAt: 1 });
+
+    clients.alice.emit([
+      {
+        eventName: SyncEvent.UPDATE,
+        data: { ...disclosed, syncData: { ...disclosed.syncData, minorIndex: -1e12 } },
+      },
+    ]);
+
+    const [seen] = await clients.bob.events();
+    expect(attributes(seen.data).disclosedAt).toBeGreaterThan(Date.now() - 11 * 60_000);
+    expect(((seen.data as Message).syncData as Record<string, unknown>).minorIndex).toBe(0);
   });
 
   it('is dated near the server’s time, however far the request dates it', async () => {
@@ -421,6 +512,29 @@ describe('a rolled result', () => {
 
     const [{ data }] = await clients.alice.events();
     expect(attributes(data).timestamp).toBeGreaterThan(Date.now() - 11 * 60_000);
+  });
+
+  it('keeps a date ahead of the server’s, where the tab’s latest line puts the line it answers', async () => {
+    const clients = await room();
+    const ahead = Date.now() + 60 * 60_000;
+    const request = rollRequest('ahead', '1d1');
+    const message = request.data.message;
+
+    clients.alice.emit([
+      {
+        ...request,
+        data: {
+          ...request.data,
+          message: {
+            ...message,
+            syncData: { ...message.syncData, attributes: { to: '', timestamp: ahead } },
+          },
+        },
+      },
+    ]);
+
+    const [{ data }] = await clients.alice.events();
+    expect(attributes(data).timestamp).toBe(ahead);
   });
 
   it('is not taken away with its tab by anyone but the GM', async () => {
