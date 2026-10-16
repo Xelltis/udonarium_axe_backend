@@ -52,10 +52,16 @@ npm install
 npx lefthook install
 ```
 
-lefthookは、コミットのときに次のことを確かめます。
+lefthookは、コミットとpushのときに次のことを確かめます。
 
-- コミットメッセージが[Conventional Commits](https://www.conventionalcommits.org/ja/)の形になっているか（commitlint）
-- PHPのファイルを変えたときは、PHP-CS-FixerとPHPStan（Dockerで動かす）
+| フック       | 確かめること                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| `commit-msg` | コミットメッセージが[Conventional Commits](https://www.conventionalcommits.org/ja/)の形か（commitlint） |
+| `pre-commit` | stagedのTypeScriptにESLint（アプリごと）、PHPにPHP-CS-FixerとPHPStan（Dockerで動かす）                  |
+| `pre-push`   | Cloudflare版とVercel版の型検査とテスト（Vercel版は`check:esm`も。Redisが要る）                          |
+
+フックは、手段を問わず迂回しないでください（`--no-verify`、`LEFTHOOK=0`、`core.hooksPath`の変更、設定の一時的な無効化）。
+落ちたら原因を直してから、もう一度コミットします。
 
 ## アプリごとのコマンド
 
@@ -87,6 +93,7 @@ cd apps/vercel
 npm ci
 docker compose up -d redis   # テストが使うRedis（127.0.0.1:6379）
 npm run lint
+npm run format           # Prettierで整形する（確かめるだけならformat:check）
 npm run typecheck
 npm run check:esm        # tscで出したものを素のNodeで読み、BCDiceを1回振る
 npm test                 # カバレッジ100%を要求
@@ -106,6 +113,7 @@ cd apps/cloudflare
 npm ci
 npm run dev              # http://localhost:8787
 npm run lint
+npm run format           # Prettierで整形する（確かめるだけならformat:check）
 npm run typecheck
 npm test                 # Workersのランタイム（workerd）の中で。カバレッジ100%を要求
 ```
@@ -116,10 +124,34 @@ npm test                 # Workersのランタイム（workerd）の中で。カ
 
 ## コミットとPull Request
 
-- コミットメッセージは[Conventional Commits](https://www.conventionalcommits.org/ja/)の形で書きます。スコープには`php`、`vercel`、`cloudflare`、`ci`、`docs`などを使います（例：`fix(cloudflare): …`）。
+コミットメッセージは、件名も本文も英語で、[Conventional Commits](https://www.conventionalcommits.org/ja/)の形`type(scope): subject`で書きます。
+フロントエンド（Udonarium Axe）と同じ決まりです。
+
+| 部分    | 決まり                                                                             |
+| ------- | ---------------------------------------------------------------------------------- |
+| type    | `feat`・`fix`・`docs`・`chore`・`style`・`refactor`・`test`・`perf`・`build`・`ci` |
+| scope   | `php`・`vercel`・`cloudflare`・`ci`・`docs`など（例：`fix(cloudflare): …`）        |
+| subject | 命令形で、小文字で始め、末尾にピリオドを付けない。72文字以内                       |
+| body    | 任意。何より「なぜ」を書く。1行は100文字以内（commitlintが確かめる）               |
+
+- 1つのコミットには、1つの論理的な変更だけを入れます。整形だけの変更や依存の更新は、別のコミットにします。
 - 1つのPull Requestには、1つの変更だけを入れます。
 - テストを足し、CIがすべて通ることを確かめます。
 - `CHANGELOG.md`は手で直しません。リリースのときに自動で更新されます。
+
+## コメントとテスト名
+
+`apps/`の中のコードのコメント（`//`、`/* */`、`/** */`、PHPの`#`も）は英語で書きます。
+`describe()`と`it()`に渡すテスト名も英語です。
+フロントエンドと同じ決まりで、`docs/`とREADMEの本文は対象外です。
+
+## 整形
+
+TypeScriptのアプリは、Prettierで整形します。
+設定はフロントエンドと同じです（シングルクォート、`printWidth: 120`、`trailingComma: 'es5'`）。
+各アプリで`npm run format`を流すと整い、CIは`npm run format:check`で確かめます。
+Markdownは表を手でそろえるので、Prettierの対象から外しています。
+PHPは`bin/php-cs-fixer fix`で整えます。
 
 詳しくは[テスト・CI・リリース](/development/ci)を見てください。
 

@@ -1,6 +1,6 @@
 ## 概要
 
-<!-- この PR で何を変更しましたか？ -->
+<!-- このPRで何を変更しましたか？ -->
 
 ## 変更内容
 
@@ -12,7 +12,7 @@
 
 <!-- どのようにテストしましたか？触ったアプリの項目だけ残してください -->
 
-- [ ] `apps/php/bin/phpunit` が通ること
-- [ ] `apps/php/bin/phpstan analyse` が通ること
-- [ ] `apps/php/bin/php-cs-fixer check` が通ること
-- [ ] `apps/vercel` で `npm run lint`・`npm run typecheck`・`npm test` が通ること
+- [ ] `apps/php`で`bin/phpunit`・`bin/phpstan analyse`・`bin/php-cs-fixer check`が通ること
+- [ ] `apps/vercel`で`npm run lint`・`npm run format:check`・`npm run typecheck`・`npm run check:esm`・`npm test`が通ること
+- [ ] `apps/cloudflare`で`npm run lint`・`npm run format:check`・`npm run typecheck`・`npm test`が通ること
+- [ ] 共有のコードを変えたときは、`node scripts/sync-shared.mjs --check`が通ること
