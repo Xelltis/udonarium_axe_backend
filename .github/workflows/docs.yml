@@ -1,8 +1,8 @@
 name: Docs
 
 # Builds the VitePress site in docs/, and on main publishes it to GitHub Pages.
-# On a pull request it only checks that every link to a heading leads to one, and that the build
-# passes (that no link leads to a page that does not exist).
+# On a pull request it only checks that every link to a heading, in docs/ and development/, leads
+# to one, and that the build passes (that no link leads to a page that does not exist).
 # Publishing needs the repository's Settings → Pages → Source set to "GitHub Actions".
 
 on:
@@ -10,6 +10,8 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'development/**'
+      - 'scripts/check-doc-anchors.mjs'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/docs.yml'
@@ -17,6 +19,8 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'development/**'
+      - 'scripts/check-doc-anchors.mjs'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/docs.yml'
