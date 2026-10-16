@@ -109,7 +109,7 @@ Macでは、名前が`.`で始まるファイル（`.env.example`、`.htaccess`�
    ACCESS_CONTROL_ALLOW_ORIGIN="https://axe.example.com"
    ```
 
-   - 値は`"`（ダブルクォート）で囲んだままにします。囲まないと、`#`から後ろが説明の扱いになって切り捨てられます。
+   - 値は`"`（ダブルクォート）で囲んだままにします。囲まないと、値の中に`;`があったときに、そこから後ろが切り捨てられます。
    - `ACCESS_CONTROL_ALLOW_ORIGIN`には、AxeのOriginを書きます。末尾に`/`は付けません。2つ以上あるときはカンマで区切ります。
    - `SKYWAY_UDONARIUM_LOBBY_SIZE`は`3`のままで構いません。
 
@@ -281,10 +281,22 @@ Axeを配信している場所の`assets/config.json`を開き、`backend.url`�
 
 ## もっと安全にしたいとき
 
-SSHが使えて、公開フォルダの外にファイルを置けるサーバーなら、`.env`を公開フォルダの外に置けます。
+公開フォルダの外にファイルを置けるサーバーなら、`.env`を公開フォルダの外に置けます。
+`.htaccess`に次の1行を足すと、PHP版は、その場所の`.env`を最初に読みます。
 
-- **公開フォルダの1つ上に置く**：PHP版は、`index.php`と同じ場所に`.env`が無ければ、1つ上のフォルダの`.env`を読みます。
-- **好きな場所に置く**：`.htaccess`に`SetEnv ENV_PATH /home/user/secret/.env`のように書くと、その場所の`.env`を最初に読みます。
+```apache
+SetEnv ENV_PATH /home/user/secret/.env
+```
+
+- 場所は、公開フォルダ（`public_html`や`www`）の外にします。中に置くと、Webから読めてしまうおそれがあります。
+- 書いた場所に`.env`が無いと、`index.php`と同じ場所の`.env`を探し、それも無ければすべてのリクエストに`500`を返します。
+
+::: warning `index.php`の1つ上に置かない
+PHP版は、`index.php`と同じ場所に`.env`が無いと、1つ上のフォルダの`.env`も読みます。
+けれども、サブディレクトリやサブドメインに置いたときは、1つ上のフォルダは公開フォルダの中です（`public_html/backend/`なら`public_html/`）。
+そこには付属の`.htaccess`の守りが届かないので、`.env`を置くと、`https://example.com/.env`のようなURLで誰にでも読まれてしまいます。
+公開フォルダの外に置くときは、`ENV_PATH`で場所を書いてください。
+:::
 
 ## 更新するとき
 

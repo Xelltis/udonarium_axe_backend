@@ -26,12 +26,16 @@
 
 ## リリース
 
-`main`にpushされ、CIが通ると、[semantic-release](https://semantic-release.gitbook.io/)がリリースを作ります。
+`main`にpushされ、CIが通ると、CIの`release`のジョブがリリースを作ります。
 
-1. 前のリリースからのコミットメッセージを読み、次の版を決めます（`fix`ならパッチ、`feat`ならマイナー、`BREAKING CHANGE`ならメジャー）。
-2. PHP版の配布用zip（`udonarium-axe-backend-<版>.zip`）を作ります。zipの直下に`apps/php`の中身が来るので、展開すればそのままドキュメントルートになります。
-3. GitHubのリリースを作り、zipを添付します。
+1. PHP版の配布用zipを作ります。zipの直下に`apps/php`の中身が来るので、展開すればそのままドキュメントルートになります。
+2. [semantic-release](https://semantic-release.gitbook.io/)が、前のリリースからのコミットメッセージを読み、次の版を決めます（`fix`ならパッチ、`feat`ならマイナー、`BREAKING CHANGE`ならメジャー）。
+3. `CHANGELOG.md`を書き足し、GitHubのリリースを作って、zipを`udonarium-axe-backend-<版>.zip`として添付します。
 4. `CHANGELOG.md`を更新するコミットを`main`に積みます。
+
+zipは、semantic-releaseが`CHANGELOG.md`を書き足す前に作ります。
+そのため、zipの中の`CHANGELOG.md`には、その版の変更はまだ載っていません。
+その版の変更は、GitHubのリリースノートで見ます。
 
 版はリポジトリ全体で1つです。
 Vercel版とCloudflare版は、それぞれの方法でデプロイするので、zipには入りません。

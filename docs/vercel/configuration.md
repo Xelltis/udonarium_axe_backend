@@ -96,7 +96,7 @@ SkyWayのトークン発行だけなら、Vercelに設定した環境変数を�
 ```sh
 cd apps/vercel
 npm ci
-npm run env     # vercel env pull で .env を作る
+npm run env     # vercel env pull で .env.local を作る
 npm start       # vercel dev（http://localhost:3000）
 ```
 

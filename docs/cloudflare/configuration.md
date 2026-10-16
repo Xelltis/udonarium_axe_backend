@@ -26,7 +26,8 @@ Deployボタンで置いた場合は、複製した自分のリポジトリの`w
 部屋を作ったあとで3つを外すと、残っている部屋はトークンを一切受けず、見学としてだけ入れます。
 くわしくは[ログインと役割](/cloudflare/login#ログインを使えるようにする)を見てください。
 
-どれかが無い、または形が違うと、すべてのリクエストに`500 config-invalid`を返し、足りない設定の名前をWorkerのログに出します。
+ログインの3つのうち一部だけが入っているとき（`SESSION_SECRET`が32文字より短いときも）や、`ACCESS_CONTROL_ALLOW_ORIGIN`か`ROOM_RETENTION_HOURS`の形が違うときは、`/v1/`の下のすべてのリクエストに`500 config-invalid`を返し、足りない設定の名前をWorkerのログに出します。
+3つとも入れないのは正しい設定なので、`config-invalid`にはなりません。
 
 ### `ACCESS_CONTROL_ALLOW_ORIGIN`
 
