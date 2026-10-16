@@ -1,3 +1,4 @@
+import { COME_BACK_CODE } from '../../../contracts/protocol.js';
 import type { AssetUploadPolicy, PeerRole } from '../../../contracts/protocol.js';
 import { RoomEngine } from '../../core/rooms/engine.js';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../../core/rooms/host.js';
@@ -298,7 +299,7 @@ export class VercelRoom implements RoomHost<Conn> {
   /** lease を失った（ほかのインスタンスが部屋を取った）。つないでいる人には、つなぎ直してもらう */
   stepDown(): void {
     if (this.released) return;
-    for (const conn of this.conns) this.close(conn, 1012, 'moved');
+    for (const conn of this.conns) this.close(conn, COME_BACK_CODE, 'moved');
     this.letGo();
   }
 

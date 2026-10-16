@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 
-import { PING, PONG } from '../../../contracts/protocol.js';
+import { COME_BACK_CODE, PING, PONG } from '../../../contracts/protocol.js';
 import { expiryKeyOf, readRoomMeta, roomKeysOf } from './keys.js';
 import type { Control, Inbound, Outbound, Relay } from './relay.js';
 import { LEASE_MS, VercelRoom } from './room.js';
@@ -12,8 +12,6 @@ import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
  */
 export const PARK_MS = 15_000;
 
-/** こちらから閉じてつなぎ直させるときのコード（Service Restart）。Axe は少し待ってつなぎ直す */
-export const ROTATE_CODE = 1012;
 
 /** 持ち主が見つからないとき、もう一度試すまでの間（ミリ秒） */
 const RETRY_MS = 100;
@@ -219,7 +217,7 @@ export class RoomRuntime {
     // Vercel の Function の最大実行時間で切られる前に、こちらから閉じてつなぎ直させる
     const rotation = setTimeout(() => {
       link.rotated = true;
-      conn.socket.close(ROTATE_CODE, 'rotate');
+      conn.socket.close(COME_BACK_CODE, 'rotate');
     }, this.options.socketSeconds * 1000);
     rotation.unref();
 
@@ -263,7 +261,7 @@ export class RoomRuntime {
         return;
       }
       if (await this.proxy(conn, roomKey, link)) return;
-      if (Date.now() > until) return conn.socket.close(ROTATE_CODE, 'moved');
+      if (Date.now() > until) return conn.socket.close(COME_BACK_CODE, 'moved');
       await sleep(RETRY_MS);
     }
   }
@@ -280,7 +278,7 @@ export class RoomRuntime {
     }
     this.proxies.set(conn.id, conn.socket);
     // 持ち主に届かなくなった（落ちた）。つなぎ直してもらう
-    const moved = () => conn.socket.close(ROTATE_CODE, 'moved');
+    const moved = () => conn.socket.close(COME_BACK_CODE, 'moved');
     // 1つの WebSocket から届いたものは、届いた順に送る
     let queue: Promise<unknown> = Promise.resolve();
     const send = (message: Inbound) => {
@@ -321,7 +319,7 @@ export class RoomRuntime {
     const relay = this.relay as Relay;
     await relay.subscribe<Control>(relay.controlOf(roomKey), (message) => {
       if (message.t !== 'moved') return;
-      for (const each of sockets) each.close(ROTATE_CODE, 'moved');
+      for (const each of sockets) each.close(COME_BACK_CODE, 'moved');
     });
   }
 

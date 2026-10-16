@@ -317,6 +317,14 @@ export type ServerMessage =
 /** サーバーが閉じるときの WebSocket の close code */
 export const CLOSE_CODE = 4000;
 
+/**
+ * 別の接続でつなぎ直してもらうときの close code（Service Restart）。error は送らない。reason は、
+ * 接続を長く持てない基盤で数分ごとに閉じる rotate か、部屋を受け持つインスタンスが替わった moved。
+ * クライアントは、ほかの人に出入りを見せずに、すぐつなぎ直す
+ */
+export const COME_BACK_CODE = 1012;
+export const COME_BACK_REASONS = ['rotate', 'moved'] as const;
+
 // ---- HTTP ----
 
 /** POST /v1/rooms の本文 */
