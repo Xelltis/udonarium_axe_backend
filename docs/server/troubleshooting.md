@@ -49,7 +49,8 @@ Workerの画面の**Deployments**から**View build history**を開き、失敗�
 よくある原因は、次のとおりです。
 
 - ログインの3つのうち、一部だけが入っている。`SESSION_SECRET`が32文字より短い。
-- `ACCESS_CONTROL_ALLOW_ORIGIN`か`ROOM_RETENTION_HOURS`の形が違う。
+- `ACCESS_CONTROL_ALLOW_ORIGIN`が無い。`ROOM_RETENTION_HOURS`が1以上の整数でない（Cloudflare版で`wrangler.jsonc`から消したときも）。
+  `ACCESS_CONTROL_ALLOW_ORIGIN`の形が違う（`https://`が抜けているなど）ときは、ここではなく、Axeからの要求が`403 origin-not-allowed`で断られます。
 - Vercel版で、RedisかBlobのストアがつながっていない（`REDIS_URL`か`KV_URL`、`BLOB_STORE_ID`が無い）。
 
 直したあとは、Cloudflare版はシークレットの画面で**Deploy**を、Vercel版は**Redeploy**を押します（→ [設定項目](/server/configuration)）。

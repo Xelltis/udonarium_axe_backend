@@ -45,6 +45,7 @@ Discordでログインしたあとに戻る先も、ここに書いたOriginの�
 ### `ROOM_RETENTION_HOURS`
 
 部屋から最後の1人が抜けて、この時間が過ぎると、部屋とその画像と音声を消します（→ [部屋が消えるとき](/server/#部屋が消えるとき)）。
+Cloudflare版の既定値の`24`は、`wrangler.jsonc`の`vars`に書いてあります。この行を消すと、`/v1/`の下がすべて`500 config-invalid`になるので、変えるときも消さずに値だけを書き換えます。
 
 ## Cloudflare版
 
