@@ -40,13 +40,17 @@ Vercel版とCloudflare版は、それぞれの方法でデプロイするので�
 
 Dependabotが、毎週次のものの更新を提案します。
 
-| 対象                | 場所              |
-| ------------------- | ----------------- |
-| composer            | `apps/php`        |
-| npm（ルートの道具） | `/`               |
-| npm                 | `apps/vercel`     |
-| npm                 | `apps/cloudflare` |
-| GitHub Actions      | `/`               |
-| Docker              | `apps/php`        |
+| 対象                | 場所                             |
+| ------------------- | -------------------------------- |
+| composer            | `apps/php`                       |
+| npm（ルートの道具） | `/`                              |
+| npm                 | `apps/vercel`・`apps/cloudflare` |
+| GitHub Actions      | `/`                              |
+| Docker              | `apps/php`                       |
+
+Vercel版とCloudflare版は1つの設定にまとめています。
+共有のコードが使うパッケージ（hono・valibot・@msgpack/msgpack・bcdice）とPrettierは、両方のアプリの分を1つのPull Requestで上げます。
+片方だけ上がると、CIの写しの確認で落ちるためです。
+ほかのパッケージは、アプリごとに別のPull Requestになります。
 
 Cloudflare版の`wrangler`は、`@cloudflare/vitest-pool-workers`が使う版に合わせて手で上げるので、Dependabotの対象から外しています。
