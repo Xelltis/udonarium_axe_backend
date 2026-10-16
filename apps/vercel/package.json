@@ -12,6 +12,8 @@
     "deploy:prod": "vercel --prod",
     "test": "vitest --run --coverage",
     "lint": "npx eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "coverage:check": "tsx ./scripts/check-coverage.ts --threshold 100",
     "check:esm": "node ./scripts/check-esm.ts",

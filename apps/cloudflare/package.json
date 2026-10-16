@@ -10,6 +10,8 @@
     "deploy": "wrangler deploy",
     "test": "vitest --run --coverage",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "generate:bcdice": "node scripts/generate-bcdice-importers.mjs && prettier --write src/core/dice/bcdice-importers.generated.ts"
   },

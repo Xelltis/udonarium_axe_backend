@@ -2,3 +2,8 @@ node_modules
 build
 dist
 coverage
+.vercel
+.esm-check
+
+# Prose is written by hand, its tables aligned to read in the source
+*.md
