@@ -11,7 +11,7 @@
 // range in both package.json files.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -26,11 +26,13 @@ const staged = process.argv.includes('--staged');
 const check = staged || process.argv.includes('--check');
 
 const git = (...args) => execFileSync('git', args, { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
+/** A path as git names it: relative to the repository, with forward slashes on every platform. */
+const gitPath = (path) => relative(ROOT, path).split(sep).join('/');
 
 /** The files under dir, as paths relative to dir: those staged, or those on disk. None when there is no dir. */
 const filesUnder = (dir) => {
   if (staged) {
-    const prefix = `${relative(ROOT, dir)}/`;
+    const prefix = `${gitPath(dir)}/`;
     return git('ls-files', '--cached', '-z', '--', prefix)
       .toString()
       .split('\0')
@@ -50,13 +52,15 @@ const filesUnder = (dir) => {
 const read = (path) => {
   if (!staged) return existsSync(path) ? readFileSync(path) : null;
   try {
-    return git('show', `:${relative(ROOT, path)}`);
+    return git('show', `:${gitPath(path)}`);
   } catch {
     return null;
   }
 };
 
 const problems = [];
+let copied = 0;
+let removed = 0;
 
 for (const dir of SHARED) {
   const from = join(SOURCE, dir);
@@ -73,12 +77,17 @@ for (const dir of SHARED) {
     } else {
       mkdirSync(dirname(target), { recursive: true });
       copyFileSync(source, target);
+      copied++;
     }
   }
   for (const file of filesUnder(to)) {
     if (sources.has(file)) continue;
-    if (check) problems.push(`${relative(ROOT, join(to, file))} is not in apps/cloudflare`);
-    else rmSync(join(to, file));
+    if (check) {
+      problems.push(`${relative(ROOT, join(to, file))} is not in apps/cloudflare`);
+    } else {
+      rmSync(join(to, file));
+      removed++;
+    }
   }
 }
 
@@ -98,11 +107,15 @@ for (const [field, names] of [
 
 if (problems.length > 0) {
   for (const problem of problems) console.error(problem);
-  console.error(
-    check
-      ? 'Edit the shared code in apps/cloudflare, then run `node scripts/sync-shared.mjs`.'
-      : 'Give both apps the same versions of the packages above.',
-  );
+  if (!check) console.error('Give both apps the same versions of the packages above.');
+  else if (staged) {
+    console.error(
+      'Edit the shared code in apps/cloudflare, run `node scripts/sync-shared.mjs`, ' +
+        'then stage both apps (`git add apps/cloudflare apps/vercel`).',
+    );
+  } else console.error('Edit the shared code in apps/cloudflare, then run `node scripts/sync-shared.mjs`.');
   process.exit(1);
 }
-console.log(check ? 'The shared code is in step.' : 'Copied the shared code to apps/vercel.');
+if (check) console.log('The shared code is in step.');
+else if (copied + removed === 0) console.log('The copies in apps/vercel were already in step.');
+else console.log(`Copied ${copied} and removed ${removed} files of the shared code in apps/vercel.`);
