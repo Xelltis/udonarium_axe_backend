@@ -302,7 +302,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * Checks that it returns 400 when channelName is over the limit (200 characters).
+     * Checks that it returns 400 when channelName is over the limit (200 bytes, as strlen counts them).
      */
     public function testTokenEndpointRejectsOversizedChannelName(): void
     {

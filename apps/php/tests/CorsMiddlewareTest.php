@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  */
 class CorsMiddlewareTest extends TestCase
 {
-    /** @var \Closure(): Response A dummy handler that does nothing. */
+    /** @var \Closure(): Response A dummy handler that returns a 200 JSON response. */
     private \Closure $dummyNext;
 
     protected function setUp(): void
