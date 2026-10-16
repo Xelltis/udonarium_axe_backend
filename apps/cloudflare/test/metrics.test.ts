@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AuthorityEvent, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
-import { FLUSH_TALLY_MS } from '../src/rooms/room';
+import { FLUSH_TALLY_MS } from '../src/core/rooms/limits';
 import {
   chatTabList,
   connect,
@@ -88,7 +88,9 @@ describe('room metrics', () => {
     const points = await recordPoints(roomKey);
     const alice = await join(roomKey, 'alice');
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (instance as unknown as { flushTally: { count: number; since: number } }).flushTally = {
+      (
+        instance as unknown as { engine: { flushTally: { count: number; since: number } } }
+      ).engine.flushTally = {
         count: 3,
         since: Date.now() - FLUSH_TALLY_MS,
       };

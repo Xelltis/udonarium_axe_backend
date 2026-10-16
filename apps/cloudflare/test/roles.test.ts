@@ -236,7 +236,11 @@ describe('invites', () => {
 
   it('honours a GM invite made before invites said who gave them', async () => {
     const roomKey = await createRoom();
-    const older = signToken<'invite'>({ aud: 'invite', room: roomKey, role: 'gm' }, 60, SESSION_SECRET);
+    const older = signToken<'invite'>(
+      { aud: 'invite', room: roomKey, role: 'gm' },
+      60,
+      SESSION_SECRET,
+    );
 
     const visitor = await join(roomKey, 'visitor', { invite: older });
 

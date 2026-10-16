@@ -734,7 +734,9 @@ describe('a rolled result', () => {
     await clients.bob.expectQuiet();
 
     await runInDurableObject(stubOf(clients.roomKey), (instance: RoomDurableObject) => {
-      const room = instance as unknown as { keptFromDeleting: Map<string, { until: number }> };
+      const room = (
+        instance as unknown as { engine: { keptFromDeleting: Map<string, { until: number }> } }
+      ).engine;
       for (const kept of room.keptFromDeleting.values()) kept.until = 0;
     });
     clients.alice.emit([

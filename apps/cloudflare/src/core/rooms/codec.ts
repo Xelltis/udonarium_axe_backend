@@ -27,7 +27,7 @@ export const encodeFrame = (message: ServerMessage): Uint8Array => {
 };
 
 /** 受けたフレームを読む。gzip ならまず展開する。読めなければ例外 */
-export const decodeFrame = (frame: ArrayBuffer): unknown => {
+export const decodeFrame = (frame: ArrayBuffer | Uint8Array): unknown => {
   const bytes = new Uint8Array(frame);
   const plain = isGzip(bytes) ? gunzipSync(bytes, { maxOutputLength: MAX_FRAME_BYTES }) : bytes;
   return decode(plain, {

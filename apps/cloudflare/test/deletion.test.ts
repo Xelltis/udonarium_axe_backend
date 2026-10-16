@@ -181,7 +181,7 @@ describe('deleting a room', () => {
     const gm = await join(roomKey, 'gm');
     const late = await connect(roomKey);
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (instance as unknown as { wiping: boolean }).wiping = true;
+      (instance as unknown as { deleting: boolean }).deleting = true;
     });
 
     late.hello('late');
@@ -299,17 +299,16 @@ describe('deleting a room', () => {
     const gm = await join(roomKey, 'gm');
     let release: () => void = () => undefined;
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (instance as unknown as { rollQueue: Promise<void> }).rollQueue = new Promise<void>(
-        (resolve) => {
+      (instance as unknown as { engine: { rollQueue: Promise<void> } }).engine.rollQueue =
+        new Promise<void>((resolve) => {
           release = resolve;
-        },
-      );
+        });
     });
     const pending = () =>
       runInDurableObject(
         stubOf(roomKey),
         (instance: RoomDurableObject) =>
-          (instance as unknown as { pendingRolls: number }).pendingRolls,
+          (instance as unknown as { engine: { pendingRolls: number } }).engine.pendingRolls,
       );
     gm.client.emit([
       { eventName: 'UPDATE_GAME_OBJECT', data: chatTabList() },
@@ -340,15 +339,12 @@ describe('deleting a room', () => {
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await runInDurableObject(stubOf(roomKey), async (instance: RoomDurableObject) => {
-      const room = instance as unknown as {
-        lobbyQueue: Promise<void>;
-        notifyLobby(roomKey: string): void;
-      };
+      const room = instance as unknown as { lobbyQueue: Promise<void> };
       let release: () => void = () => undefined;
       room.lobbyQueue = new Promise<void>((resolve) => {
         release = resolve;
       });
-      room.notifyLobby(roomKey);
+      instance.lobbyChanged(roomKey);
       expect(await instance.deleteRoom(HOST)).toBe('deleted');
       release();
       await room.lobbyQueue;

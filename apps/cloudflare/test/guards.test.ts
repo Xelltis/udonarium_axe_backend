@@ -19,7 +19,7 @@ import {
   MAX_SOCKETS,
   MAX_VIEW_BYTES,
   TOKEN_GRACE_MS,
-} from '../src/rooms/room';
+} from '../src/core/rooms/limits';
 import type { RoomDurableObject } from '../src/rooms/room';
 import type { RoomStore } from '../src/rooms/store';
 import { accessTokenFor } from './helpers';
@@ -48,7 +48,7 @@ interface Internals {
 
 const inside = <T>(roomKey: string, run: (room: Internals, state: DurableObjectState) => T) =>
   runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) =>
-    run(instance as unknown as Internals, state),
+    run((instance as unknown as { engine: Internals }).engine, state),
   );
 
 const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });

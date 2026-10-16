@@ -26,8 +26,7 @@ import {
   OCCUPIED_CHECK_MS,
   RATE_WINDOW_MS,
   TOKEN_GRACE_MS,
-} from '../src/rooms/room';
-import type { RoomStore } from '../src/rooms/store';
+} from '../src/core/rooms/limits';
 import { CHUNK_BYTES } from '../src/rooms/store';
 import { ORIGIN, freshIp } from './helpers';
 import {
@@ -54,7 +53,7 @@ const keysOf = (value: object) => Object.keys(value).sort();
 /** 部屋の置き場所を、まとめておいた変更を書いてから読む */
 const flushed = async <T>(roomKey: string, read: (sql: SqlStorage) => T): Promise<T> =>
   runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) => {
-    (instance as unknown as { store: RoomStore }).store.flush();
+    instance.store().flush();
     return read(state.storage.sql);
   });
 
@@ -444,7 +443,9 @@ describe('joining a room', () => {
     for (let i = 0; i < MAX_FRAMES_PER_WINDOW - 2; i++) steady.client.emit([]);
     await steady.client.expectQuiet();
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) => {
-      const { rates } = instance as unknown as { rates: WeakMap<WebSocket, { start: number }> };
+      const { rates } = (
+        instance as unknown as { engine: { rates: WeakMap<WebSocket, { start: number }> } }
+      ).engine;
       const ws = state
         .getWebSockets()
         .find(
@@ -795,7 +796,7 @@ describe('the state of the room', () => {
     it('clears away the cursor of someone who went without a word', async () => {
       const { roomKey, alice } = await twoInRoom();
       await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) => {
-        (instance as unknown as { store: RoomStore }).store.put(cursorOf('ghost'), 'ghost');
+        instance.store().put(cursorOf('ghost'), 'ghost');
         return state.storage.setAlarm(Date.now() + 60_000);
       });
 
