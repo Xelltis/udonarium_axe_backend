@@ -216,6 +216,33 @@ describe('invites', () => {
     expect(anonymous.welcome.role).toBe('guest');
   });
 
+  it('takes a GM invite as none once whoever gave it is no longer GM, but keeps the others', async () => {
+    const { roomKey, gm } = await table();
+    gm.send({ type: 'invite', role: 'gm' });
+    const { invite } = await gm.next('invite');
+    gm.send({ type: 'invite', role: 'guest' });
+    const { invite: watchOnly } = await gm.next('invite');
+    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
+      const { ctx } = instance as unknown as { ctx: DurableObjectState };
+      ctx.storage.sql.exec(`UPDATE seats SET role = 'pl' WHERE user_id = 'user-gm'`);
+    });
+
+    const late = await join(roomKey, 'late', { invite });
+    const watcher = await join(roomKey, 'watcher', { invite: watchOnly });
+
+    expect(late.welcome.role).toBe('pl');
+    expect(watcher.welcome.role).toBe('guest');
+  });
+
+  it('honours a GM invite made before invites said who gave them', async () => {
+    const roomKey = await createRoom();
+    const older = signToken<'invite'>({ aud: 'invite', room: roomKey, role: 'gm' }, 60, SESSION_SECRET);
+
+    const visitor = await join(roomKey, 'visitor', { invite: older });
+
+    expect(visitor.welcome.role).toBe('gm');
+  });
+
   it('ignores an invite to another room', async () => {
     const roomKey = await createRoom();
     const elsewhere = signToken<'invite'>(

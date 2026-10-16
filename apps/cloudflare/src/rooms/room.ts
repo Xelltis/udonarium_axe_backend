@@ -474,10 +474,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const room = this.room();
     if (!room || this.wiping) return 'not-found';
-    const known = this.ctx.storage.sql
-      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
-      .toArray()[0];
-    if (known?.role !== 'gm') return 'not-game-master';
+    if (this.storedRoleOf(userId) !== 'gm') return 'not-game-master';
 
     this.record('delete', 'gm', this.seats().length);
     for (const ws of this.ctx.getWebSockets()) {
@@ -765,9 +762,19 @@ export class RoomDurableObject extends DurableObject<Env> {
     );
   }
 
+  /** ログインして入ったことのある人の、覚えている役割。入ったことが無ければ null */
+  private storedRoleOf(userId: string): PeerRole | null {
+    const known = this.ctx.storage.sql
+      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
+      .toArray()[0];
+    return known?.role ?? null;
+  }
+
   /**
    * ログインした人の役割。前に入ったことがあればそのときの役割、初めてなら招待の役割、
-   * 招待が無いか、この部屋のものでなければ PL。known は、前に入ったことがあるか
+   * 招待が無いか、この部屋のものでなければ PL。known は、前に入ったことがあるか。
+   * GM の招待は、出した人がもう GM でなければ（アカウントを消したときも）無いものとみなす。
+   * GM を外された人が前に出した招待で、GM を増やさせない
    */
   private roleOf(
     userId: string,
@@ -775,12 +782,14 @@ export class RoomDurableObject extends DurableObject<Env> {
     roomKey: string,
     secret: string,
   ): { role: PeerRole; known: boolean } {
-    const known = this.ctx.storage.sql
-      .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
-      .toArray()[0];
-    if (known) return { role: known.role, known: true };
+    const known = this.storedRoleOf(userId);
+    if (known) return { role: known, known: true };
     const invited = invite ? readToken(invite, 'invite', secret) : null;
-    return { role: invited?.room === roomKey ? invited.role : 'pl', known: false };
+    if (invited?.room !== roomKey) return { role: 'pl', known: false };
+    if (invited.role === 'gm' && invited.by !== undefined && this.storedRoleOf(invited.by) !== 'gm') {
+      return { role: 'pl', known: false };
+    }
+    return { role: invited.role, known: false };
   }
 
   /**
@@ -813,7 +822,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       return;
     }
     const invite = signToken<'invite'>(
-      { aud: 'invite', room: seat.roomKey, role },
+      { aud: 'invite', room: seat.roomKey, role, by: seat.userId },
       INVITE_SECONDS,
       secret,
     );

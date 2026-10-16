@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { literal, number, object, picklist, safeParse, string } from 'valibot';
+import { literal, number, object, optional, picklist, safeParse, string } from 'valibot';
 import type { GenericSchema, InferOutput } from 'valibot';
 
 import { PEER_ROLES } from '../../contracts/protocol';
@@ -51,6 +51,8 @@ const claimSchemas = {
     aud: literal('invite'),
     room: string(),
     role: picklist(PEER_ROLES),
+    /** 出した GM のユーザー ID。GM の招待は、その人がいまも GM のときだけ効く。前の形の招待には無い */
+    by: optional(string()),
     exp: number(),
   }),
   login: object({
