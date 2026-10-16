@@ -65,8 +65,8 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 - 複数の論理的変更を1コミットに混ぜない（整形だけ、依存の更新だけのコミットは分ける）
 - **lefthook迂回は絶対禁止**（`--no-verify` / `LEFTHOOK=0` / `core.hooksPath`変更等）。
   フックが落ちたら原因を直してから再コミットする
-  - `commit-msg`: `commitlint` / `pre-commit`: stagedのTypeScriptに`eslint`、PHPに`php-cs-fixer`と`phpstan` /
-    `pre-push`: 両アプリの型検査とテスト（Vercel版は`check:esm`も）
+  - `commit-msg`: `commitlint` / `pre-commit`: stagedのTypeScriptに`eslint`（整形も見る）、PHPに`php-cs-fixer`と`phpstan`、
+    共有コードを変えたら写しの確認 / `pre-push`: pushに変更が入ったアプリの型検査とテスト（Vercel版は`check:esm`も）
 - mainへのPRでは[.github/workflows/ci.yml](.github/workflows/ci.yml)が、全アプリのlint・整形・型検査・テストを回す
 - `CHANGELOG.md`は手で直さない。semantic-releaseがConventional Commitsから生成する
 
