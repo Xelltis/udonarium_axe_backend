@@ -420,6 +420,43 @@ describe('writes that would uncover what is kept back', () => {
     expect(ids(await t.alice.events())).toContainEqual(['AUTHORITATIVE_OBJECT', 'deck-root']);
   });
 
+  it('refuses a player making in a deck the parent that a card it owns was moved under before it came', async () => {
+    const t = await deckTable();
+    const waiting = { ...t.stacked.syncData, parentIdentifier: 'ghost', attributes: owned };
+
+    t.alice.emit([
+      update({ ...t.stacked, majorVersion: 2, syncData: waiting }),
+      update(contextOf('ghost', 1, 0.5, { parentIdentifier: 'deck-root', attributes: {} }, 'node')),
+      update({ ...t.stacked, majorVersion: 3, syncData: { ...t.stacked.syncData, attributes: owned } }),
+    ]);
+
+    const got = ids(await t.alice.events());
+    expect(got).toContainEqual(['WITHDRAW_GAME_OBJECT', 'ghost']);
+    expect(got).not.toContainEqual(['AUTHORITATIVE_OBJECT', 'front_d2']);
+  });
+
+  it('lets a player make out of every deck the parent that a card it owns was moved under before it came', async () => {
+    const t = await deckTable();
+    const waiting = { ...t.stacked.syncData, parentIdentifier: 'shelf', attributes: owned };
+
+    t.alice.emit([
+      update({ ...t.stacked, majorVersion: 2, syncData: waiting }),
+      update(contextOf('shelf', 1, 0.5, { attributes: {} }, 'node')),
+    ]);
+
+    expect(ids(await t.bob.events())).toContainEqual(['UPDATE_GAME_OBJECT', 'shelf']);
+    expect(ids(await t.alice.events())).not.toContainEqual(['AUTHORITATIVE_OBJECT', 'd2']);
+  });
+
+  it('refuses a player marking a card that stays in a deck as in its own hand, which would show it the face', async () => {
+    const t = await deckTable();
+    const held = { state: 1, location: { name: 'hand:user-alice' } };
+
+    t.alice.emit([update({ ...t.stacked, majorVersion: 2, syncData: { ...t.stacked.syncData, attributes: held } })]);
+
+    await expectRefused(t, 'd2');
+  });
+
   it('lets a player rewrite, or move the deck of, a card the GM gave an owner in the deck', async () => {
     const t = await deckTable('deck-root', { owner: 'user-bob' });
     await place(t, [contextOf('shelf', 1, 0.5, { attributes: {} }, 'node')]);

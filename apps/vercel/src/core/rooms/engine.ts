@@ -88,6 +88,9 @@ type Reply = (eventName: string, data: unknown) => void;
 /** The alias of a deck, whose cards keep their faces from everyone. */
 const CARD_STACK_ALIAS = 'card-stack';
 
+/** What the deck check reads of an index row: what the object is, where it sits and how it is seen. */
+type DeckRow = Pick<StoredEntry, 'alias' | 'parent' | 'view'>;
+
 /** Adds one event to the bundle for one receiver. */
 type Push<C> = (conn: C, event: EventContext) => void;
 
@@ -720,6 +723,8 @@ export class RoomEngine<C extends object> {
         movesTab(existing, context))
     )
       return this.refuseWrite(identifier, seat, reply);
+    if (!existing && seat.role !== 'gm' && this.peeksIntoDeck(context, null))
+      return this.refuseWrite(identifier, seat, reply);
 
     let owner: string | null = null;
     // Someone who holds the masked form keeps the masked form (the masked version) after the write is
@@ -774,39 +779,42 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * Whether a write leaves a card in a deck with an owner it was not there with before: by giving a
-   * card in the deck an owner, or by moving into the deck a card with one, or what holds such a card.
-   * The owner of a card sees its face, which a deck keeps from everyone, so only the GM may. Axe takes
-   * the owner off a card it puts in a deck, and taking a card out of the deck, as into a hand, is not
-   * this. Writes sent together are taken one by one, so drawing a card as its owner and putting it
-   * back would otherwise go through.
+   * Whether a write leaves a card in a deck seen by someone who did not see it there before: by giving
+   * a card in the deck an owner, or marking it as in someone's hand, or by moving into the deck a card
+   * with either, or what holds such a card. A new object counts for the cards moved under it before it
+   * came. The owner and the one whose hand a card is in see its face, which a deck keeps from
+   * everyone, so only the GM may. Axe takes the owner off a card it puts in a deck and gives it the
+   * deck's place, and taking a card out of the deck, as into a hand, is not this. Writes sent
+   * together are taken one by one, so drawing a card as its owner and putting it back would
+   * otherwise go through.
    */
-  private peeksIntoDeck(context: ObjectContext, existing: StoredEntry): boolean {
+  private peeksIntoDeck(context: ObjectContext, existing: StoredEntry | null): boolean {
     const identifier = context.identifier;
     const next = describe(context);
-    const written: StoredEntry = { ...existing, parent: next.parent, view: next.view };
-    const after = (other: string) => (other === identifier ? written : this.store.entryOf(other));
-    const reached = next.parent === existing.parent ? [] : this.store.descendantsOf(identifier);
-    return [identifier, ...reached].some((other) => {
-      const owner = this.ownerInDeck(other, after);
-      return owner !== '' && owner !== this.ownerInDeck(other, this.store.lookup);
+    const written: DeckRow = { alias: context.aliasName, parent: next.parent, view: next.view };
+    const after = (other: string) => (other === identifier ? written : this.store.lookup(other));
+    const reached = existing?.parent === next.parent ? [] : this.store.descendantsOf(identifier);
+    return [...(existing ? [identifier] : []), ...reached].some((other) => {
+      const before = this.seersInDeck(other, this.store.lookup);
+      return this.seersInDeck(other, after).some((seer) => !before.includes(seer));
     });
   }
 
   /**
-   * The owner of a card in a deck, as the rows `lookup` gives have it: '' for a card with none, for one
-   * in no deck and for anything but a card. Axe keeps a deck's cards under a node of the deck's own, so
-   * every parent up is looked at, as far as parents are followed anywhere.
+   * Who sees the face of a card in a deck, as the rows `lookup` gives have it: its owner and the one
+   * whose hand it is marked as in. None for a card in no deck and for anything but a card. Axe keeps
+   * a deck's cards under a node of the deck's own, so every parent up is looked at, as far as
+   * parents are followed anywhere.
    */
-  private ownerInDeck(identifier: string, lookup: (identifier: string) => StoredEntry | null): string {
+  private seersInDeck(identifier: string, lookup: (identifier: string) => DeckRow | null): string[] {
     const entry = lookup(identifier);
-    if (entry?.view?.kind !== 'card') return '';
+    if (entry?.view?.kind !== 'card') return [];
     let holder = lookup(entry.parent);
     for (let depth = 0; holder && depth < MAX_DEPTH; depth++) {
-      if (holder.alias === CARD_STACK_ALIAS) return entry.view.owner;
+      if (holder.alias === CARD_STACK_ALIAS) return [entry.view.owner, entry.view.hand].filter((seer) => seer !== '');
       holder = lookup(holder.parent);
     }
-    return '';
+    return [];
   }
 
   /**
