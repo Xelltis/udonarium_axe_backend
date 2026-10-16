@@ -7,13 +7,13 @@
 `main`へのpushと、`main`へのPull Requestで、`.github/workflows/ci.yml`が走ります。
 変更したアプリに関わらず、毎回すべてのジョブを流します。
 
-| ジョブ              | 内容                                                                                                                        |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| PHP 8.3 / 8.4 / 8.5 | PHP-CS-Fixer、PHPStan、PHPUnit（カバレッジ付き）。8.5のカバレッジをCodecovへ送る                                            |
-| Vercel              | lint、型検査、テスト（カバレッジ100%）、カバレッジのCodecovへの送信                                                         |
-| Cloudflare          | workerdが1つだけかの確認、Origin照合の中身がVercel版と同じかの確認、lint、型検査、テスト（カバレッジ100%）、Codecovへの送信 |
-| Deploy Cloudflare   | `main`へのpushのときだけ。Cloudflare版をデプロイする（→ [mainからの自動デプロイ](/cloudflare/auto-deploy)）                 |
-| Release             | `main`へのpushのときだけ。PHP・Vercel・Cloudflareのジョブが通ったら、リリースを作る                                         |
+| ジョブ              | 内容                                                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PHP 8.3 / 8.4 / 8.5 | PHP-CS-Fixer、PHPStan、PHPUnit（カバレッジ付き）。8.5のカバレッジをCodecovへ送る                                                                                  |
+| Vercel              | 共有のコードの写しが正本と同じかの確認、lint、型検査、素のNodeで読めるかの確認（`check:esm`）、テスト（Redisのサービスを立てて、カバレッジ100%）、Codecovへの送信 |
+| Cloudflare          | workerdが1つだけかの確認、共有のコードの写しがVercel版と同じかの確認、lint、型検査、テスト（カバレッジ100%）、Codecovへの送信                                     |
+| Deploy Cloudflare   | `main`へのpushのときだけ。Cloudflare版をデプロイする（→ [mainからの自動デプロイ](/cloudflare/auto-deploy)）                                                       |
+| Release             | `main`へのpushのときだけ。PHP・Vercel・Cloudflareのジョブが通ったら、リリースを作る                                                                               |
 
 `main`のルールセットでは、Pull Requestを通すことと、必須のチェックが通ることを求めています。
 

@@ -85,10 +85,15 @@ bin/php-cs-fixer check   # 整形の確認（CIと同じ）
 ```sh
 cd apps/vercel
 npm ci
+docker compose up -d redis   # テストが使うRedis（127.0.0.1:6379）
 npm run lint
 npm run typecheck
+npm run check:esm        # tscで出したものを素のNodeで読み、BCDiceを1回振る
 npm test                 # カバレッジ100%を要求
 ```
+
+部屋のサーバーのテストは、本物のRedisを使います（テストのファイルごとに、キーの頭を分けます）。
+CIでは、Redisのサービスのコンテナを立てます。
 
 相対パスの`import`には、拡張子（`./foo.js`）を付けてください。
 Vercelは型を検査せずにファイルごとに変換するので、拡張子が無いと本番で`ERR_MODULE_NOT_FOUND`になります。
