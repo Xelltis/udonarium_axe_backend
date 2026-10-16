@@ -364,6 +364,26 @@ describe('writes that would uncover what is kept back', () => {
     expect(ids(await t.bob.events())).toContainEqual(['UPDATE_GAME_OBJECT', 'd1']);
   });
 
+  it('refuses a player making itself the owner of a card that stays in a deck, which would show it the face', async () => {
+    const t = await table();
+    const deck = contextOf('deck', 1, 0.5, { attributes: {} }, 'card-stack');
+    // Axe keeps a deck's cards under a node of the deck's own.
+    const root = contextOf('deck-root', 1, 0.5, { parentIdentifier: 'deck', attributes: { name: 'cardRoot' } }, 'node');
+    const { card, elements } = cardTree('d2', { state: 1, location: { name: 'table' } });
+    const stacked = { ...card, syncData: { ...card.syncData, parentIdentifier: 'deck-root' } };
+    await place(t, [deck, root, stacked, ...elements]);
+
+    t.alice.emit([
+      update({
+        ...stacked,
+        majorVersion: 2,
+        syncData: { ...stacked.syncData, attributes: { state: 1, owner: 'user-alice', location: { name: 'table' } } },
+      }),
+    ]);
+
+    await expectRefused(t, 'd2');
+  });
+
   it('lets a player draw a card from the hand of another into its own, face down', async () => {
     const t = await table();
     const { card, elements } = cardTree('u5', { state: 1, location: { name: 'hand:user-bob' } });

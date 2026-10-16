@@ -85,6 +85,9 @@ import type { Lookup, ViewKind, Viewer } from './visibility.js';
 
 type Reply = (eventName: string, data: unknown) => void;
 
+/** The alias of a deck, whose cards keep their faces from everyone. */
+const CARD_STACK_ALIAS = 'card-stack';
+
 /** Adds one event to the bundle for one receiver. */
 type Push<C> = (conn: C, event: EventContext) => void;
 
@@ -713,6 +716,7 @@ export class RoomEngine<C extends object> {
       seat.role !== 'gm' &&
       (!mayChangeView(existing.view, describe(context).view, seat) ||
         this.uncovers(context, existing, seat) ||
+        this.peeksIntoDeck(context, existing) ||
         movesTab(existing, context))
     )
       return this.refuseWrite(identifier, seat, reply);
@@ -775,6 +779,22 @@ export class RoomEngine<C extends object> {
    * The view follows the path of parents and names, so renaming, or moving out from under a parent
    * with rules, would hand over what is masked.
    */
+  /**
+   * Whether a write gives a card that stays in a deck an owner it did not have. The owner of a card
+   * sees its face, which a deck keeps from everyone, so only the GM may; taking the card out of the
+   * deck, as into a hand, is not this. Axe keeps a deck's cards under a node of the deck's own, so
+   * the deck is looked for one step further up as well.
+   */
+  private peeksIntoDeck(context: ObjectContext, existing: StoredEntry): boolean {
+    if (existing.view?.kind !== 'card') return false;
+    const next = describe(context);
+    if (next.view?.kind !== 'card' || next.view.owner === '' || next.view.owner === existing.view.owner) return false;
+    const holder = next.parent !== '' ? this.store.entryOf(next.parent) : null;
+    if (!holder) return false;
+    if (holder.alias === CARD_STACK_ALIAS) return true;
+    return holder.parent !== '' && this.store.entryOf(holder.parent)?.alias === CARD_STACK_ALIAS;
+  }
+
   private uncovers(context: ObjectContext, existing: StoredEntry, seat: Seat): boolean {
     const next = describe(context);
     const renamed =
