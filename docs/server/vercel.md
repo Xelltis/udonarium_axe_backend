@@ -38,6 +38,17 @@ Vercelの画面は英語だけです。
 - AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
 - `SESSION_SECRET`に入れる乱数（→ [設置の準備](/guide/prepare#乱数を作る-session-secret)）
 
+途中で、次の値を入れたり控えたりします。
+パソコンの中にメモのファイルを1つ作り、そこに貼り付けながら進めると迷いません（→ [秘密の値の扱い](/guide/prepare#秘密の値の扱い)）。
+
+| 値                     | 手に入れるところ                                       | 使う手順     |
+| ---------------------- | ------------------------------------------------------ | ------------ |
+| AxeのOrigin            | [設置の準備](/guide/prepare#axeのoriginを確かめる)     | 手順3        |
+| DiscordのClient ID     | 手順1                                                  | 手順3        |
+| DiscordのClient Secret | 手順1                                                  | 手順3        |
+| `SESSION_SECRET`       | [設置の準備](/guide/prepare#乱数を作る-session-secret) | 手順3        |
+| 部屋のサーバーのURL    | 手順8                                                  | 手順8、9、10 |
+
 ## 1. Discordのアプリを作る
 
 部屋に入るときのログインに、Discordを使います。
@@ -51,20 +62,18 @@ Discordのアプリに登録する戻り先のURL（Redirects）は、サーバ�
 下のボタンを押します。
 トークン発行のボタンとは、入れる環境変数が違います。
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&envDescription=%E3%81%9D%E3%82%8C%E3%81%9E%E3%82%8C%E3%81%AE%E6%AC%84%E3%81%AB%E5%85%A5%E3%82%8C%E3%82%8B%E5%80%A4%E3%81%AF%E3%80%81Learn%20More%E3%81%8B%E3%82%89%E9%96%8B%E3%81%8F%E6%89%8B%E9%A0%86%E3%81%AE%E3%83%9A%E3%83%BC%E3%82%B8%E3%81%AB%E3%81%82%E3%82%8A%E3%81%BE%E3%81%99%E3%80%82&envLink=https%3A%2F%2Fxelltis.github.io%2Fudonarium_axe_backend%2Fserver%2Fvercel%23_3-%E7%92%B0%E5%A2%83%E5%A4%89%E6%95%B0%E3%82%92%E5%85%A5%E3%82%8C%E3%82%8B&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
 
 <DeployMap kind="vercel-rooms" />
 
-**Create Git Repository**の欄で、複製先を決めます。
-
-1. Gitのサービスを尋ねられたら、**GitHub**を選びます。
-2. 複製先のアカウントには、自分の個人のアカウントを選びます。
-3. リポジトリの名前には、`my-udonarium-rooms-vercel`が入っています。そのままで構いません。
-4. **Create**を押します。
+**New Project**の画面が開くので、複製先のリポジトリを作ります。
+画面の進みかたは、[Vercelに置く（SkyWay版）の手順3](/skyway/vercel#_3-複製先のリポジトリを決める)と同じです。
+リポジトリの名前の欄には、`my-udonarium-rooms-vercel`が入っています。そのままで構いません。
 
 ## 3. 環境変数を入れる
 
-環境変数を入れる欄が4つ出ます。
+**Add Environment Variables**のカードに、環境変数を入れる欄が4つ出ます。
+左の**Name**には名前が入っているので、右の**Value**に値を入れます。
 
 | 名前                          | 入れる値                                                                             |
 | ----------------------------- | ------------------------------------------------------------------------------------ |
@@ -79,7 +88,7 @@ AxeのOriginを、名前で書いてください。
 ## 4. デプロイする
 
 **Deploy**を押し、ビルドが終わるのを待ちます（1〜2分ほど）。
-終わったら、プロジェクトの画面（ダッシュボード）に進みます。
+「Deployment completed.」と出て、デプロイできたことを知らせる画面に変わったら、ダッシュボードへ進むボタンを押して、プロジェクトの画面に進みます。
 
 この時点では、まだRedisとBlobのストアがつながっていません。
 そのため、部屋のサーバーは`config-invalid`を返します。
@@ -88,21 +97,27 @@ AxeのOriginを、名前で書いてください。
 ## 5. Redisをつなぐ
 
 Redisは、部屋の状態、部屋の一覧、ログインした人のアカウントを置くデータベースです。
-VercelのMarketplaceから、Upstashの無料のRedisを作ってつなぎます。
+VercelのMarketplaceから、Upstashの無料のRedis（**Upstash for Redis**）を作ってつなぎます。
 
 1. プロジェクトの画面で、左のサイドバーの**Storage**を開きます。
-2. Marketplaceのデータベースの中から、**Upstash**の**Redis**を選び、**Install**を押します。続けて出る画面でも、**Install**を押します。
-3. **Region**（置く場所）を選びます。日本から使うなら、東京（Tokyo）を選びます。
-4. プラン（料金の種類）は、無料のもの（Free）を選び、**Continue**を押します。
-5. **Database Name**に名前（例：`udonarium-rooms`）を入れ、**Create**を押します。
-6. できたデータベースの画面で、**Connect Project**を押し、このプロジェクトを選びます。
-7. 環境（Production、Preview、Development）は、すべてにチェックを入れたままにします。**Custom Prefix**の欄は空のままにします。
-8. **Connect**を押します。
+2. データベースを作るボタン（**Create Database**か**Create Storage**）を押し、Marketplaceのデータベースの一覧を出します。
+3. 一覧から、**Upstash for Redis**（Upstashの行）を選びます。名前が**Redis**だけの行は、Redis Cloudという別のサービスなので選びません。
+4. **Install**を押します。初めてUpstashを使うときは「Install Upstash」の画面が出るので、**Create New Upstash Account**を選んで**Continue**を押します。
+5. **Primary Region**（置く場所）で、東京（**Tokyo**、`hnd1`）を選びます。部屋のサーバーも東京で動くので、近くに置くと速くなります。あとから変えられません。
+6. **Read Regions**は空のまま、**Eviction**はオフのままにします。**Eviction**をオンにすると、データベースがいっぱいになったときに、部屋のデータが消されることがあります。
+7. プラン（料金の種類）は、無料の**Free**を選び、**Continue**を押します。**Prod Pack**と**Auto Upgrade**は有料のものなので、選びません。
+8. **Database Name**に名前（例：`udonarium-rooms`）を入れ、**Create**を押します。
+9. できたデータベースの画面で、**Connect Project**を押します。
+10. 「Connect Project」の画面で、このプロジェクトを選びます。**Environments**は、Development、Preview、Productionのすべてにチェックが入ったままにします。**Custom Prefix**の欄は空のままにします。
+11. **Connect**を押します。
+
+Freeのプランで作れるデータベースは、1つのUpstashのアカウントに1つまでです。
+1か月に使えるコマンドの数などにも上限があります（→ [料金と上限](/operate/costs#vercel版)）。
 
 つないだら、変数が入ったかを確かめます。
 
 1. 左のサイドバーの**Environment Variables**を開きます。
-2. 一覧に、`REDIS_URL`か`KV_URL`があるかを見ます。
+2. 一覧に、`REDIS_URL`か`KV_URL`があるかを見ます。ほかに`KV_REST_API_URL`などの変数も入りますが、部屋のサーバーは使いません。
 
 どちらかがあれば、次に進みます。
 どちらも無いときは、`REDIS_URL`を手で足します。
@@ -116,19 +131,20 @@ Vercel Blobは、部屋に置いた画像と音声の置き場です。
 1. 左のサイドバーの**Storage**を開き、**Create Storage**を押します。
 2. **Blob**を選び、**Continue**を押します。
 3. アクセスの種類を**Private**にします。**Public**にすると、URLを知っている人ならだれでも画像と音声を読めてしまいます。あとから変えられないので、間違えたときは作り直します。
-4. 名前を入れて作り、このプロジェクトにつなぎます。環境は、すべてにチェックを入れたままにします。
+4. 置く場所（リージョン）を選ぶ欄で、東京（**Tokyo**、`hnd1`）を選びます。これも、あとから変えられません。
+5. 名前（例：`udonarium-rooms-assets`）を入れて、**Create a new Blob store**を押します。
+6. つなぐ環境を尋ねられます。最初はProductionとPreviewにチェックが入っているので、そのままにします。
 
-つなぐと、`BLOB_STORE_ID`などの変数がプロジェクトに入ります。
+つなぐと、`BLOB_STORE_ID`と`BLOB_READ_WRITE_TOKEN`などの変数がプロジェクトに入ります。
+**Environment Variables**の一覧で、`BLOB_STORE_ID`があるかを確かめます。
 Vercelの上では、これで読み書きできます。
 
 ## 7. デプロイし直す
 
 RedisとBlobの変数は、いま動いているデプロイには入っていません。
 デプロイし直して、読み込ませます。
-
-1. 左のサイドバーの**Deployments**を開きます。
-2. いちばん上（最新）のデプロイの右の **…** から、**Redeploy**を選びます。
-3. 確かめる画面が出たら、**Redeploy**を押します。
+やりかたは、[Vercelに置く（SkyWay版）の「設定を直す」](/skyway/vercel#設定を直す)の、デプロイし直す手順と同じです。
+**Deployments**のいちばん上のデプロイの **…** から**Redeploy**を選び、ビルドのキャッシュは使わずにデプロイし直します。
 
 ## 8. URLを控えて、Discordに戻り先を登録する
 

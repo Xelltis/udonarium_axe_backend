@@ -25,9 +25,11 @@ Discord Developer Portal（アプリを作る画面）は英語で表示され�
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)を開き、Discordのアカウントでログインします。
 2. 右上の**New Application**を押します。
-3. **Name**に名前を入れます。この名前は、ログインのときにDiscordが出す確認の画面で、ログインする人に見えます。卓や配信の名前にすると分かりやすくなります（例：`Udonarium Axe`）。
-4. チーム（team）を選ぶ欄があれば、空のままで構いません。開発者向けの規約（Developer Terms of ServiceとDeveloper Policy）に同意するチェックがあれば入れ、**Create**を押します。
-5. 人間かどうかを確かめる画面が出たら、案内に従って答えます。
+3. 「Create a new app」の画面で、**Name**に名前を入れます。この名前は、ログインのときにDiscordが出す確認の画面で、ログインする人に見えます。卓や配信の名前にすると分かりやすくなります（例：`Udonarium Axe`）。
+4. **Team**の欄は、Discordのチームに入っている人にだけ出ます。出たときは、**Personal**のままにします。
+5. 「By clicking Create, you agree to the Discord Developer Terms of Service and Developer Policy.」のチェックを入れます。開発者向けの規約に同意するという意味です。
+6. 名前とチェックがそろうと、**Create**が押せるようになります。押します。
+7. 人間かどうかを確かめる画面が出たら、案内に従って答えます。
 
 アプリの画面（**General Information**）が開きます。
 アイコンや説明は、入れなくても動きます。
@@ -35,9 +37,10 @@ Discord Developer Portal（アプリを作る画面）は英語で表示され�
 ## 2. Client IDとClient Secretを控える
 
 1. 左のメニューの**OAuth2**を開きます。
-2. **Client ID**の下の**Copy**を押し、どこかに貼り付けて控えます。
-3. **Client Secret**の下の**Reset Secret**を押します。本当に作り直すかを尋ねられたら、**Yes, do it!** を押します。2段階認証を設定しているアカウントでは、確認のコードを求められることがあります。
-4. 新しいClient Secretが出るので、**Copy**を押して控えます。
+2. **Client information**の欄の、**Client ID**の下の**Copy**を押し、どこかに貼り付けて控えます。
+3. **Client Secret**は、「Hidden for security」と伏せてあります。その下の**Reset Secret**を押します。
+4. 「Regenerate Secret Key?」と、本当に作り直すかを尋ねられます。作ったばかりのアプリなので、作り直しても困ることはありません。**Yes, do it!** を押します。2段階認証を設定しているアカウントでは、6けたの確認のコードを求められることがあります。
+5. 「A new token was generated! Be sure to copy it as it will not be shown to you again.」と出て、新しいClient Secretが見えるようになります。**Copy**を押して控えます。
 
 ::: warning Client Secretは一度しか出ません
 画面を離れると、Client Secretはもう見られません。
@@ -63,7 +66,7 @@ Discordでログインしたあと、Discordは決められたURLにだけ戻り
 部屋のサーバーのURLは、デプロイが終わると決まります。
 
 1. Discord Developer Portalで、作ったアプリを開き、左のメニューの**OAuth2**を開きます。
-2. **Redirects**の欄で、URLを入れる欄を足すボタン（**Add Redirect**）を押します。
+2. **Redirects**の欄の**Add Redirect**を押します。すでに1つ登録してあるときは、ボタンの名前が**Add Another**になっています。
 3. 出てきた欄に、次の形のURLを入れます。
 
    ```text
@@ -76,7 +79,8 @@ Discordでログインしたあと、Discordは決められたURLにだけ戻り
    | Vercel版                    | `https://my-udonarium-rooms-vercel.vercel.app/v1/login/discord/callback`       |
    | カスタムドメイン            | `https://backend.example.com/v1/login/discord/callback`                        |
 
-4. 画面の下に出る**Save Changes**を押します。押さないと、登録されません。
+4. 画面の下に「Careful — you have unsaved changes!」という帯が出るので、**Save Changes**を押します。押さないと、登録されません。
+5. 帯が消えれば、登録できています。「You provided an invalid redirect URI.」と出たときは、URLの形が違います。`https://`から始まっているか、前後に空白が入っていないかを確かめます。
 
 ドメインの部分は、Axeの`config.json`の`backend.url`に書くのと同じにします。
 URLは上の形のとおりに書き、末尾に`/`を付けません。

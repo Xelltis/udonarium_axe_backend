@@ -20,6 +20,17 @@ Cloudflareの画面は、日本語でも表示できます（右上のプロフ�
 - クレジットカードかPayPal（R2を使い始めるときに登録が要ります。無料枠の中なら請求はありません）
 - AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
 
+途中で、次の値を入れたり控えたりします。
+パソコンの中にメモのファイルを1つ作り、そこに貼り付けながら進めると迷いません（→ [秘密の値の扱い](/guide/prepare#秘密の値の扱い)）。
+
+| 値                     | 手に入れるところ                                   | 使う手順      |
+| ---------------------- | -------------------------------------------------- | ------------- |
+| AxeのOrigin            | [設置の準備](/guide/prepare#axeのoriginを確かめる) | 手順6、8      |
+| DiscordのClient ID     | 手順3                                              | 手順6         |
+| DiscordのClient Secret | 手順3                                              | 手順6         |
+| `SESSION_SECRET`       | 手順4                                              | 手順6         |
+| 部屋のサーバーのURL    | 手順7                                              | 手順9、10、11 |
+
 ## 1. Cloudflareのアカウントを作る
 
 すでにCloudflareのアカウントがあれば、ログインして手順2に進みます。
@@ -38,8 +49,10 @@ R2は、部屋に置いた画像と音声の置き場です。
 無料枠（1か月に10GBの保存と、決まった回数の読み書き）の範囲なら、料金はかかりません。
 ただし、申し込みには支払い方法の登録が要ります。
 
-1. [Cloudflareのダッシュボード](https://dash.cloudflare.com/)で、左のメニューの**Storage & databases**から**R2**を開きます。
-2. R2をまだ使っていないアカウントでは、R2を使い始めるための案内とボタンが出ます。ボタンを押し、画面に従って支払い方法（クレジットカードかPayPal）を登録して、申し込みを済ませます。
+1. [Cloudflareのダッシュボード](https://dash.cloudflare.com/)で、左のメニューの**Storage & databases**から**R2 object storage**（または**R2**）を開き、**Overview**を開きます。
+2. R2をまだ使っていないアカウントでは、R2を使い始めるための案内と、申し込みのボタン（**Add R2 subscription to my account**など）が出ます。ボタンを押します。
+3. 画面に従って、支払い方法（クレジットカードかPayPal）を登録し、申し込みを済ませます。料金は、無料枠を超えて使った分だけです。
+4. R2の画面に戻り、バケットの一覧（まだ空です）が出ていれば、使い始められています。
 
 バケット（R2の中の入れ物）は、このあとのデプロイで自動で作られます。
 ここでは作りません。
@@ -68,51 +81,60 @@ Discordのアプリに登録する戻り先のURL（Redirects）は、WorkerのU
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Xelltis/udonarium_axe_backend/tree/main/apps/cloudflare)
 
-Cloudflareのデプロイの画面が開きます。
+Cloudflareにログインしていないときは、先にログインの画面が出ます。
+ログインすると、Cloudflareのデプロイの画面（「Set up your application」）が開きます。
 
 <DeployMap kind="cloudflare" />
 
 このボタンは、このリポジトリの`apps/cloudflare`だけを、あなたのGitHubに新しいリポジトリとして複製し、そこからCloudflareにデプロイします。
 このリポジトリそのものは変わりません。
 
-初めてのときは、CloudflareとGitHubをつなぐよう求められます。
+初めてのときは、CloudflareとGitHubをつなぎます。
 
-1. **GitHub**を選びます。
-2. GitHubの画面で、**Cloudflare Workers and Pages**というGitHubのアプリを入れるよう求められます。入れる先には、自分の個人のアカウントを選びます。
-3. 許可すると、Cloudflareのデプロイの画面に戻ります。
+1. **Configure repository**の欄の**Git account**を開き、**Connect GitHub**を選びます。
+2. GitHubの画面で、**Cloudflare Workers and Pages**というGitHubのアプリを入れるよう求められます。入れる先には、自分の個人のアカウントを選び、**Install**を押します。
+3. Cloudflareのデプロイの画面に戻り、**Git account**に自分のGitHubのアカウントが出ていれば、つながっています。
 
 ## 6. 設定を入れて、デプロイする
 
-デプロイの画面では、次のものを決めます。
+デプロイの画面では、上から順に次のものを決めます。
+欄によっては、その下に、このリポジトリが付けた日本語の説明が出ます。
 
-| 項目                          | 入れるもの                                                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------------------ |
-| リポジトリの名前              | 複製先のGitHubのリポジトリの名前。そのままで構わない。同じ名前のリポジトリがすでにあると作れない |
-| Workerの名前                  | 例：`udonarium-axe-backend`。WorkerのURLと、R2のバケットの名前（`<この名前>-assets`）になる      |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` | AxeのOrigin（例：`https://axe.example.com`）。2つ以上あるときはカンマで区切る。`*`は使えない     |
-| `ROOM_RETENTION_HOURS`        | 最後の1人が抜けてから部屋を消すまでの時間。`24`のままで構わない                                  |
-| `DISCORD_CLIENT_ID`           | 手順3で控えたClient ID                                                                           |
-| `DISCORD_CLIENT_SECRET`       | 手順3で控えたClient Secret                                                                       |
-| `SESSION_SECRET`              | 手順4で作った乱数                                                                                |
+| 項目                              | 入れるもの                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Repository name**               | 複製先のGitHubのリポジトリの名前。そのままで構わない。同じ名前のリポジトリがすでにあると作れない |
+| **Create private Git repository** | 複製先を非公開にするかのチェック。どちらでも動く。迷ったらチェックを入れる                       |
+| **Worker name**                   | 例：`udonarium-axe-backend`。WorkerのURLと、R2のバケットの名前（`<この名前>-assets`）になる      |
+| `ACCESS_CONTROL_ALLOW_ORIGIN`     | AxeのOrigin（例：`https://axe.example.com`）。2つ以上あるときはカンマで区切る。`*`は使えない     |
+| `ROOM_RETENTION_HOURS`            | 最後の1人が抜けてから部屋を消すまでの時間。`24`のままで構わない                                  |
+| `DISCORD_CLIENT_ID`               | 手順3で控えたClient ID                                                                           |
+| `DISCORD_CLIENT_SECRET`           | 手順3で控えたClient Secret                                                                       |
+| `SESSION_SECRET`                  | 手順4で作った乱数                                                                                |
 
 - Workerの名前には、英小文字、数字、`-`だけを使います。
 - 値は、コピーして貼り付けます。前後に空白や改行が入らないように気をつけてください。
+- ログインの3つ（`DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`）は、入れないと先に進めない欄です。
+- R2のバケットの名前を尋ねる欄が出たときは、そのまま（`<Workerの名前>-assets`）にします。
 - ビルドとデプロイのコマンドの欄は、最初から入っているままにします。
 
 すべて入れたら、画面のいちばん下の**Create and deploy**を押します。
 リポジトリの複製、R2のバケットの作成、部屋のサーバー（Durable Objects）の作成、Workerのデプロイが、まとめて行われます。
+
+画面は、ビルドの様子（**Build details**と**Build log**）に変わります。
 数分かかるので、終わるまで待ちます。
+うまくいくと、**Build log**の最後に、`https://<Workerの名前>.<アカウントのサブドメイン>.workers.dev`の形のURLが出ます。
 
 ## 7. WorkerのURLを確かめる
 
-1. [Cloudflareのダッシュボード](https://dash.cloudflare.com/)で、左のメニューの**Workers & Pages**を開きます。
+1. [Cloudflareのダッシュボード](https://dash.cloudflare.com/)で、左のメニューの**Workers & Pages**を開きます。メニューがまとめて畳まれているときは、**Compute**の中にあります。
 2. 一覧から、手順6で付けた名前のWorkerを開きます。
-3. Workerの画面に、`https://<Workerの名前>.<アカウントのサブドメイン>.workers.dev`の形のURLが出ています。
+3. Workerの画面の**Domains**のタブに、`https://<Workerの名前>.<アカウントのサブドメイン>.workers.dev`の形のURLが出ています。画面の右上の**Visit**を押しても、そのURLが開きます。
 
 このURLが、**部屋のサーバーのURL**です。
 このあとの手順では、`https://udonarium-axe-backend.yourname.workers.dev`として書きます。
 
-デプロイが失敗していたときは、Workerの画面の**Deployments**から**View build history**を開き、失敗したビルドのログを見ます。
+デプロイが失敗していたときは、Workerの画面の**Deployments**のタブを開き、いちばん下の**View build history**を押して、失敗したビルドのログを見ます。
+原因を直したら、そのビルドの **…** から**Retry build**を選ぶと、やり直せます。
 困ったときの見かたは、[サーバー版で困ったとき](/server/troubleshooting#デプロイでつまずく)にあります。
 
 ## 8. Originの設定を確かめる
@@ -230,9 +252,10 @@ Axe側の設定の詳しい意味は、[Axeの設定](/guide/client-config#サ�
 
 ### Workerにドメインを付ける
 
-1. **Workers & Pages**からWorkerを開き、**Settings**の**Domains & Routes**を開きます。
-2. **Add**を押し、**Custom Domain**を選びます。
-3. `backend.example.com`のように、管理しているドメインの下の名前を入れて、**Add Custom Domain**を押します。
+1. **Workers & Pages**からWorkerを開き、**Domains**のタブを開きます。タブが無いときは、**Settings**の**Domains & Routes**を開きます。
+2. ドメインを足すボタン（**Add Domain**、または**Add**から**Custom Domain**）を押します。
+3. `backend.example.com`のように、管理しているドメインの下の名前を入れて、足します（**Add Custom Domain**）。
+4. 一覧に、入れたドメインが出れば付いています。証明書ができるまで、数分かかることがあります。
 
 DNSのレコードと証明書は、Cloudflareが作ります。
 

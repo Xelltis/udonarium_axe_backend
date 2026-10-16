@@ -21,15 +21,27 @@ Vercelの画面は英語だけで、日本語に切り替えられません。
 - SkyWayのアプリケーションIDとシークレットキー（→ [SkyWayのアプリを作る](/skyway/app)）
 - AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
 
+途中で、次の値を入れたり控えたりします。
+パソコンの中にメモのファイルを1つ作り、そこに貼り付けながら進めると迷いません（→ [秘密の値の扱い](/guide/prepare#秘密の値の扱い)）。
+
+| 値                         | 手に入れるところ                                   | 使う手順 |
+| -------------------------- | -------------------------------------------------- | -------- |
+| AxeのOrigin                | [設置の準備](/guide/prepare#axeのoriginを確かめる) | 手順4    |
+| SkyWayのアプリケーションID | [SkyWayのアプリを作る](/skyway/app)                | 手順4    |
+| SkyWayのシークレットキー   | [SkyWayのアプリを作る](/skyway/app)                | 手順4    |
+| トークン発行サーバーのURL  | 手順6                                              | 手順7、8 |
+
 ## 1. Vercelのアカウントを作る
 
 すでにVercelのアカウントがあれば、ログインして手順2に進みます。
 
 1. [Vercelの登録ページ](https://vercel.com/signup)を開きます。
-2. プランを尋ねられたら、個人で使う無料のプラン（**Hobby**）を選び、名前を入れて進みます。
-3. **Continue with GitHub**を押します。
-4. GitHubのログインの画面が出たらログインし、VercelにGitHubのアカウントを使わせてよいかを尋ねられたら、**Authorize Vercel**を押します。
+2. **Continue with GitHub**を押します。GoogleやメールアドレスでもVercelのアカウントは作れますが、GitHubで作ると、あとでGitHubとつなぐ手間が省けます。
+3. GitHubのログインの画面が出たら、ログインします。
+4. VercelにGitHubのアカウントを使わせてよいかを尋ねる画面が出たら、許可するボタンを押します。
+5. プランを尋ねられたら、個人で使う無料のプラン（**Hobby**）を選び、名前を入れて進みます。
 
+Vercelのダッシュボードが開けば、アカウントができています。
 これで、VercelとGitHubがつながります。
 次からは、同じGitHubのアカウントでVercelにログインします。
 
@@ -43,9 +55,10 @@ Hobbyは、個人が自分のために使うためのプランです。
 
 下のボタンを押します。
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&envDescription=%E3%81%9D%E3%82%8C%E3%81%9E%E3%82%8C%E3%81%AE%E6%AC%84%E3%81%AB%E5%85%A5%E3%82%8C%E3%82%8B%E5%80%A4%E3%81%AF%E3%80%81Learn%20More%E3%81%8B%E3%82%89%E9%96%8B%E3%81%8F%E6%89%8B%E9%A0%86%E3%81%AE%E3%83%9A%E3%83%BC%E3%82%B8%E3%81%AB%E3%81%82%E3%82%8A%E3%81%BE%E3%81%99%E3%80%82&envLink=https%3A%2F%2Fxelltis.github.io%2Fudonarium_axe_backend%2Fskyway%2Fvercel%23_4-%E7%92%B0%E5%A2%83%E5%A4%89%E6%95%B0%E3%82%92%E5%85%A5%E3%82%8C%E3%82%8B&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
-Vercelの新しいプロジェクトを作る画面が開きます。
+Vercelの新しいプロジェクトを作る画面（**New Project**）が開きます。
+ログインしていないときは「Sign in to clone and deploy.」と出るので、**Continue with GitHub**を押してログインします。
 
 <DeployMap kind="vercel-token" />
 
@@ -54,17 +67,21 @@ Vercelの新しいプロジェクトを作る画面が開きます。
 
 ## 3. 複製先のリポジトリを決める
 
-**Create Git Repository**の欄で、複製先を決めます。
+**New Project**の画面の、リポジトリを作るカードで、複製先を決めます。
+カードには「Create a Git repository to easily update your project after deploying it.」と書いてあります。
 
-1. Gitのサービスを尋ねられたら、**GitHub**を選びます。
-2. 複製先のアカウントには、自分の個人のアカウントを選びます。無料のプランでは、GitHubの組織（Organization）の非公開リポジトリからはデプロイできません。
-3. リポジトリの名前には、`my-udonarium-backend-vercel`が入っています。そのままで構いません。身内用と公開用など、2つ以上置くときは、名前を変えます。
-4. 非公開（private）のリポジトリにするかを選ぶ欄があります。どちらでも動きます。迷ったら非公開のままにします。
-5. **Create**を押します。
+1. **Git Providers**の中から、**GitHub**を押します。
+2. **Git Scope**で、自分の個人のアカウントを選びます。無料のプランでは、GitHubの組織（Organization）の非公開リポジトリからはデプロイできません。
+3. 自分のアカウントが出てこないときは、**Git Scope**の中の**Add GitHub Scope**を選びます。GitHubの画面が開くので、Vercelを入れる先に自分のアカウントを選び、**Install**を押します。
+4. **Private Repository Name**の欄には、`my-udonarium-backend-vercel`が入っています。そのままで構いません。身内用と公開用など、2つ以上置くときは、名前を変えます。
+5. 名前の欄の中のスイッチで、非公開（private）にするか公開にするかを選べます。最初は非公開になっています。どちらでも動くので、そのままにします。
+6. **Create**を押します。
 
 ## 4. 環境変数を入れる
 
-続いて、環境変数（サーバーに渡す設定）を入れる欄が3つ出ます。
+続いて、**Add Environment Variables**のカードに、環境変数（サーバーに渡す設定）を入れる欄が3つ出ます。
+左の**Name**には名前が入っていて、変えられません。
+右の**Value**に値を入れます。
 
 | 名前                          | 入れる値                                                                      |
 | ----------------------------- | ----------------------------------------------------------------------------- |
@@ -74,6 +91,8 @@ Vercelの新しいプロジェクトを作る画面が開きます。
 
 - 値は、コピーして貼り付けます。前後に空白や改行が入らないように気をつけてください。
 - Originの末尾には`/`を付けません。パス（`/udonarium/`など）も付けません。
+- 空のままの欄には「Missing」と出ます。3つとも入れると、先に進めます。
+- 欄の下の説明の**Learn More**を押すと、このページが開きます。
 
 ほかの設定（トークンの有効期間、ロビーの数）は、あとから足せます。
 ここでは入れなくて構いません（→ [設定項目](/skyway/configuration)）。
@@ -81,10 +100,11 @@ Vercelの新しいプロジェクトを作る画面が開きます。
 ## 5. デプロイする
 
 **Deploy**を押します。
-ビルドが始まり、1〜2分ほどで終わります。
+ボタンが「Deploying」に変わり、その下で「Deployment queued…」「Deployment started…」と進みます。
+ビルドは、1〜2分ほどで終わります。
 
-終わると、デプロイできたことを知らせる画面が出ます。
-そこからプロジェクトの画面（ダッシュボード）に進みます。
+「Deployment completed.」と出たあと、デプロイできたことを知らせる画面に変わります。
+そこから、ダッシュボードへ進むボタンを押して、プロジェクトの画面に進みます。
 
 ビルドが失敗したときは、画面に出るログの最後の数行を見てください。
 環境変数の誤りは、ビルドでは見つかりません。
@@ -165,22 +185,33 @@ Axeを配信している場所の`assets/config.json`を開き、`backend.url`�
 
 1. [Vercelのダッシュボード](https://vercel.com/dashboard)で、プロジェクトを開きます。
 2. 左のサイドバーの**Environment Variables**を開きます。
-3. 直すときは、その変数の行の右の **…** から**Edit**を選びます。足すときは、上の欄に**Name**と**Value**を入れます。
-4. 値を見せない種類（**Secret**）と、あとから見られる種類（**Config**）を選ぶ欄があります。`SKYWAY_SECRET`は**Secret**にします。
-5. **Save**を押します。
+3. 直すときは、その変数の行の右の **…** から**Edit**を選び、新しい値を入れて**Save**を押します。
+4. 足すときは、変数を足すボタンを押します。「Add Environment Variable」の画面が出るので、**Key**に名前、**Value**に値を入れます。
+5. **Type**で、値の種類を選びます。**Secret**は、保存したあと値を画面に出さない種類です。**Config**は、あとから値を見られる種類です。`SKYWAY_SECRET`のような秘密の値は**Secret**にします。
+6. **Environments**は最初のままにして、**Save**を押します。
+
+**Secret**にした値は、あとから見られません。
+直すときは、新しい値をもう一度入れます。
 
 環境変数を変えても、いま動いているデプロイには反映されません。
 変えたあとは、デプロイし直します。
 
 1. 左のサイドバーの**Deployments**を開きます。
-2. いちばん上（最新）のデプロイの右の **…** から、**Redeploy**を選びます。
-3. 確かめる画面が出たら、**Redeploy**を押します。
+2. いちばん上（最新）のデプロイの右の **…** から、**Redeploy**を選びます。古いデプロイからはやり直せないので、いちばん上のものを選びます。
+3. 「Redeploy」の画面が出ます。**Choose Environment**は**Production**のままにし、**Use existing Build Cache.** のチェックは外したままにします。
+4. **Redeploy**を押します。1〜2分で、新しいデプロイに替わります。
 
 ## 独自ドメインで公開する
 
 `*.vercel.app`のURLのままでも使えます。
-自分のドメイン（例：`backend.example.com`）で公開したいときは、プロジェクトの**Settings**の**Domains**から足します。
-画面に、ドメインの管理元（お名前.comなど）でDNSに足す値が出るので、そのとおりに設定します。
+自分のドメイン（例：`backend.example.com`）で公開したいときは、次のように足します。
+
+1. プロジェクトの**Settings**の**Domains**を開き、**Add Domain**を押します。
+2. 使うドメイン（例：`backend.example.com`）を入れて、足します。
+3. 画面に、DNSに足すレコードが出ます。`backend.example.com`のようなサブドメインならCNAMEのレコード、`example.com`そのものならAのレコードです。
+4. ドメインの管理元（お名前.comなど）のDNSの設定で、画面に出たとおりのレコードを足します。値はプロジェクトごとに違うので、画面に出たものを使います。
+5. Vercelの画面で、ドメインの横の表示が設定済みに変われば、使えます。DNSが行きわたるまで、数分から数時間かかることがあります。
+
 足し終えたら、Axeの`backend.url`も新しいURLに書き換えます。
 
 ## 更新するとき
