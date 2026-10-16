@@ -358,15 +358,15 @@ class AppTest extends TestCase
     public static function unsafeScopeNameProvider(): array
     {
         return [
-            'channelName がワイルドカードそのもの' => ['*', 'p'],
-            'channelName が前方一致ワイルドカード' => ['room-*', 'p'],
-            'channelName がエスケープ文字を含む'   => ['room-\\*', 'p'],
-            'channelName が空文字列'               => ['', 'p'],
-            'peerId がワイルドカードそのもの'      => ['ch', '*'],
-            'peerId が前方一致ワイルドカード'      => ['ch', 'peer-*'],
-            'peerId が空文字列'                    => ['ch', ''],
-            'channelName がロビーの予約名'         => ['udonarium-lobby-1-of-3', 'p'],
-            'channelName がロビーの予約プレフィックス' => ['udonarium-lobby-anything', 'p'],
+            'channelName is the wildcard itself'      => ['*', 'p'],
+            'channelName is a prefix wildcard'        => ['room-*', 'p'],
+            'channelName holds an escape character'   => ['room-\\*', 'p'],
+            'channelName is empty'                    => ['', 'p'],
+            'peerId is the wildcard itself'           => ['ch', '*'],
+            'peerId is a prefix wildcard'             => ['ch', 'peer-*'],
+            'peerId is empty'                         => ['ch', ''],
+            'channelName is the lobby\'s reserved name' => ['udonarium-lobby-1-of-3', 'p'],
+            'channelName has the lobby\'s reserved prefix' => ['udonarium-lobby-anything', 'p'],
         ];
     }
 }
