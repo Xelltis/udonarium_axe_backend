@@ -6,25 +6,13 @@ import { deleteRoomAssets } from '../assets/sweep';
 import { parseConfig } from '../config';
 import { hashPassword } from '../core/rooms/password';
 import { RoomEngine } from '../core/rooms/engine';
+import type { RoomInit } from '../core/http/backend';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../core/rooms/host';
 import { LOBBY_NAME } from './lobby';
 import { RoomStore, migrate } from './store';
 
 /** 部屋を消しきれなかったとき、もう一度消しにくるまでの時間（ミリ秒） */
 export const WIPE_RETRY_MS = 60_000;
-
-/** 部屋を作るときに Worker から渡すもの */
-export interface RoomInit {
-  roomKey: string;
-  roomId: string;
-  name: string;
-  /** 空ならパスワードの無い部屋 */
-  password: string;
-  /** 部屋を作った人のユーザー ID。この人が GM になる */
-  creatorUserId: string;
-  /** 受けた Worker のホスト名。同じアカウントに置いた別の Worker と、記録を分けるのに使う */
-  host: string;
-}
 
 interface RoomRow extends Record<string, SqlStorageValue> {
   room_key: string;

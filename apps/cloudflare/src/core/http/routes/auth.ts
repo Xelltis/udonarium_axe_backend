@@ -2,16 +2,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { literal, object, regex, pipe, safeParse, string, variant } from 'valibot';
 
-import type { AuthConfigResponse, TokenResponse } from '../../contracts/protocol';
-import type { LoginConfig } from '../config';
-import type { AppEnv } from '../http/context';
-import { fail } from '../http/errors';
-import { networkOfRequest, withinLimits } from '../http/limits';
-import { isAllowedOrigin, tryParseUrl } from '../core/http/origin';
-import { authorizeUrl, fetchProfile } from '../core/auth/discord';
-import { accountOf, bearerOf } from './request';
-import { packSecret, tokensOf, unpackSecret } from '../core/auth/session';
-import { LOGIN_STATE_SECONDS, readToken, signToken } from '../core/auth/tokens';
+import type { AuthConfigResponse, TokenResponse } from '../../../../contracts/protocol.js';
+import { authorizeUrl, fetchProfile } from '../../auth/discord.js';
+import { packSecret, tokensOf, unpackSecret } from '../../auth/session.js';
+import { LOGIN_STATE_SECONDS, readToken, signToken } from '../../auth/tokens.js';
+import type { LoginConfig } from '../../config/login.js';
+import type { ServerEnv } from '../backend.js';
+import { fail } from '../errors.js';
+import { isAllowedOrigin, tryParseUrl } from '../origin.js';
+import { bearerOf } from '../request.js';
 
 /** PKCE の code_challenge（SHA-256 の base64url。43文字） */
 const CHALLENGE = /^[\w-]{43}$/;
@@ -30,7 +29,7 @@ const tokenRequestSchema = variant('grant_type', [
 
 const logoutSchema = object({ refresh_token: string() });
 
-const callbackUrl = (c: Context<AppEnv>): string =>
+const callbackUrl = (c: Context<ServerEnv>): string =>
   `${new URL(c.req.url).origin}/v1/login/discord/callback`;
 
 /**
@@ -48,18 +47,18 @@ const isLoginRedirect = (redirect: string, allowedOrigins: string[]): boolean =>
   );
 };
 
-type LoginHandler = (c: Context<AppEnv>, login: LoginConfig) => Response | Promise<Response>;
+type LoginHandler = (c: Context<ServerEnv>, login: LoginConfig) => Response | Promise<Response>;
 
-/** ログインを置いていない Worker では 503 で断る */
+/** ログインを置いていない部屋のサーバーでは 503 で断る */
 const withLogin =
   (handler: LoginHandler) =>
-  (c: Context<AppEnv>): Response | Promise<Response> => {
+  (c: Context<ServerEnv>): Response | Promise<Response> => {
     const login = c.var.config.login;
     return login ? handler(c, login) : fail(c, 503, 'login-unavailable');
   };
 
 /** ブラウザがページとして開くもの。CORS は要らない */
-export const loginRoutes = new Hono<AppEnv>();
+export const loginRoutes = new Hono<ServerEnv>();
 
 /**
  * ログインを始める。Axe は code_verifier を作って手元に置き、その SHA-256（code_challenge）と、
@@ -96,18 +95,17 @@ loginRoutes.get(
 
     const code = c.req.query('code');
     if (!code) return back({ login_error: 'denied' });
-    if (!(await withinLimits(c, c.env.AUTH_LIMITER, [networkOfRequest(c)]))) {
+    if (!(await c.var.backend.limit(c.req.raw, 'auth')))
       return back({ login_error: 'rate-limited' });
-    }
     const profile = await fetchProfile(login, code, callbackUrl(c));
     if (!profile) return back({ login_error: 'provider-failed' });
-    const secret = await accountOf(c.env, profile.accountKey).signIn(profile, state.challenge);
+    const secret = await c.var.backend.account(profile.accountKey).signIn(profile, state.challenge);
     return back({ login_code: packSecret(profile.accountKey, secret) });
   }),
 );
 
 /** Axe から呼ぶもの。許可した Origin からだけ受ける */
-export const authRoutes = new Hono<AppEnv>();
+export const authRoutes = new Hono<ServerEnv>();
 
 authRoutes.get('/config', (c) =>
   c.json<AuthConfigResponse>({ providers: c.var.config.login ? ['discord'] : [] }),
@@ -116,9 +114,7 @@ authRoutes.get('/config', (c) =>
 authRoutes.post(
   '/token',
   withLogin(async (c, login) => {
-    if (!(await withinLimits(c, c.env.AUTH_LIMITER, [networkOfRequest(c)]))) {
-      return fail(c, 429, 'rate-limited');
-    }
+    if (!(await c.var.backend.limit(c.req.raw, 'auth'))) return fail(c, 429, 'rate-limited');
     const parsed = safeParse(tokenRequestSchema, await c.req.json().catch(() => null));
     if (!parsed.success) return fail(c, 400, 'invalid-request');
     const request = parsed.output;
@@ -126,7 +122,7 @@ authRoutes.post(
       request.grant_type === 'login_code' ? request.code : request.refresh_token,
     );
     if (!handle) return fail(c, 400, 'invalid-grant');
-    const account = accountOf(c.env, handle.accountKey);
+    const account = c.var.backend.account(handle.accountKey);
     const session =
       request.grant_type === 'login_code'
         ? await account.redeem(handle.secret, request.code_verifier)
@@ -139,21 +135,19 @@ authRoutes.post(
 authRoutes.post(
   '/logout',
   withLogin(async (c) => {
-    // 鍵から Durable Object を起こすので、トークンと同じく数を絞る。絞らないと、でたらめな鍵で
-    // いくらでもアカウントの Durable Object を作らせられる
-    if (!(await withinLimits(c, c.env.AUTH_LIMITER, [networkOfRequest(c)]))) {
-      return fail(c, 429, 'rate-limited');
-    }
+    // 鍵からアカウントを引くので、トークンと同じく数を絞る。絞らないと、でたらめな鍵で
+    // いくらでもアカウントの置き場所を起こさせられる
+    if (!(await c.var.backend.limit(c.req.raw, 'auth'))) return fail(c, 429, 'rate-limited');
     const parsed = safeParse(logoutSchema, await c.req.json().catch(() => null));
     if (!parsed.success) return fail(c, 400, 'invalid-request');
     const handle = unpackSecret(parsed.output.refresh_token);
-    if (handle) await accountOf(c.env, handle.accountKey).signOut(handle.secret);
+    if (handle) await c.var.backend.account(handle.accountKey).signOut(handle.secret);
     return c.body(null, 204);
   }),
 );
 
 /** ログインしている人のアカウント。Authorization: Bearer のアクセストークンで尋ねる */
-export const accountRoutes = new Hono<AppEnv>();
+export const accountRoutes = new Hono<ServerEnv>();
 
 accountRoutes.get(
   '/',
@@ -161,7 +155,7 @@ accountRoutes.get(
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
     // 消したあと同じ人が作り直したアカウントは、前のアカウントのトークンでは見せない
-    const account = await accountOf(c.env, claims.sub).account();
+    const account = await c.var.backend.account(claims.sub).account();
     return account?.userId === claims.uid ? c.json(account) : fail(c, 404, 'not-found');
   }),
 );
@@ -173,7 +167,8 @@ accountRoutes.delete(
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
     // 前のアカウントのトークンで、作り直したアカウントを消させない
-    if (!(await accountOf(c.env, claims.sub).erase(claims.uid))) return fail(c, 404, 'not-found');
+    if (!(await c.var.backend.account(claims.sub).erase(claims.uid)))
+      return fail(c, 404, 'not-found');
     return c.body(null, 204);
   }),
 );

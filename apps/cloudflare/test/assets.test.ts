@@ -3,7 +3,7 @@ import { exports } from 'cloudflare:workers';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { roomAssetKey } from '../src/core/assets/keys';
-import { MAX_BYTES } from '../src/assets/routes';
+import { MAX_BYTES } from '../src/core/assets/limits';
 import { SNIFF_BYTES } from '../src/core/assets/sniff';
 import app from '../src/index';
 import {

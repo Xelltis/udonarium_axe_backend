@@ -1,6 +1,6 @@
 import type { Context, ErrorHandler } from 'hono';
 
-import { ConfigError } from '../config';
+import { ConfigError } from '../config/login.js';
 
 /** 本文 `{"error": "<コード>"}` で返すエラー。README の表と揃える */
 export type ErrorCode =
@@ -25,6 +25,10 @@ export type ErrorCode =
   | 'rate-limited'
   | 'config-invalid'
   | 'internal-error';
+
+/** Hono の文脈の外で作る、エラーの応答 */
+export const failure = (status: number, error: ErrorCode): Response =>
+  Response.json({ error }, { status });
 
 export const fail = (
   c: Context,
