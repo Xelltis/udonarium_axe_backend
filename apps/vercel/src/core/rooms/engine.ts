@@ -1291,15 +1291,21 @@ export class RoomEngine<C extends object> {
   // ---- 置き場所 ----
 
   private scheduleFlush(): void {
-    this.flushTimer ??= setTimeout(() => {
-      this.flushTimer = null;
-      const now = Date.now();
-      if (this.flushTally.count === 0) this.flushTally.since = now;
-      this.flushTally.count += this.store.flush();
-      if (now - this.flushTally.since >= FLUSH_TALLY_MS || this.seats().length === 0) {
-        this.host.record('flush', '', this.flushTally.count);
-        this.flushTally = { count: 0, since: now };
-      }
-    }, FLUSH_DELAY_MS);
+    this.flushTimer ??= setTimeout(() => this.flushNow(), FLUSH_DELAY_MS);
+  }
+
+  /**
+   * まとめておいた変更を、待たずに書く。部屋のサーバーが部屋を放す前（Vercel 版で、最後の1人が出たとき）にも
+   * 呼ぶ。書いた数は、間を置いてまとめて記録する
+   */
+  flushNow(): void {
+    this.stopFlushing();
+    const now = Date.now();
+    if (this.flushTally.count === 0) this.flushTally.since = now;
+    this.flushTally.count += this.store.flush();
+    if (now - this.flushTally.since >= FLUSH_TALLY_MS || this.seats().length === 0) {
+      this.host.record('flush', '', this.flushTally.count);
+      this.flushTally = { count: 0, since: now };
+    }
   }
 }

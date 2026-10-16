@@ -16,7 +16,7 @@ import {
   navigate,
   signInWithDiscord,
 } from './auth-helpers.js';
-import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp } from './helpers.js';
+import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp, jsonOf } from './helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -245,7 +245,7 @@ describe('POST /v1/auth/token', () => {
     const tokens = await logIn({ id: '9', username: 'sei' });
 
     const swapped = await refresh(tokens.refreshToken);
-    const next = await swapped.json<TokenResponse>();
+    const next = await jsonOf<TokenResponse>(swapped);
     const replayed = await refresh(tokens.refreshToken);
     const afterTheft = await refresh(next.refreshToken);
 
@@ -262,7 +262,7 @@ describe('POST /v1/auth/token', () => {
     const answers = await Promise.all([refresh(tokens.refreshToken), refresh(tokens.refreshToken)]);
     const statuses = answers.map((res) => res.status).sort();
     const winner = answers.find((res) => res.status === 200) as Response;
-    const next = await winner.json<TokenResponse>();
+    const next = await jsonOf<TokenResponse>(winner);
 
     expect(statuses).toEqual([200, 400]);
     expect((await refresh(next.refreshToken)).status).toBe(400);
@@ -282,7 +282,7 @@ describe('POST /v1/auth/token', () => {
     const winner = answers.find((res) => res.status === 200);
 
     expect(answers.map((res) => res.status).sort()).toEqual([200, 400]);
-    const next = await (winner as Response).json<TokenResponse>();
+    const next = await jsonOf<TokenResponse>(winner as Response);
     expect((await refresh(next.refreshToken)).status).toBe(400);
   });
 

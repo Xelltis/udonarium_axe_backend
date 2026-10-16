@@ -18,6 +18,8 @@ import {
   freshIp,
   put,
   sha256Hex,
+  jsonOf,
+  textOf,
 } from './helpers.js';
 import { prepareAssetRooms } from './room-helpers.js';
 
@@ -190,14 +192,14 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
   });
 
   it('turns away a file that is neither a picture nor a sound', async () => {
-    const html = new TextEncoder().encode('<!DOCTYPE html><html><script>alert(1)</script></html>');
+    const html = textOf('<!DOCTYPE html><html><script>alert(1)</script></html>');
     const res = await put(await sha256Hex(html), html);
     expect(res.status).toBe(415);
     expect(await res.json()).toEqual({ error: 'unsupported-type' });
   });
 
   it('stores an SVG longer than the part it reads to tell the type', async () => {
-    const svg = new TextEncoder().encode(
+    const svg = textOf(
       `<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg">${'<rect/>'.repeat(2000)}</svg>`,
     );
     const id = await sha256Hex(svg);
@@ -210,7 +212,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
   });
 
   it('turns away an SVG whose root comes after the part it reads', async () => {
-    const svg = new TextEncoder().encode(`<!--${'-'.repeat(SNIFF_BYTES)}--><svg></svg>`);
+    const svg = textOf(`<!--${'-'.repeat(SNIFF_BYTES)}--><svg></svg>`);
     const res = await put(await sha256Hex(svg), svg);
     expect(res.status).toBe(415);
   });
@@ -419,7 +421,7 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
   });
 
   it('serves an SVG in a sandbox, so a script inside it cannot run', async () => {
-    const svg = new TextEncoder().encode(
+    const svg = textOf(
       '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>',
     );
     const id = await sha256Hex(svg);
@@ -569,9 +571,9 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
     await put(long.id, long.file, { 'X-Asset-Name': 'x'.repeat(300) });
 
     const res = await list();
-    const { assets } = await res.json<{
+    const { assets } = await jsonOf<{
       assets: { id: string; type: string; size: number; name: string }[];
-    }>();
+    }>(res);
     const byId = new Map(assets.map((asset) => [asset.id, asset]));
 
     expect(res.status).toBe(200);
@@ -598,7 +600,7 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
       'X-Asset-Name': encodeURIComponent(`${'x'.repeat(254)}🐉🐉`),
     });
 
-    const { assets } = await (await list()).json<{ assets: { id: string; name: string }[] }>();
+    const { assets } = await jsonOf<{ assets: { id: string; name: string }[] }>(await list());
 
     expect(assets.find((asset) => asset.id === halved.id)?.name).toBe('x'.repeat(254));
   });

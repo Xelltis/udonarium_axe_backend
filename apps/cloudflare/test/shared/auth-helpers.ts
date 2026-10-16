@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 import type { TokenResponse } from '../../contracts/protocol.js';
 import { base64url } from '../../src/core/auth/tokens.js';
 import { harness } from '../harness.js';
-import { ORIGIN, freshIp } from './helpers.js';
+import { ORIGIN, freshIp, jsonOf } from './helpers.js';
 
 export const BACKEND = 'https://backend.example';
 export const APP = `${ORIGIN}/`;
@@ -85,5 +85,5 @@ export const logIn = async (user?: Answer) => {
     method: 'POST',
     body: { grant_type: 'login_code', code, code_verifier: VERIFIER },
   });
-  return res.json<TokenResponse>();
+  return jsonOf<TokenResponse>(res);
 };

@@ -43,14 +43,23 @@ export const assetTokenFor = (
 /** ROOM_KEY の部屋に置いたアセットが、バケットで置かれる名前 */
 export const storedKeyOf = (id: string) => roomAssetKey(ROOM_KEY, id);
 
-export const fileOf = (head: number[], size: number, seed = 0): Uint8Array => {
+/** 本文に使うバイト列。どの部屋のサーバーの型でも、Request の本文に渡せるもの */
+export type Bytes = Uint8Array<ArrayBuffer>;
+
+/** 文字列のバイト列 */
+export const textOf = (text: string): Bytes => new TextEncoder().encode(text) as Bytes;
+
+/** 応答の本文を、その形として読む */
+export const jsonOf = async <T>(res: Response): Promise<T> => (await res.json()) as T;
+
+export const fileOf = (head: number[], size: number, seed = 0): Bytes => {
   const file = new Uint8Array(size);
   file.set(head);
   for (let i = head.length; i < size; i++) file[i] = (i * 31 + seed) & 0xff;
   return file;
 };
 
-export const sha256Hex = async (data: Uint8Array): Promise<string> =>
+export const sha256Hex = async (data: Bytes): Promise<string> =>
   Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data)), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
@@ -79,7 +88,7 @@ export const call = (path: string, init: RequestInit = {}) => {
   return harness.fetch(new Request(`${BASE}/${path}`, { ...init, headers }));
 };
 
-export const put = (id: string, body: Uint8Array, headers: Record<string, string> = {}) =>
+export const put = (id: string, body: Bytes, headers: Record<string, string> = {}) =>
   call(id, {
     method: 'PUT',
     body,

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthorityEvent } from '../../contracts/protocol.js';
 import type { ErrorMessage, RoomSummary } from '../../contracts/protocol.js';
 import { harness } from '../harness.js';
-import { ORIGIN, accessTokenFor, freshIp } from './helpers.js';
+import { ORIGIN, accessTokenFor, freshIp, jsonOf } from './helpers.js';
 import {
   Client,
   connect,
@@ -42,7 +42,7 @@ const listAs = async (authorization: string): Promise<RoomSummary[]> => {
       headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: authorization },
     }),
   );
-  return (await res.json<{ rooms: RoomSummary[] }>()).rooms;
+  return (await jsonOf<{ rooms: RoomSummary[] }>(res)).rooms;
 };
 const listFor = (userId: string) => listAs(`Bearer ${accessTokenFor(userId)}`);
 const rowOf = <T extends { roomKey: string }>(rooms: T[], roomKey: string) =>
@@ -216,9 +216,9 @@ describe('the room list', () => {
       );
 
     expect(
-      (await (await find(roomKey, 'user-finder-gm')).json<{ room: RoomSummary }>()).room.deletable,
+      (await jsonOf<{ room: RoomSummary }>(await find(roomKey, 'user-finder-gm'))).room.deletable,
     ).toBe(true);
-    expect((await (await find(roomKey)).json<{ room: RoomSummary }>()).room).not.toHaveProperty(
+    expect((await jsonOf<{ room: RoomSummary }>(await find(roomKey))).room).not.toHaveProperty(
       'deletable',
     );
     const missing = await find('0'.repeat(32));
@@ -271,6 +271,6 @@ describe('the room list', () => {
     );
 
     expect(res.status).toBe(200);
-    expect((await res.json<{ room: RoomSummary }>()).room).not.toHaveProperty('deletable');
+    expect((await jsonOf<{ room: RoomSummary }>(res)).room).not.toHaveProperty('deletable');
   });
 });

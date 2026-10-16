@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { roomKeyOf } from '../../src/core/assets/keys.js';
 import { networkOf } from '../../src/core/http/network.js';
 import { isAllowedOrigin } from '../../src/core/http/origin.js';
+import { decodeFrame } from '../../src/core/rooms/codec.js';
+import { refusalFrame } from '../../src/core/rooms/refusal.js';
 
 describe('networkOf', () => {
   it.each([
@@ -45,5 +47,15 @@ describe('roomKeyOf', () => {
     expect(roomKeyOf('b'.repeat(64))).toBeNull();
     expect(roomKeyOf(`blocked/${'b'.repeat(64)}`)).toBeNull();
     expect(roomKeyOf('rooms//x')).toBeNull();
+  });
+});
+
+describe('refusalFrame', () => {
+  it('says why, in the protocol spoken here', () => {
+    expect(decodeFrame(refusalFrame('room-not-found'))).toEqual({
+      type: 'error',
+      code: 'room-not-found',
+      protocolVersion: 2,
+    });
   });
 });

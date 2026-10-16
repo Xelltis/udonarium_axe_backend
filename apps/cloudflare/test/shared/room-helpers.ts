@@ -6,7 +6,15 @@ import type { CreateRoomResponse, ServerMessage } from '../../contracts/protocol
 import { decodeFrame } from '../../src/core/rooms/codec.js';
 import { harness } from '../harness.js';
 import type { TestSocket } from './harness-api.js';
-import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp } from './helpers.js';
+import {
+  ORIGIN,
+  OTHER_ROOM_KEY,
+  ROOM_KEY,
+  UPLOADER,
+  accessTokenFor,
+  freshIp,
+  jsonOf,
+} from './helpers.js';
 
 export const ROOMS = 'https://backend.example/v1/rooms';
 
@@ -39,15 +47,16 @@ export const createRoom = async (
     creator ? { Authorization: `Bearer ${accessTokenFor(`user-${creator}`)}` } : {},
   );
   if (res.status !== 201) throw new Error(`room not created: ${res.status}`);
-  return (await res.json<CreateRoomResponse>()).roomKey;
+  return (await jsonOf<CreateRoomResponse>(res)).roomKey;
 };
 
 export const listRooms = async () => {
   const res = await harness.fetch(
     new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() } }),
   );
-  return (await res.json<{ rooms: { roomKey: string; members: number; hasPassword: boolean }[] }>())
-    .rooms;
+  return (
+    await jsonOf<{ rooms: { roomKey: string; members: number; hasPassword: boolean }[] }>(res)
+  ).rooms;
 };
 
 /** 部屋への WebSocket を開く要求 */

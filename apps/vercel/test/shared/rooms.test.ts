@@ -12,7 +12,7 @@ import {
 } from '../../contracts/protocol.js';
 import { MAX_FRAMES_PER_WINDOW, MAX_SOCKETS, RATE_WINDOW_MS } from '../../src/core/rooms/limits.js';
 import { harness } from '../harness.js';
-import { ORIGIN, freshIp } from './helpers.js';
+import { ORIGIN, freshIp, jsonOf } from './helpers.js';
 import {
   ROOMS,
   connect,
@@ -42,7 +42,7 @@ describe('POST /v1/rooms', () => {
 
     expect(res.status).toBe(201);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
-    const body = await res.json<{ roomKey: string; roomId: string }>();
+    const body = await jsonOf<{ roomKey: string; roomId: string }>(res);
     expect(body.roomKey).toMatch(/^[0-9a-f]{32}$/);
     expect(body.roomId).toMatch(/^[0-9a-zA-Z]{3}$/);
     expect((await listRooms()).find((room) => room.roomKey === body.roomKey)).toEqual({
