@@ -146,7 +146,7 @@ Axeは`code_challenge`を付けて`/v1/login/discord`を開き、戻り先のフ
 アクセストークンは15分のJWT（HS256）、リフレッシュトークンは使うたびに替わります。
 アカウントは、ログインした人ごとのDurable Object（`AccountDurableObject`）に置くので、D1は使いません。
 
-Discordのアプリの**Redirects**には、`https://<Workerのドメイン>/v1/login/discord/callback`を入れます。
+Discordのアプリの**Redirects**には、`https://<Workerのドメイン>/v1/login/discord/callback`を入れます。`<Workerのドメイン>`は、Axeの`backend.url`に書くのと同じドメインです（カスタムドメインを付けたなら、そちら）。
 部屋のアセットには、ログインのアクセストークンではなく、部屋のサーバーが渡すアセットのトークンを使います。
 
 ## セットアップ

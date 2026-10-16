@@ -57,7 +57,7 @@ Cloudflare版のエラーは`{"error": "<コード>"}`の形で返るので、�
 
 ## ログインできない
 
-- **Discordの画面で「Invalid OAuth2 redirect_uri」と出る**：Discordのアプリの**Redirects**に、`https://<Workerのドメイン>/v1/login/discord/callback`が入っていません。
+- **Discordの画面で「Invalid OAuth2 redirect_uri」と出る**：Discordのアプリの**Redirects**に、`https://<Workerのドメイン>/v1/login/discord/callback`が入っていません。`<Workerのドメイン>`は、Axeの`backend.url`に書くのと同じドメインです。`*.workers.dev`で登録したままカスタムドメインから使うと、このエラーになります。
 - **Axeに戻ってきたが`login_error=provider-failed`**：`DISCORD_CLIENT_ID`か`DISCORD_CLIENT_SECRET`が、Discordのアプリと合っていません。Client Secretを作り直したときは、Workerのシークレットも入れ直します。
 - **ログインを始めると`400 invalid-request`**：戻り先のOriginが`ACCESS_CONTROL_ALLOW_ORIGIN`に名前で書かれていません（`*`は数えません）。
 - **すべてのリクエストが`500 config-invalid`**：ログインの3つのうち一部だけが入っているか、`SESSION_SECRET`が32文字より短いです。
