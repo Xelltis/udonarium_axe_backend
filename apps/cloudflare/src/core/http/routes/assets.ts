@@ -6,7 +6,7 @@ import { ASSET_ID } from '../../assets/keys.js';
 import { MAX_ANY_BYTES, MAX_BYTES } from '../../assets/limits.js';
 import { assetNameOf } from '../../assets/names.js';
 import { SNIFF_BYTES, sniff } from '../../assets/sniff.js';
-import { readHead, rejoin } from '../../assets/upload.js';
+import { joinChunks, readHead, rejoin } from '../../assets/upload.js';
 import type { ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
 import { assetClaimsOf, declaredLengthOf } from '../request.js';
@@ -61,9 +61,7 @@ export const putRoomAsset = async (c: AssetContext) => {
   const reader = c.req.raw.body?.getReader();
   if (!reader) return fail(c, 415, 'unsupported-type');
   const head = await readHead(reader, SNIFF_BYTES);
-  const sniffed = sniff(
-    new Uint8Array(await new Blob(head).arrayBuffer()).subarray(0, SNIFF_BYTES),
-  );
+  const sniffed = sniff(joinChunks(head).subarray(0, SNIFF_BYTES));
   if (!sniffed) return fail(c, 415, 'unsupported-type');
   if (length > MAX_BYTES[sniffed.kind]) return fail(c, 413, 'too-large');
 

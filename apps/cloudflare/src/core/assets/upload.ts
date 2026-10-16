@@ -14,6 +14,17 @@ export const readHead = async (
   return chunks;
 };
 
+/** chunks をつないだもの */
+export const joinChunks = (chunks: Uint8Array[]): Uint8Array => {
+  const joined = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return joined;
+};
+
 /** 先に読んだ chunks と、reader の残りを1本のストリームに戻す */
 export const rejoin = (
   chunks: Uint8Array[],

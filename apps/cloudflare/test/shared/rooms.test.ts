@@ -1,7 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import messages from '../../contracts/fixtures/messages.json';
+import messages from '../../contracts/fixtures/messages.json' with { type: 'json' };
 import {
   AUTHORITY_PEER_ID,
   CATALOG_BATCH,

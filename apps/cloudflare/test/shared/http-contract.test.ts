@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import http from '../../contracts/fixtures/http.json';
+import http from '../../contracts/fixtures/http.json' with { type: 'json' };
 import { callApi, logIn } from './auth-helpers.js';
 import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put } from './helpers.js';
 import { createRoom, prepareAssetRooms } from './room-helpers.js';

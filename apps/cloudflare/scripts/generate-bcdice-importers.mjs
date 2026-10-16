@@ -3,6 +3,7 @@
 // bcdice 同梱の DynamicLoader は実行時に組み立てたパスを require に渡すため、バンドラが追えない。
 // そこでパスを前もって書き出しておく。Worker はすべてを1つのバンドルに入れるが、
 // 動的 import にしておけば、評価されるのは振るときに初めて使うシステムだけになり、起動は遅くならない。
+// パスは拡張子まで書き、JSON には属性を付ける。Vercel 版では Node がバンドルせずにそのまま読むため。
 //
 // bcdice を上げたら `npm run generate:bcdice` で作り直す。
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,13 +25,16 @@ const lines = [
   '/** ゲームシステムのクラス名から、そのシステムを読み込む */',
   'export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {',
   ...classNames.map(
-    (name) => `  '${name}': () => import('bcdice/lib/bcdice/game_system/${name}'),`,
+    (name) => `  '${name}': () => import('bcdice/lib/bcdice/game_system/${name}.js'),`,
   ),
   '};',
   '',
   '/** 「元のクラス名.ロケール」から、その翻訳を読み込む */',
   'export const I18N_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {',
-  ...translations.map((key) => `  '${key}': () => import('bcdice/lib/bcdice/i18n/${key}.json'),`),
+  ...translations.map(
+    (key) =>
+      `  '${key}': () => import('bcdice/lib/bcdice/i18n/${key}.json', { with: { type: 'json' } }),`,
+  ),
   '};',
   '',
 ];

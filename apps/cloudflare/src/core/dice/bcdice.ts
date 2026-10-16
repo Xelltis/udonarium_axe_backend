@@ -1,9 +1,14 @@
-import * as LoaderModule from 'bcdice/lib/loader/loader';
-import type BaseLoader from 'bcdice/lib/loader/loader';
-import type { I18nJsonObject } from 'bcdice/lib/loader/loader';
-import type GameSystemClass from 'bcdice/lib/game_system';
+import * as LoaderModule from 'bcdice/lib/loader/loader.js';
+import type BaseLoader from 'bcdice/lib/loader/loader.js';
+import type { I18nJsonObject, getGameSystemClass } from 'bcdice/lib/loader/loader.js';
 
 import { GAME_SYSTEM_IMPORTERS, I18N_IMPORTERS } from './bcdice-importers.generated.js';
+
+/**
+ * ゲームシステムのクラス。名前で書き出された関数の戻り値から取る（default で書き出された型は、
+ * Vercel 版の Node の解決では CommonJS のモジュールそのものになってしまう）
+ */
+type GameSystemClass = ReturnType<typeof getGameSystemClass>;
 
 /** CommonJS のモジュールの default。バンドルのしかたによって1段か2段になる */
 export const unwrapDefault = <T>(module: { default: T | { default?: T } }): T => {

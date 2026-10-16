@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { safeParse } from 'valibot';
 
-import errors from '../../contracts/fixtures/errors.json';
-import events from '../../contracts/fixtures/events.json';
-import limits from '../../contracts/fixtures/limits.json';
-import lww from '../../contracts/fixtures/lww.json';
-import messages from '../../contracts/fixtures/messages.json';
-import visibility from '../../contracts/fixtures/visibility.json';
+import errors from '../../contracts/fixtures/errors.json' with { type: 'json' };
+import events from '../../contracts/fixtures/events.json' with { type: 'json' };
+import limits from '../../contracts/fixtures/limits.json' with { type: 'json' };
+import lww from '../../contracts/fixtures/lww.json' with { type: 'json' };
+import messages from '../../contracts/fixtures/messages.json' with { type: 'json' };
+import visibility from '../../contracts/fixtures/visibility.json' with { type: 'json' };
 import * as protocol from '../../contracts/protocol.js';
 import {
   AUTHORITY_ONLY_EVENTS,
