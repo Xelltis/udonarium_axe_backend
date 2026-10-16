@@ -11,6 +11,8 @@
 
 [SkyWay](https://skyway.ntt.com/) の認証トークン発行をはじめとした WebRTC セッションに必要なエンドポイントを、サーバーレスに配信できます。
 
+Udonarium Axe の**サーバー版**の部屋のサーバー ([apps/cloudflare](../cloudflare) と同じもの) も受け持てます。部屋の状態は Redis に、部屋の画像と音声は Vercel Blob (private) に置きます。部屋のサーバーの設定と手順は [ドキュメント](https://xelltis.github.io/udonarium_axe_backend/vercel/) にあります。
+
 ---
 
 ## Table of Contents
@@ -36,6 +38,7 @@
 - **依存性注入された純関数ドメイン** — JWT / HMAC / UUID 等を全て外部から注入し、テスト容易性を確保
 - **Vitest による 100% テストカバレッジ** — `lines / functions / branches / statements` すべて 100% を CI で強制
 - **後方互換エンドポイント** — 旧 `udonarium-backend` クライアントから移行できるよう deprecated エンドポイントも提供
+- **部屋のサーバー** — Cloudflare 版と同じ `src/core` (`scripts/sync-shared.mjs` が写す) を、WebSocket を受ける Node のサーバーで動かします。部屋を受け持つインスタンスは Redis の lease で決め、ほかのインスタンスに着いた WebSocket は Redis の pub/sub で中継します
 
 ## Architecture
 
@@ -52,7 +55,7 @@
                        └──────────────────┘
 ```
 
-- ランタイム: **Vercel Functions / Node.js** (`api/index.ts` が `{ fetch }` を default export し、Vercel が Web Standard ハンドラとして解決)
+- ランタイム: **Vercel Functions / Node.js** (`api/index.ts` が、WebSocket も受ける Node の HTTP サーバー (`src/server/node.ts`) を default export する)
 - リージョン: **`hnd1` (東京)** を `vercel.json` の `regions` で固定 (未指定時の既定は `iad1` / ワシントン D.C.)
 - ルート: `src/http/routes/`
 - ミドルウェア: `src/http/middlewares/` (CORS / 設定ロード)
@@ -67,6 +70,14 @@
 1. 上記ボタンから Vercel にリポジトリを Clone & Import します
 2. デプロイ画面で必須の環境変数 (`SKYWAY_APP_ID` / `SKYWAY_SECRET` / `ACCESS_CONTROL_ALLOW_ORIGIN`) を入力します
 3. デプロイ完了後、フロントエンド ([Udonarium 本体](https://github.com/TK11235/udonarium)) からこの URL を参照するように設定します
+
+部屋のサーバーとして置くとき:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
+
+1. デプロイ画面でログインの3つ (`DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `SESSION_SECRET`) と `ACCESS_CONTROL_ALLOW_ORIGIN` を入力します
+2. デプロイ後、プロジェクトの「Storage」から Redis (Vercel Marketplace) と Blob (Private) を作ってつなぎ、Redeploy します
+3. 手元で動かすときは `docker compose up -d redis` と `npm run serve` (`.env.local` を読む) を使います
 
 ## Requirements
 

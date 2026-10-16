@@ -8,11 +8,11 @@
 動かす場所ごとに、`apps/`の下へ分けて置いています。
 選びかた、設置のしかた、設定項目、困ったときの対処は、[ドキュメント](https://xelltis.github.io/udonarium_axe_backend/)にまとめています。
 
-| ディレクトリ                       | 内容                                                       | 動かす場所                              |
-| ---------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
-| [apps/php](apps/php)               | SkyWayの認証トークンを発行するPHP実装                      | レンタルサーバー（Apache＋PHP 8.3〜）   |
-| [apps/vercel](apps/vercel)         | 同じトークン発行をHonoで書いたもの                         | Vercel Functions（Node.js 24）          |
-| [apps/cloudflare](apps/cloudflare) | SkyWayを使わない部屋のサーバー。画像と音声は部屋の中に置く | Cloudflare Workers＋R2＋Durable Objects |
+| ディレクトリ                       | 内容                                                                             | 動かす場所                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
+| [apps/php](apps/php)               | SkyWayの認証トークンを発行するPHP実装                                            | レンタルサーバー（Apache＋PHP 8.3〜）              |
+| [apps/vercel](apps/vercel)         | 同じトークン発行をHonoで書いたもの。Cloudflare版と同じ部屋のサーバーも受け持てる | Vercel Functions（Node.js 24）＋Redis＋Vercel Blob |
+| [apps/cloudflare](apps/cloudflare) | SkyWayを使わない部屋のサーバー。画像と音声は部屋の中に置く                       | Cloudflare Workers＋R2＋Durable Objects            |
 
 ## セルフホスト
 
@@ -28,7 +28,12 @@ Vercel版（SkyWayの認証トークンの発行）:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
-要る環境変数は[apps/vercel/README.md](apps/vercel/README.md)にあります。
+Vercel版（部屋のサーバー）:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
+
+部屋のサーバーには、デプロイしたあとでRedisとVercel Blob（private）のストアをプロジェクトにつなぎます。
+要る環境変数は[apps/vercel/README.md](apps/vercel/README.md)にあり、手順は[ドキュメント](https://xelltis.github.io/udonarium_axe_backend/vercel/deploy)にあります。
 
 Cloudflare版（SkyWayを使わない部屋のサーバー）:
 

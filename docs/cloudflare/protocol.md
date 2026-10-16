@@ -63,15 +63,15 @@ Content-Type: application/json
 
 ```json
 {
-    "rooms": [
-        {
-            "roomKey": "511c18c8…",
-            "roomId": "O46",
-            "name": "金曜の卓",
-            "hasPassword": true,
-            "members": 2
-        }
-    ]
+  "rooms": [
+    {
+      "roomKey": "511c18c8…",
+      "roomId": "O46",
+      "name": "金曜の卓",
+      "hasPassword": true,
+      "members": 2
+    }
+  ]
 }
 ```
 
@@ -211,13 +211,13 @@ X-Asset-Name: <ファイル名をencodeURIComponentしたもの>
 
 ```json
 {
-    "type": "hello",
-    "protocolVersion": 2,
-    "peerId": "a1B2c3XyZq9W8e7r6-",
-    "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
-    "password": "secret",
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-    "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+  "type": "hello",
+  "protocolVersion": 2,
+  "peerId": "a1B2c3XyZq9W8e7r6-",
+  "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
+  "password": "secret",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
 }
 ```
 
@@ -236,15 +236,15 @@ X-Asset-Name: <ファイル名をencodeURIComponentしたもの>
 
 ```json
 {
-    "type": "send",
-    "to": "Zz9Yy8XyZq9W8e7r6-",
-    "events": [
-        {
-            "eventName": "WRITING_A_MESSAGE_DETAIL",
-            "data": "…",
-            "sendFrom": "a1B2c3XyZq9W8e7r6-"
-        }
-    ]
+  "type": "send",
+  "to": "Zz9Yy8XyZq9W8e7r6-",
+  "events": [
+    {
+      "eventName": "WRITING_A_MESSAGE_DETAIL",
+      "data": "…",
+      "sendFrom": "a1B2c3XyZq9W8e7r6-"
+    }
+  ]
 }
 ```
 
@@ -308,10 +308,10 @@ Axeは、トークンを替えたらすぐ送ります。
 
 ```json
 {
-    "type": "asset-token",
-    "assetToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-    "expiresAt": 1792000900000,
-    "role": "pl"
+  "type": "asset-token",
+  "assetToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+  "expiresAt": 1792000900000,
+  "role": "pl"
 }
 ```
 
@@ -370,29 +370,29 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 
 ```json
 {
-    "eventName": "ROLL_REQUEST",
-    "data": {
-        "message": {
-            "aliasName": "chat",
-            "identifier": "…",
-            "majorVersion": 1,
-            "minorVersion": 0.5,
-            "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
-        },
-        "command": "2d6+3",
-        "gameSystem": "SwordWorld2.5",
-        "speaker": "Kai",
-        "suffix": " [ゴブリン]"
-    }
+  "eventName": "ROLL_REQUEST",
+  "data": {
+    "message": {
+      "aliasName": "chat",
+      "identifier": "…",
+      "majorVersion": 1,
+      "minorVersion": 0.5,
+      "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
+    },
+    "command": "2d6+3",
+    "gameSystem": "SwordWorld2.5",
+    "speaker": "Kai",
+    "suffix": " [ゴブリン]"
+  }
 }
 ```
 
-| フィールド   | 内容                                                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `message`    | 用意した結果の発言                                                                                                       |
-| `command`    | 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい。4000文字まで                                  |
-| `gameSystem` | ゲームシステムのID。知らないものなら`DiceBot`で振る                                                                      |
-| `speaker`    | 発言した人の名前                                                                                                         |
+| フィールド   | 内容                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------- |
+| `message`    | 用意した結果の発言                                                                                          |
+| `command`    | 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい。4000文字まで                     |
+| `gameSystem` | ゲームシステムのID。知らないものなら`DiceBot`で振る                                                         |
+| `speaker`    | 発言した人の名前                                                                                            |
 | `suffix`     | 結果の文面の後ろに付ける対象のキャラの名前。` [名前]`の1行だけで、名前は改行と角括弧と`→`を含まず128文字まで。省いてよい |
 
 サーバーは振った結果で、発言の次の項目を埋め、新しい発言として全員に配ります（振った人にも届きます）。
