@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import http from '../contracts/fixtures/http.json';
-import { callApi, logIn } from './auth-helpers';
-import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put } from './helpers';
-import { createRoom, prepareAssetRooms } from './room-helpers';
+import http from '../../contracts/fixtures/http.json';
+import { callApi, logIn } from './auth-helpers.js';
+import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put } from './helpers.js';
+import { createRoom, prepareAssetRooms } from './room-helpers.js';
 
 // HTTP の返事が、contracts/fixtures/http.json の例と同じ形かを、実際に呼んで確かめる
 

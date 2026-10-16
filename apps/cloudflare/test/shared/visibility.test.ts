@@ -1,6 +1,6 @@
 import { describe as group, expect, it } from 'vitest';
 
-import type { ObjectContext } from '../contracts/protocol';
+import type { ObjectContext } from '../../contracts/protocol.js';
 import {
   describe,
   masked,
@@ -8,8 +8,8 @@ import {
   unmasked,
   viewFor,
   viewKind,
-} from '../src/core/rooms/visibility';
-import type { Lookup, ViewEntry, Viewer } from '../src/core/rooms/visibility';
+} from '../../src/core/rooms/visibility.js';
+import type { Lookup, ViewEntry, Viewer } from '../../src/core/rooms/visibility.js';
 
 const context = (
   aliasName: string,

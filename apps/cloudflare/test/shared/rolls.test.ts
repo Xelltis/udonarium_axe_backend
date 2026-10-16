@@ -1,4 +1,3 @@
-import { runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,8 +5,8 @@ import {
   AuthorityEvent,
   MAX_VERSION_STEP,
   SyncEvent,
-} from '../contracts/protocol';
-import type { RoomDurableObject } from '../src/rooms/room';
+} from '../../contracts/protocol.js';
+import { harness } from '../harness.js';
 import {
   chatTabList,
   contextOf,
@@ -15,8 +14,7 @@ import {
   eventually,
   join,
   listedTabOf,
-  stubOf,
-} from './room-helpers';
+} from './room-helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -280,14 +278,9 @@ describe('rolling on the server', () => {
   it('keeps going after a roll that fails', async () => {
     const { roomKey, alice, bob } = await room();
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      const holder = instance as unknown as { storeCache: { put: () => never } };
-      const real = holder.storeCache;
-      holder.storeCache = Object.assign(Object.create(Object.getPrototypeOf(real)), real, {
-        put: () => {
-          holder.storeCache = real;
-          throw new Error('store broke');
-        },
+    await harness.inside(roomKey, ({ host }) => {
+      vi.spyOn(host.store(), 'put').mockImplementationOnce(() => {
+        throw new Error('store broke');
       });
     });
 
@@ -733,10 +726,8 @@ describe('a rolled result', () => {
     await clients.alice.events();
     await clients.bob.expectQuiet();
 
-    await runInDurableObject(stubOf(clients.roomKey), (instance: RoomDurableObject) => {
-      const room = (
-        instance as unknown as { engine: { keptFromDeleting: Map<string, { until: number }> } }
-      ).engine;
+    await harness.inside(clients.roomKey, ({ engine }) => {
+      const room = engine as unknown as { keptFromDeleting: Map<string, { until: number }> };
       for (const kept of room.keptFromDeleting.values()) kept.until = 0;
     });
     clients.alice.emit([

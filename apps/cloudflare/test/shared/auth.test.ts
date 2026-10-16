@@ -1,11 +1,10 @@
-import { createExecutionContext, env, runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ACCOUNT_USER_ID_PREFIX } from '../contracts/protocol';
-import type { TokenResponse } from '../contracts/protocol';
-import { unpackSecret } from '../src/core/auth/session';
-import { base64url, readToken } from '../src/core/auth/tokens';
-import app from '../src/index';
+import { ACCOUNT_USER_ID_PREFIX } from '../../contracts/protocol.js';
+import type { TokenResponse } from '../../contracts/protocol.js';
+import { unpackSecret } from '../../src/core/auth/session.js';
+import { base64url, readToken } from '../../src/core/auth/tokens.js';
+import { harness } from '../harness.js';
 import {
   APP,
   BACKEND,
@@ -16,8 +15,8 @@ import {
   logIn,
   navigate,
   signInWithDiscord,
-} from './auth-helpers';
-import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp } from './helpers';
+} from './auth-helpers.js';
+import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp } from './helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -25,16 +24,11 @@ afterEach(() => {
 
 /** ログインの3つを外した Worker に送る */
 const withoutLogin = (request: Request) =>
-  app.fetch(
-    request,
-    {
-      ...env,
-      DISCORD_CLIENT_ID: undefined,
-      DISCORD_CLIENT_SECRET: undefined,
-      SESSION_SECRET: undefined,
-    },
-    createExecutionContext(),
-  );
+  harness.fetchWith(request, {
+    DISCORD_CLIENT_ID: undefined,
+    DISCORD_CLIENT_SECRET: undefined,
+    SESSION_SECRET: undefined,
+  });
 
 const fragmentOf = (url: URL) => new URLSearchParams(url.hash.slice(1));
 
@@ -50,8 +44,8 @@ const refresh = (refreshToken: string) =>
     body: { grant_type: 'refresh_token', refresh_token: refreshToken },
   });
 
-const accountStub = (tokens: TokenResponse) =>
-  env.ACCOUNTS.getByName(unpackSecret(tokens.refreshToken)?.accountKey as string);
+const accountKeyOf = (tokens: TokenResponse) =>
+  unpackSecret(tokens.refreshToken)?.accountKey as string;
 
 describe('GET /v1/auth/config', () => {
   it('names Discord while login is set up, and nothing otherwise', async () => {
@@ -103,12 +97,11 @@ describe('GET /v1/login/discord', () => {
   });
 
   it('does not count `*` as a page it may send the code to', async () => {
-    const res = await app.fetch(
+    const res = await harness.fetchWith(
       new Request(
         `${BACKEND}/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${'c'.repeat(43)}`,
       ),
-      { ...env, ACCESS_CONTROL_ALLOW_ORIGIN: '*' },
-      createExecutionContext(),
+      { ACCESS_CONTROL_ALLOW_ORIGIN: '*' },
     );
     expect(res.status).toBe(400);
   });
@@ -235,12 +228,7 @@ describe('POST /v1/auth/token', () => {
     fakeDiscord({ id: '8', username: 'ran' });
     const old = fragmentOf(await signInWithDiscord()).get('login_code') as string;
     const tampered = fragmentOf(await signInWithDiscord()).get('login_code') as string;
-    await runInDurableObject(env.ACCOUNTS.getByName('discord:8'), (_instance, state) => {
-      state.storage.sql.exec(
-        'UPDATE login_codes SET expires_at = 0 WHERE id = ?',
-        old.split('.')[1],
-      );
-    });
+    await harness.expireLoginCode('discord:8', old.split('.')[1]);
 
     const expired = await exchange(old);
     const forged = await exchange(`${tampered.slice(0, -2)}xx`);
@@ -306,9 +294,7 @@ describe('POST /v1/auth/token', () => {
 
   it('turns away a refresh token that has run out', async () => {
     const tokens = await logIn({ id: '10', username: 'tou' });
-    await runInDurableObject(accountStub(tokens), (_instance, state) => {
-      state.storage.sql.exec('UPDATE refresh_tokens SET expires_at = 0');
-    });
+    await harness.expireRefreshTokens(accountKeyOf(tokens));
 
     expect((await refresh(tokens.refreshToken)).status).toBe(400);
   });

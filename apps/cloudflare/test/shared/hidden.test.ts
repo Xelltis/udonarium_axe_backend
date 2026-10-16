@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../contracts/protocol';
-import type { ObjectContext } from '../contracts/protocol';
-import { chatTabList, contextOf, createRoom, join, listedTabOf } from './room-helpers';
+import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../../contracts/protocol.js';
+import type { ObjectContext } from '../../contracts/protocol.js';
+import { chatTabList, contextOf, createRoom, join, listedTabOf } from './room-helpers.js';
 
 type Client = Awaited<ReturnType<typeof join>>['client'];
 interface Event {

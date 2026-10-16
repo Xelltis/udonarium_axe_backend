@@ -1,9 +1,9 @@
-import { exports } from 'cloudflare:workers';
 import { vi } from 'vitest';
 
-import type { TokenResponse } from '../contracts/protocol';
-import { base64url } from '../src/core/auth/tokens';
-import { ORIGIN, freshIp } from './helpers';
+import type { TokenResponse } from '../../contracts/protocol.js';
+import { base64url } from '../../src/core/auth/tokens.js';
+import { harness } from '../harness.js';
+import { ORIGIN, freshIp } from './helpers.js';
 
 export const BACKEND = 'https://backend.example';
 export const APP = `${ORIGIN}/`;
@@ -37,7 +37,7 @@ export const fakeDiscord = (
 
 /** ブラウザがページとして開く。Origin は付かない */
 export const navigate = (path: string, ip = freshIp()) =>
-  exports.default.fetch(
+  harness.fetch(
     new Request(`${BACKEND}${path}`, { headers: { 'CF-Connecting-IP': ip }, redirect: 'manual' }),
   );
 
@@ -46,7 +46,7 @@ export const callApi = (
   path: string,
   init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {},
 ) =>
-  exports.default.fetch(
+  harness.fetch(
     new Request(`${BACKEND}${path}`, {
       method: init.method ?? 'GET',
       headers: {

@@ -11,8 +11,8 @@ export default defineConfig([
   tseslint.configs.stylistic,
   eslintConfigPrettier,
   {
-    // src/core と contracts は Vercel 版にも写し、Node がそのまま読む。Node は拡張子を補わない
-    files: ['src/core/**/*.ts', 'contracts/**/*.ts'],
+    // src/core・contracts・test/shared は Vercel 版にも写し、Node がそのまま読む。Node は拡張子を補わない
+    files: ['src/core/**/*.ts', 'contracts/**/*.ts', 'test/shared/**/*.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',

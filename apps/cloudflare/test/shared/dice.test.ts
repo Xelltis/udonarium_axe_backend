@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkerLoader, loadGameSystem, unwrapDefault } from '../src/core/dice/bcdice';
-import { encodeDetail, rollLine } from '../src/core/dice/roll';
+import { WorkerLoader, loadGameSystem, unwrapDefault } from '../../src/core/dice/bcdice.js';
+import { encodeDetail, rollLine } from '../../src/core/dice/roll.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,7 +39,8 @@ describe('rollLine', () => {
     const unknown = await rollLine('NoSuchSystem', '1d1');
 
     expect(cthulhu?.text).toMatch(/^Cthulhu7th : /);
-    expect(JSON.parse(cthulhu?.dicebot as string).outcome).toMatch(/success|critical/);
+    // 技能値 100 でも 100 の目はファンブル。どれでも、システムが判定したことがわかる
+    expect(JSON.parse(cthulhu?.dicebot as string).outcome).toMatch(/success|critical|fumble/);
     expect(unknown?.text).toBe('DiceBot : (1D1) → 1');
   });
 

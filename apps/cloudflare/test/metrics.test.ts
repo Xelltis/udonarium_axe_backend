@@ -12,8 +12,8 @@ import {
   eventually,
   join,
   listedTabOf,
-  stubOf,
-} from './room-helpers';
+} from './shared/room-helpers';
+import { stubOf } from './cf-helpers';
 
 /** 部屋が Analytics Engine に書いたものを手元に集める */
 const recordPoints = async (roomKey: string) => {

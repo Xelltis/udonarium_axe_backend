@@ -1,12 +1,12 @@
 import { encode } from '@msgpack/msgpack';
-import { env } from 'cloudflare:test';
-import { exports } from 'cloudflare:workers';
 import { gzipSync } from 'node:zlib';
 
-import { CHAT_TAB_LIST_IDENTIFIER, PROTOCOL_VERSION } from '../contracts/protocol';
-import type { CreateRoomResponse, ServerMessage } from '../contracts/protocol';
-import { decodeFrame } from '../src/core/rooms/codec';
-import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp } from './helpers';
+import { CHAT_TAB_LIST_IDENTIFIER, PROTOCOL_VERSION } from '../../contracts/protocol.js';
+import type { CreateRoomResponse, ServerMessage } from '../../contracts/protocol.js';
+import { decodeFrame } from '../../src/core/rooms/codec.js';
+import { harness } from '../harness.js';
+import type { TestSocket } from './harness-api.js';
+import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp } from './helpers.js';
 
 export const ROOMS = 'https://backend.example/v1/rooms';
 
@@ -15,7 +15,7 @@ export const HOST = 'user-host';
 
 /** 部屋を作る API を呼ぶ。指定しなければ HOST がログインして作る */
 export const postRoom = (body: unknown, headers: Record<string, string> = {}) =>
-  exports.default.fetch(
+  harness.fetch(
     new Request(ROOMS, {
       method: 'POST',
       headers: {
@@ -43,18 +43,16 @@ export const createRoom = async (
 };
 
 export const listRooms = async () => {
-  const res = await exports.default.fetch(
+  const res = await harness.fetch(
     new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() } }),
   );
   return (await res.json<{ rooms: { roomKey: string; members: number; hasPassword: boolean }[] }>())
     .rooms;
 };
 
-export const stubOf = (roomKey: string) => env.ROOMS.getByName(roomKey);
-
 /** 部屋への WebSocket を開く要求 */
 export const upgrade = (roomKey: string, headers: Record<string, string> = {}) =>
-  exports.default.fetch(
+  harness.upgrade(
     new Request(`${ROOMS}/${roomKey}/ws`, {
       headers: { Upgrade: 'websocket', Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), ...headers },
     }),
@@ -69,18 +67,14 @@ export class Client {
   private wake: (() => void) | null = null;
   readonly closed: Promise<{ code: number; reason: string }>;
 
-  constructor(readonly ws: WebSocket) {
-    // 新しい互換日付では、バイナリは Blob で届くのが標準になった
-    ws.binaryType = 'arraybuffer';
-    ws.accept();
-    ws.addEventListener('message', (event) => {
-      const raw = event.data as ArrayBuffer | string;
+  constructor(readonly socket: TestSocket) {
+    socket.onMessage((raw) => {
       const message = typeof raw === 'string' ? raw : (decodeFrame(raw) as ServerMessage);
       this.inbox.push({ raw, message });
       this.wake?.();
     });
     this.closed = new Promise((resolve) => {
-      ws.addEventListener('close', (event) => resolve({ code: event.code, reason: event.reason }));
+      socket.onClose((code, reason) => resolve({ code, reason }));
     });
   }
 
@@ -121,7 +115,7 @@ export class Client {
 
   send(message: unknown, options: { gzip?: boolean } = {}): void {
     const bytes = encode(message);
-    this.ws.send(options.gzip ? gzipSync(bytes) : bytes);
+    this.socket.send(options.gzip ? gzipSync(bytes) : bytes);
   }
 
   /** イベントを送る */
@@ -142,14 +136,14 @@ export class Client {
   }
 
   close(): void {
-    this.ws.close(1000, 'bye');
+    this.socket.close(1000, 'bye');
   }
 }
 
 export const connect = async (roomKey: string): Promise<Client> => {
   const res = await upgrade(roomKey);
-  if (!res.webSocket) throw new Error(`not upgraded: ${res.status}`);
-  return new Client(res.webSocket);
+  if (!res.socket) throw new Error(`not upgraded: ${res.status}`);
+  return new Client(res.socket);
 };
 
 /** 部屋につないだところで断られたときの理由。部屋が無いときと満員のときは、つないでから断る */
@@ -182,11 +176,10 @@ const seatedUploaders = new Map<string, Client>();
  */
 export const prepareAssetRooms = async () => {
   for (const roomKey of [ROOM_KEY, OTHER_ROOM_KEY]) {
-    const room = env.ROOMS.getByName(roomKey);
-    const allowed = await room.canUpload(UPLOADER);
+    const allowed = await harness.canUpload(roomKey, UPLOADER);
     if (allowed === 'ok') continue;
     if (allowed === 'room-not-found') {
-      await room.create({
+      await harness.createRoom({
         roomKey,
         roomId: 'abc',
         name: 'assets',

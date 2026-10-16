@@ -1,8 +1,11 @@
-import { exports } from 'cloudflare:workers';
-
-import type { PeerRole } from '../contracts/protocol';
-import { roomAssetKey } from '../src/core/assets/keys';
-import { ACCESS_TOKEN_SECONDS, ASSET_TOKEN_SECONDS, signToken } from '../src/core/auth/tokens';
+import type { PeerRole } from '../../contracts/protocol.js';
+import { roomAssetKey } from '../../src/core/assets/keys.js';
+import {
+  ACCESS_TOKEN_SECONDS,
+  ASSET_TOKEN_SECONDS,
+  signToken,
+} from '../../src/core/auth/tokens.js';
+import { harness } from '../harness.js';
 
 export const ORIGIN = 'https://app.example';
 /** アセットのテストで使う部屋。アセットの経路は部屋の Durable Object に尋ねないので、作らなくてよい */
@@ -15,7 +18,7 @@ export const OGG_HEAD = [0x4f, 0x67, 0x67, 0x53];
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** vitest.config.ts の SESSION_SECRET と同じもの */
+/** テストの部屋のサーバーに置いた SESSION_SECRET と同じもの */
 export const SESSION_SECRET = 'test-session-secret-0123456789abcdef';
 
 /** ログインした人のアクセストークン。userId を指定しなければ、同じ1人 */
@@ -73,7 +76,7 @@ export const call = (path: string, init: RequestInit = {}) => {
   if (!headers.has('Origin')) headers.set('Origin', ORIGIN);
   if (!headers.has('Authorization'))
     headers.set('Authorization', `Bearer ${assetTokenFor('guest')}`);
-  return exports.default.fetch(new Request(`${BASE}/${path}`, { ...init, headers }));
+  return harness.fetch(new Request(`${BASE}/${path}`, { ...init, headers }));
 };
 
 export const put = (id: string, body: Uint8Array, headers: Record<string, string> = {}) =>

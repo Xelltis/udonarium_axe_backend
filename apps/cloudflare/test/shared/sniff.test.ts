@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { sniff } from '../src/core/assets/sniff';
+import { sniff } from '../../src/core/assets/sniff.js';
 
 const bytes = (...values: (number | string)[]): Uint8Array =>
   new Uint8Array(

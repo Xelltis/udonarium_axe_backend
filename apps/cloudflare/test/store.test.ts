@@ -2,7 +2,7 @@ import { env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { RoomStore, migrate } from '../src/rooms/store';
-import { contextOf } from './room-helpers';
+import { contextOf } from './shared/room-helpers';
 
 /** 空の Durable Object の置き場所で、部屋の置き場所を試す */
 const withStore = <T>(name: string, run: (store: RoomStore, storage: DurableObjectStorage) => T) =>

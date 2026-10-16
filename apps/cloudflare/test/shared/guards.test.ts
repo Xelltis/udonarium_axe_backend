@@ -1,4 +1,3 @@
-import { runInDurableObject } from 'cloudflare:test';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,9 +8,9 @@ import {
   MAX_ROLLS_PER_WINDOW,
   SyncEvent,
   toBase62,
-} from '../contracts/protocol';
-import type { ObjectContext } from '../contracts/protocol';
-import { MAX_EVENTS_PER_MESSAGE } from '../src/core/rooms/messages';
+} from '../../contracts/protocol.js';
+import type { ObjectContext } from '../../contracts/protocol.js';
+import { MAX_EVENTS_PER_MESSAGE } from '../../src/core/rooms/messages.js';
 import {
   MAX_EVENTS_PER_WINDOW,
   MAX_OBJECTS,
@@ -19,10 +18,10 @@ import {
   MAX_SOCKETS,
   MAX_VIEW_BYTES,
   TOKEN_GRACE_MS,
-} from '../src/core/rooms/limits';
-import type { RoomDurableObject } from '../src/rooms/room';
-import type { RoomStore } from '../src/rooms/store';
-import { accessTokenFor } from './helpers';
+} from '../../src/core/rooms/limits.js';
+import type { RoomHost, RoomStore } from '../../src/core/rooms/host.js';
+import { harness } from '../harness.js';
+import { accessTokenFor } from './helpers.js';
 import {
   chatTabList,
   connect,
@@ -31,8 +30,7 @@ import {
   join,
   listedTabOf,
   refusalOf,
-  stubOf,
-} from './room-helpers';
+} from './room-helpers.js';
 
 // 部屋のサーバーを、名乗り・書き込み・送りすぎで壊させないための守り
 
@@ -42,14 +40,12 @@ afterEach(() => {
 
 interface Internals {
   store: RoomStore;
-  connectedAt: WeakMap<WebSocket, number>;
+  connectedAt: WeakMap<object, number>;
   pendingRolls: number;
 }
 
-const inside = <T>(roomKey: string, run: (room: Internals, state: DurableObjectState) => T) =>
-  runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) =>
-    run((instance as unknown as { engine: Internals }).engine, state),
-  );
+const inside = <T>(roomKey: string, run: (room: Internals, host: RoomHost<object>) => T) =>
+  harness.inside(roomKey, ({ engine, host }) => run(engine as unknown as Internals, host));
 
 const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
 
@@ -330,8 +326,8 @@ describe('connections that say nothing', () => {
   it('closes one that has not said hello in time when another arrives', async () => {
     const roomKey = await createRoom();
     const silent = await connect(roomKey);
-    await inside(roomKey, (room, state) => {
-      for (const ws of state.getWebSockets()) room.connectedAt.set(ws, 0);
+    await inside(roomKey, (room, host) => {
+      for (const conn of host.connections()) room.connectedAt.set(conn, 0);
     });
 
     const late = await connect(roomKey);
@@ -347,8 +343,8 @@ describe('connections that say nothing', () => {
     for (let i = 0; i < MAX_SOCKETS; i++) sockets.push(await connect(roomKey));
     expect(await refusalOf(roomKey)).toBe('room-full');
 
-    await inside(roomKey, (room, state) => {
-      for (const ws of state.getWebSockets()) room.connectedAt.set(ws, 0);
+    await inside(roomKey, (room, host) => {
+      for (const conn of host.connections()) room.connectedAt.set(conn, 0);
     });
     const fresh = await connect(roomKey);
     fresh.hello('fresh');
@@ -438,11 +434,11 @@ describe('a login that runs out while connected', () => {
 
     alice.client.send({ type: 'auth', accessToken: accessTokenFor('user-alice') });
     await alice.client.expectQuiet();
-    await inside(roomKey, (_room, state) => {
-      for (const ws of state.getWebSockets()) {
-        const seat = ws.deserializeAttachment() as { peerId: string } | null;
+    await inside(roomKey, (_room, host) => {
+      for (const conn of host.connections()) {
+        const seat = host.seatOf(conn);
         if (seat?.peerId === 'bob')
-          ws.serializeAttachment({ ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1 });
+          host.setSeat(conn, { ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1 });
       }
     });
 

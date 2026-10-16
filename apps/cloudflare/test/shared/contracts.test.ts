@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { safeParse } from 'valibot';
 
-import errors from '../contracts/fixtures/errors.json';
-import events from '../contracts/fixtures/events.json';
-import limits from '../contracts/fixtures/limits.json';
-import lww from '../contracts/fixtures/lww.json';
-import messages from '../contracts/fixtures/messages.json';
-import visibility from '../contracts/fixtures/visibility.json';
-import * as protocol from '../contracts/protocol';
+import errors from '../../contracts/fixtures/errors.json';
+import events from '../../contracts/fixtures/events.json';
+import limits from '../../contracts/fixtures/limits.json';
+import lww from '../../contracts/fixtures/lww.json';
+import messages from '../../contracts/fixtures/messages.json';
+import visibility from '../../contracts/fixtures/visibility.json';
+import * as protocol from '../../contracts/protocol.js';
 import {
   AUTHORITY_ONLY_EVENTS,
   CLOSE_CODE,
@@ -17,17 +17,17 @@ import {
   ROLE_REJECT_REASONS,
   ROLL_REJECT_REASONS,
   judgeUpdate,
-} from '../contracts/protocol';
-import type { UpdateVerdict } from '../contracts/protocol';
-import type { ObjectContext } from '../contracts/protocol';
-import * as tokens from '../src/core/auth/tokens';
+} from '../../contracts/protocol.js';
+import type { UpdateVerdict } from '../../contracts/protocol.js';
+import type { ObjectContext } from '../../contracts/protocol.js';
+import * as tokens from '../../src/core/auth/tokens.js';
 import {
   clientMessageSchema,
   roleRequestSchema,
   rollRequestSchema,
-} from '../src/core/rooms/messages';
-import { describe as describeObject, viewKind } from '../src/core/rooms/visibility';
-import type { ViewEntry, Viewer } from '../src/core/rooms/visibility';
+} from '../../src/core/rooms/messages.js';
+import { describe as describeObject, viewKind } from '../../src/core/rooms/visibility.js';
+import type { ViewEntry, Viewer } from '../../src/core/rooms/visibility.js';
 
 describe('the LWW contract', () => {
   it.each(lww.cases)('judges $name as $verdict', ({ stored, incoming, deleted, verdict }) => {

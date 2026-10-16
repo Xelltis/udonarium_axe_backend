@@ -1,4 +1,3 @@
-import { createExecutionContext, env, runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,12 +5,11 @@ import {
   AUTHORITY_PEER_ID,
   AuthorityEvent,
   SyncEvent,
-} from '../contracts/protocol';
-import { readToken, signToken } from '../src/core/auth/tokens';
-import app from '../src/index';
-import type { RoomDurableObject } from '../src/rooms/room';
-import { ORIGIN, SESSION_SECRET, accessTokenFor } from './helpers';
-import { connect, contextOf, createRoom, join, postRoom, stubOf } from './room-helpers';
+} from '../../contracts/protocol.js';
+import { readToken, signToken } from '../../src/core/auth/tokens.js';
+import { harness } from '../harness.js';
+import { ORIGIN, SESSION_SECRET, accessTokenFor } from './helpers.js';
+import { connect, contextOf, createRoom, join, postRoom } from './room-helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -59,19 +57,13 @@ const table = async () => {
 
 describe('opening a room', () => {
   it('is not offered on a Worker without login', async () => {
-    const res = await app.fetch(
+    const res = await harness.fetchWith(
       new Request('https://backend.example/v1/rooms', {
         method: 'POST',
         headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'room' }),
       }),
-      {
-        ...env,
-        DISCORD_CLIENT_ID: undefined,
-        DISCORD_CLIENT_SECRET: undefined,
-        SESSION_SECRET: undefined,
-      },
-      createExecutionContext(),
+      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined },
     );
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'login-unavailable' });
@@ -141,14 +133,7 @@ describe('roles', () => {
 
   it('lets in only guests once login is taken away from the Worker', async () => {
     const roomKey = await createRoom();
-    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (instance as unknown as { env: Env }).env = {
-        ...env,
-        DISCORD_CLIENT_ID: undefined,
-        DISCORD_CLIENT_SECRET: undefined,
-        SESSION_SECRET: undefined,
-      } as Env;
-    });
+    await harness.dropLogin(roomKey);
 
     const anonymous = await join(roomKey, 'anon', { accessToken: null });
     const member = await connect(roomKey);
@@ -161,14 +146,7 @@ describe('roles', () => {
   it('takes no token signed with an empty secret once login is taken away', async () => {
     const roomKey = await createRoom({}, 'gm');
     const gm = await join(roomKey, 'gm');
-    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (instance as unknown as { env: Env }).env = {
-        ...env,
-        DISCORD_CLIENT_ID: undefined,
-        DISCORD_CLIENT_SECRET: undefined,
-        SESSION_SECRET: undefined,
-      } as Env;
-    });
+    await harness.dropLogin(roomKey);
     const forged = signToken<'access'>(
       { aud: 'access', sub: 'discord:gm', uid: 'user-gm', name: 'gm' },
       60,
@@ -222,10 +200,7 @@ describe('invites', () => {
     const { invite } = await gm.next('invite');
     gm.send({ type: 'invite', role: 'guest' });
     const { invite: watchOnly } = await gm.next('invite');
-    await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      const { ctx } = instance as unknown as { ctx: DurableObjectState };
-      ctx.storage.sql.exec(`UPDATE seats SET role = 'pl' WHERE user_id = 'user-gm'`);
-    });
+    await harness.inside(roomKey, ({ host }) => host.roles.set('user-gm', 'pl'));
 
     const late = await join(roomKey, 'late', { invite });
     const watcher = await join(roomKey, 'watcher', { invite: watchOnly });
