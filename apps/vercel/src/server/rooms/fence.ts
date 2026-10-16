@@ -29,8 +29,7 @@ end
 return 1
 `;
 
-const sizeOf = (op: Op): number =>
-  op.key.length + op.args.reduce((size, arg) => size + arg.length, 0);
+const sizeOf = (op: Op): number => op.key.length + op.args.reduce((size, arg) => size + arg.length, 0);
 
 /** 1回に送れる量ずつに分ける。1つで上限を超える操作は、それだけで1回にする */
 export const batchesOf = (ops: Op[]): Op[][] => {
@@ -60,12 +59,7 @@ export interface Fence {
  * 持ち主として書く。lease が自分のものでなくなっていたら（ほかのインスタンスが部屋を取った）、
  * または部屋が消されていたら、そこで止めて false。分けて送るので、途中で止まれば前半だけが書かれる
  */
-export const fencedWrite = async (
-  redis: Redis,
-  fence: Fence,
-  lease: string,
-  ops: Op[],
-): Promise<boolean> => {
+export const fencedWrite = async (redis: Redis, fence: Fence, lease: string, ops: Op[]): Promise<boolean> => {
   for (const batch of batchesOf(ops)) {
     const keys = [fence.lease, fence.meta, ...new Set(batch.map((op) => op.key))];
     const args: (string | Buffer)[] = [lease];

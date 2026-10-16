@@ -21,11 +21,7 @@ import {
 import type { UpdateVerdict } from '../../contracts/protocol.js';
 import type { ObjectContext } from '../../contracts/protocol.js';
 import * as tokens from '../../src/core/auth/tokens.js';
-import {
-  clientMessageSchema,
-  roleRequestSchema,
-  rollRequestSchema,
-} from '../../src/core/rooms/messages.js';
+import { clientMessageSchema, roleRequestSchema, rollRequestSchema } from '../../src/core/rooms/messages.js';
 import { describe as describeObject, viewKind } from '../../src/core/rooms/visibility.js';
 import type { ViewEntry, Viewer } from '../../src/core/rooms/visibility.js';
 
@@ -40,26 +36,21 @@ describe('the message contract', () => {
     expect(safeParse(clientMessageSchema, message).success).toBe(true);
   });
 
-  it.each(messages.invalid.map((message) => [JSON.stringify(message), message]))(
-    'turns away %s',
-    (_name, message) => {
-      expect(safeParse(clientMessageSchema, message).success).toBe(false);
-    },
-  );
+  it.each(messages.invalid.map((message) => [JSON.stringify(message), message]))('turns away %s', (_name, message) => {
+    expect(safeParse(clientMessageSchema, message).success).toBe(false);
+  });
 
   it.each(['hello', 'helloWithPassword', 'helloLoggedIn'] as const)(
     'gives %s the peer id Axe makes from its user id, which the room server holds it to',
     (name) => {
       const { peerId, userId } = messages.client[name];
-      const digest = protocol.toBase62(
-        new Uint8Array(createHash('sha256').update(userId).digest()),
-      );
+      const digest = protocol.toBase62(new Uint8Array(createHash('sha256').update(userId).digest()));
 
       expect(peerId).toMatch(protocol.ROOM_PEER_ID_PATTERN);
       expect(peerId.slice(0, protocol.PEER_ID_USER_DIGEST_LENGTH)).toBe(
-        digest.slice(0, protocol.PEER_ID_USER_DIGEST_LENGTH),
+        digest.slice(0, protocol.PEER_ID_USER_DIGEST_LENGTH)
       );
-    },
+    }
   );
 
   it('speaks the version the examples are written in', () => {
@@ -85,7 +76,7 @@ describe('the event contract', () => {
     'turns away a request with the target %j',
     (_name, request) => {
       expect(safeParse(rollRequestSchema, request).success).toBe(false);
-    },
+    }
   );
 
   it('takes the role request', () => {
@@ -125,18 +116,13 @@ describe('the error contract', () => {
 
 describe('the visibility contract', () => {
   const cases = visibility.cases.flatMap(({ room, identifier, expect: kinds }) =>
-    Object.entries(kinds).map(([viewer, kind]) => ({ room, identifier, viewer, kind })),
+    Object.entries(kinds).map(([viewer, kind]) => ({ room, identifier, viewer, kind }))
   );
 
-  it.each(cases)(
-    'shows $identifier in $room to $viewer as $kind',
-    ({ room, identifier, viewer, kind }) => {
-      const objects = visibility.rooms[room as keyof typeof visibility.rooms] as ObjectContext[];
-      const entries = new Map<string, ViewEntry>(
-        objects.map((o) => [o.identifier, describeObject(o)]),
-      );
-      const seer = visibility.viewers[viewer as keyof typeof visibility.viewers] as Viewer;
-      expect(viewKind(identifier, seer, (id) => entries.get(id) ?? null)).toBe(kind);
-    },
-  );
+  it.each(cases)('shows $identifier in $room to $viewer as $kind', ({ room, identifier, viewer, kind }) => {
+    const objects = visibility.rooms[room as keyof typeof visibility.rooms] as ObjectContext[];
+    const entries = new Map<string, ViewEntry>(objects.map((o) => [o.identifier, describeObject(o)]));
+    const seer = visibility.viewers[viewer as keyof typeof visibility.viewers] as Viewer;
+    expect(viewKind(identifier, seer, (id) => entries.get(id) ?? null)).toBe(kind);
+  });
 });

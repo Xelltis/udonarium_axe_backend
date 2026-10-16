@@ -24,16 +24,13 @@ const lines = [
   '',
   '/** ゲームシステムのクラス名から、そのシステムを読み込む */',
   'export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {',
-  ...classNames.map(
-    (name) => `  '${name}': () => import('bcdice/lib/bcdice/game_system/${name}.js'),`,
-  ),
+  ...classNames.map((name) => `  '${name}': () => import('bcdice/lib/bcdice/game_system/${name}.js'),`),
   '};',
   '',
   '/** 「元のクラス名.ロケール」から、その翻訳を読み込む */',
   'export const I18N_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {',
   ...translations.map(
-    (key) =>
-      `  '${key}': () => import('bcdice/lib/bcdice/i18n/${key}.json', { with: { type: 'json' } }),`,
+    (key) => `  '${key}': () => import('bcdice/lib/bcdice/i18n/${key}.json', { with: { type: 'json' } }),`
   ),
   '};',
   '',

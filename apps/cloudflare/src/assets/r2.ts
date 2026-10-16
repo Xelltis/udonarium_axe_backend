@@ -23,7 +23,7 @@ const MAX_LIST_PAGES = 10;
 export const r2Assets = (
   env: Env,
   waitUntil: (work: Promise<unknown>) => void,
-  limit: (request: Request, kind: LimitKind) => Promise<boolean>,
+  limit: (request: Request, kind: LimitKind) => Promise<boolean>
 ): AssetBackend => ({
   blocked: async (id) => (await env.ASSETS.head(blockedKeyOf(id))) !== null,
 
@@ -32,15 +32,11 @@ export const r2Assets = (
   store: async (roomKey, id, body, length, type, name) => {
     // 照合は R2 が書き込みながら行う。長さが Content-Length と違えば、流すあいだに止まる
     try {
-      await env.ASSETS.put(
-        roomAssetKey(roomKey, id),
-        body.pipeThrough(new FixedLengthStream(length)),
-        {
-          sha256: id,
-          httpMetadata: { contentType: type },
-          ...(name ? { customMetadata: { name } } : {}),
-        },
-      );
+      await env.ASSETS.put(roomAssetKey(roomKey, id), body.pipeThrough(new FixedLengthStream(length)), {
+        sha256: id,
+        httpMetadata: { contentType: type },
+        ...(name ? { customMetadata: { name } } : {}),
+      });
     } catch (err) {
       if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) return 'hash-mismatch';
       throw err;

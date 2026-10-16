@@ -1,23 +1,6 @@
-import {
-  integer,
-  minValue,
-  number,
-  object,
-  optional,
-  pipe,
-  safeParse,
-  string,
-  summarize,
-  transform,
-} from 'valibot';
+import { integer, minValue, number, object, optional, pipe, safeParse, string, summarize, transform } from 'valibot';
 
-import {
-  ConfigError,
-  loginComplete,
-  loginEntries,
-  loginOf,
-  sessionSecretLongEnough,
-} from '../core/config/login.js';
+import { ConfigError, loginComplete, loginEntries, loginOf, sessionSecretLongEnough } from '../core/config/login.js';
 import type { LoginConfig } from '../core/config/login.js';
 import type { ServerConfig } from '../core/http/backend.js';
 
@@ -37,10 +20,7 @@ const MIN_ROOM_SOCKET_SECONDS = 60;
 const DEFAULT_REDIS_KEY_PREFIX = 'axe:';
 
 const integerOf = (fallback: number, least: number) =>
-  optional(
-    pipe(string(), transform(Number), number(), integer(), minValue(least)),
-    String(fallback),
-  );
+  optional(pipe(string(), transform(Number), number(), integer(), minValue(least)), String(fallback));
 
 const serverSchema = pipe(
   object({
@@ -58,7 +38,7 @@ const serverSchema = pipe(
     ...loginEntries,
   }),
   loginComplete(),
-  sessionSecretLongEnough(),
+  sessionSecretLongEnough()
 );
 
 /** 部屋のアセットを置くところ */

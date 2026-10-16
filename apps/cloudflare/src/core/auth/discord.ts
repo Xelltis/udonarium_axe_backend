@@ -35,11 +35,7 @@ export const authorizeUrl = (login: LoginConfig, redirectUri: string, state: str
  *
  * Discord のアクセストークンは、人の情報を1度読むのに使うだけで、どこにも置かない。
  */
-export const fetchProfile = async (
-  login: LoginConfig,
-  code: string,
-  redirectUri: string,
-): Promise<Profile | null> => {
+export const fetchProfile = async (login: LoginConfig, code: string, redirectUri: string): Promise<Profile | null> => {
   const tokenResponse = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {

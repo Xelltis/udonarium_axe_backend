@@ -27,7 +27,7 @@ const tryPut = async (roomKey: string, token: string) => {
         'CF-Connecting-IP': freshIp(),
         Authorization: `Bearer ${token}`,
       },
-    }),
+    })
   );
   return { res, id };
 };
@@ -57,12 +57,8 @@ describe('the asset token a room hands its seats', () => {
         room: roomKey,
         role,
       });
-      expect(seat.welcome.assetTokenExpiresAt).toBeGreaterThan(
-        now + (ASSET_TOKEN_SECONDS - 5) * 1000,
-      );
-      expect(seat.welcome.assetTokenExpiresAt).toBeLessThanOrEqual(
-        now + ASSET_TOKEN_SECONDS * 1000,
-      );
+      expect(seat.welcome.assetTokenExpiresAt).toBeGreaterThan(now + (ASSET_TOKEN_SECONDS - 5) * 1000);
+      expect(seat.welcome.assetTokenExpiresAt).toBeLessThanOrEqual(now + ASSET_TOKEN_SECONDS * 1000);
     }
   });
 
@@ -107,7 +103,7 @@ describe('the asset token a room hands its seats', () => {
     pl.client.close();
     await eventually(
       () => harness.canUpload(roomKey, 'user-pl'),
-      (answer) => answer === 'not-a-player',
+      (answer) => answer === 'not-a-player'
     );
 
     const { res } = await tryPut(roomKey, pl.welcome.assetToken);
@@ -127,7 +123,7 @@ describe('the asset token a room hands its seats', () => {
           'CF-Connecting-IP': freshIp(),
           Authorization: `Bearer ${accessTokenFor('user-gm')}`,
         },
-      }),
+      })
     );
 
     const { res, id } = await tryPut(roomKey, welcome.assetToken);
@@ -144,10 +140,7 @@ describe('a room’s assets when the room goes', () => {
     const other = await createRoom({}, 'other-gm');
     const { welcome } = await join(roomKey, 'gm');
     const { welcome: otherWelcome } = await join(other, 'other-gm');
-    const ids = [
-      await putIn(roomKey, welcome.assetToken),
-      await putIn(roomKey, welcome.assetToken),
-    ];
+    const ids = [await putIn(roomKey, welcome.assetToken), await putIn(roomKey, welcome.assetToken)];
     const kept = await putIn(other, otherWelcome.assetToken);
 
     const res = await harness.fetch(
@@ -158,7 +151,7 @@ describe('a room’s assets when the room goes', () => {
           'CF-Connecting-IP': freshIp(),
           Authorization: `Bearer ${accessTokenFor('user-gm')}`,
         },
-      }),
+      })
     );
 
     expect(res.status).toBe(204);

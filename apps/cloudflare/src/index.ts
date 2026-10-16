@@ -19,7 +19,7 @@ const configLoader: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.set('config', parseConfig(c.env));
   c.set(
     'backend',
-    cloudflareBackend(c.env, (work) => c.executionCtx.waitUntil(work)),
+    cloudflareBackend(c.env, (work) => c.executionCtx.waitUntil(work))
   );
   await next();
 };

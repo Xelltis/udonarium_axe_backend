@@ -18,9 +18,7 @@ export const LIMITS: Readonly<Record<LimitKind, number>> = {
  * 手元のサーバーでは、つないできたソケットの番地を x-real-ip に入れてから渡す
  */
 export const clientIpOf = (request: Request): string =>
-  request.headers.get('x-real-ip') ??
-  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-  'unknown';
+  request.headers.get('x-real-ip') ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
 
 /**
  * 送信元（IPv6 は /64 ごと）の数が上限のうちかを、Redis で数える。窓は、その送信元の最初の1回から

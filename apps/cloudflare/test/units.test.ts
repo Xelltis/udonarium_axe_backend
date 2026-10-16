@@ -24,7 +24,7 @@ describe('sweepOrphans', () => {
   const at = (msAgo: number) => new Date(Date.now() - msAgo);
   const bucketHolding = (
     roomObjects: { key: string; uploaded: Date }[],
-    topObjects: { key: string; uploaded: Date }[] = [],
+    topObjects: { key: string; uploaded: Date }[] = []
   ) => {
     const bucket = {
       list: vi.fn(async (options: R2ListOptions) => ({
@@ -65,7 +65,7 @@ describe('sweepOrphans', () => {
         { key: legacy, uploaded: at(0) },
         { key: `blocked/${'d'.repeat(64)}`, uploaded: at(0) },
         { key: `rooms/${ROOM}/${'e'.repeat(64)}`, uploaded: at(0) },
-      ],
+      ]
     );
     const known = vi.fn(async () => []);
 
@@ -77,9 +77,7 @@ describe('sweepOrphans', () => {
   });
 
   it('deletes nothing when every room is still there', async () => {
-    const bucket = bucketHolding([
-      { key: `rooms/${ROOM}/${'f'.repeat(64)}`, uploaded: at(2 * ORPHAN_GRACE_MS) },
-    ]);
+    const bucket = bucketHolding([{ key: `rooms/${ROOM}/${'f'.repeat(64)}`, uploaded: at(2 * ORPHAN_GRACE_MS) }]);
 
     expect(await sweepOrphans(bucket, async () => [ROOM], 'start')).toBe(0);
 
@@ -150,10 +148,7 @@ describe('parseConfig', () => {
     ['a room retention that is not whole hours', { ROOM_RETENTION_HOURS: '1.5' }],
     ['no room retention', { ROOM_RETENTION_HOURS: undefined }],
     ['a room retention under an hour', { ROOM_RETENTION_HOURS: '0' }],
-    [
-      'only part of the login settings',
-      { DISCORD_CLIENT_ID: 'client', SESSION_SECRET: 's'.repeat(32) },
-    ],
+    ['only part of the login settings', { DISCORD_CLIENT_ID: 'client', SESSION_SECRET: 's'.repeat(32) }],
     [
       'a session secret that is too short',
       { DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 'c', SESSION_SECRET: 'short' },

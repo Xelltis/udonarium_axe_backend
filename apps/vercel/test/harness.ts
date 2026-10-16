@@ -54,8 +54,7 @@ const port = new Promise<number>((resolve) => {
 // 部屋のサーバーは、テストの設定で先に作っておく。fetchWith がほかの設定で先に作ると、部屋がその設定で動く
 await provider.backendFor(config);
 
-const deps = async () =>
-  provider.depsFor(config) as NonNullable<ReturnType<typeof provider.depsFor>>;
+const deps = async () => provider.depsFor(config) as NonNullable<ReturnType<typeof provider.depsFor>>;
 
 // 終わりかけの仕事（振っているダイスなど）を待ち、部屋を放してから閉じる。テストのあとで書き残させない
 afterAll(async () => {
@@ -75,8 +74,7 @@ const vercelHeaders = (headers: Headers): Headers => {
   return moved;
 };
 
-const forVercel = (request: Request): Request =>
-  new Request(request, { headers: vercelHeaders(request.headers) });
+const forVercel = (request: Request): Request => new Request(request, { headers: vercelHeaders(request.headers) });
 
 /** ws のクライアントを、テストの形にする。受ける側が付く前に届いたものは取っておく */
 const socketOf = (ws: WebSocket): TestSocket => {
@@ -156,14 +154,11 @@ export const harness: Harness = {
   },
 
   inside: async (roomKey, run) =>
-    (await deps()).runtime.withRoom(roomKey, (room) =>
-      run({ engine: room.engine as never, host: room as never }),
-    ),
+    (await deps()).runtime.withRoom(roomKey, (room) => run({ engine: room.engine as never, host: room as never })),
 
   createRoom: async (init) => (await provider.backendFor(config)).rooms.create(init),
 
-  canUpload: async (roomKey, userId) =>
-    (await provider.backendFor(config)).rooms.canUpload(roomKey, userId),
+  canUpload: async (roomKey, userId) => (await provider.backendFor(config)).rooms.canUpload(roomKey, userId),
 
   dropLogin: async (roomKey) => {
     withoutLogin.add(roomKey);

@@ -25,9 +25,7 @@ export class FakeWs extends EventEmitter {
 
   /** 届いたもののうち、部屋のメッセージ */
   messages(): ServerMessage[] {
-    return this.sent.flatMap((data) =>
-      typeof data === 'string' ? [] : [decodeFrame(data) as ServerMessage],
-    );
+    return this.sent.flatMap((data) => (typeof data === 'string' ? [] : [decodeFrame(data) as ServerMessage]));
   }
 
   /** 部屋のメッセージを送る */
@@ -53,11 +51,11 @@ export class FakeWs extends EventEmitter {
           accessToken: signToken<'access'>(
             { aud: 'access', sub: `discord:${peerId}`, uid: userId, name: peerId },
             ACCESS_TOKEN_SECONDS,
-            LOGIN.SESSION_SECRET,
+            LOGIN.SESSION_SECRET
           ),
-        }),
+        })
       ),
-      true,
+      true
     );
   }
 }

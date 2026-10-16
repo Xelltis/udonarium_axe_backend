@@ -15,9 +15,7 @@ const LOGIN = {
 
 describe('parseServerConfig', () => {
   it('reads the origins, and the defaults of the rest', () => {
-    expect(
-      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: 'https://a.example, https://b.example ,' }),
-    ).toEqual({
+    expect(parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: 'https://a.example, https://b.example ,' })).toEqual({
       allowedOrigins: ['https://a.example', 'https://b.example'],
       login: null,
       roomRetentionSeconds: DEFAULT_ROOM_RETENTION_HOURS * 3600,
@@ -40,7 +38,7 @@ describe('parseServerConfig', () => {
         ROOM_RETENTION_HOURS: '2',
         ROOM_SOCKET_SECONDS: '120',
         CRON_SECRET: 'cron',
-      }),
+      })
     ).toMatchObject({
       login: {
         discordClientId: 'id',
@@ -64,7 +62,7 @@ describe('parseServerConfig', () => {
         REDIS_URL: '',
         KV_URL: 'rediss://kv.example',
         BLOB_STORE_ID: 'store',
-      }),
+      })
     ).toMatchObject({ redisUrl: 'rediss://kv.example', blob: { kind: 'vercel' } });
   });
 
@@ -84,10 +82,7 @@ describe('parseServerConfig', () => {
 
   it.each([
     ['no origins', {}],
-    [
-      'a socket that rotates too soon',
-      { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_SOCKET_SECONDS: '30' },
-    ],
+    ['a socket that rotates too soon', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_SOCKET_SECONDS: '30' }],
     ['only part of the login', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', DISCORD_CLIENT_ID: 'id' }],
   ])('turns away %s', (_name, env) => {
     expect(() => parseServerConfig(env)).toThrow(ConfigError);

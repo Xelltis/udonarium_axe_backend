@@ -64,8 +64,6 @@ describe('parseConfig', () => {
   });
 
   it('throws AppError when lobby size is non-numeric', () => {
-    expect(() => parseConfig({ ...validRaw, SKYWAY_UDONARIUM_LOBBY_SIZE: 'abc' })).toThrow(
-      AppError,
-    );
+    expect(() => parseConfig({ ...validRaw, SKYWAY_UDONARIUM_LOBBY_SIZE: 'abc' })).toThrow(AppError);
   });
 });

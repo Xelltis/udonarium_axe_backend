@@ -51,7 +51,7 @@ export const createRoom = async (
   redis: Redis,
   key: KeyOf,
   init: RoomInit,
-  retentionSeconds: number,
+  retentionSeconds: number
 ): Promise<boolean> => {
   const keys = roomKeysOf(key, init.roomKey);
   const password = init.password ? hashPassword(init.password) : null;
@@ -75,23 +75,15 @@ export const createRoom = async (
 };
 
 /** 部屋。作られていないか、消しはじめたか、保持期間を過ぎていれば null */
-export const readRoomMeta = async (
-  redis: Redis,
-  key: KeyOf,
-  roomKey: string,
-): Promise<RoomMeta | null> => {
+export const readRoomMeta = async (redis: Redis, key: KeyOf, roomKey: string): Promise<RoomMeta | null> => {
   const keys = roomKeysOf(key, roomKey);
-  const [meta, wipeAt] = await Promise.all([
-    redis.hGetAll(keys.meta),
-    redis.zScore(expiryKeyOf(key), roomKey),
-  ]);
+  const [meta, wipeAt] = await Promise.all([redis.hGetAll(keys.meta), redis.zScore(expiryKeyOf(key), roomKey)]);
   if (!meta.roomKey || meta.deleting === '1') return null;
   // 保持期間を過ぎた部屋は、消すのが遅れていても、もう無いものとする
   if (wipeAt !== null && wipeAt <= Date.now()) return null;
   return {
     roomKey,
-    password:
-      meta.salt && meta.hash ? { salt: bytesOf(meta.salt), hash: bytesOf(meta.hash) } : null,
+    password: meta.salt && meta.hash ? { salt: bytesOf(meta.salt), hash: bytesOf(meta.hash) } : null,
     host: meta.host,
   };
 };

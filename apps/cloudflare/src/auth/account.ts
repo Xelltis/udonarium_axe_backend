@@ -75,7 +75,7 @@ export class AccountDurableObject extends DurableObject<Env> {
       profile.name,
       profile.avatarUrl,
       now,
-      now,
+      now
     );
     this.sweep();
     const code = newLoginCode();
@@ -84,7 +84,7 @@ export class AccountDurableObject extends DurableObject<Env> {
       code.id,
       await sha256(code.secret),
       challenge,
-      now + LOGIN_CODE_SECONDS,
+      now + LOGIN_CODE_SECONDS
     );
     return code;
   }
@@ -98,7 +98,7 @@ export class AccountDurableObject extends DurableObject<Env> {
     const row = sql
       .exec<{ hash: string; challenge: string; expires_at: number }>(
         'SELECT hash, challenge, expires_at FROM login_codes WHERE id = ?',
-        code.id,
+        code.id
       )
       .toArray()[0];
     if (!row) return null;
@@ -162,7 +162,7 @@ export class AccountDurableObject extends DurableObject<Env> {
     const row = this.ctx.storage.sql
       .exec<{ family: string; hash: string; expires_at: number; used: number }>(
         'SELECT family, hash, expires_at, used FROM refresh_tokens WHERE id = ?',
-        token.id,
+        token.id
       )
       .toArray()[0];
     if (!row || row.expires_at <= nowSeconds()) return null;
@@ -182,7 +182,7 @@ export class AccountDurableObject extends DurableObject<Env> {
       next.token.id,
       family,
       next.hash,
-      nowSeconds() + REFRESH_TOKEN_SECONDS,
+      nowSeconds() + REFRESH_TOKEN_SECONDS
     );
     return {
       account: { userId: profile.user_id, name: profile.name, avatarUrl: profile.avatar_url },

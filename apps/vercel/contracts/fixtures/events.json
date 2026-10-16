@@ -1,11 +1,6 @@
 {
   "description": "サーバーとのあいだだけで使うイベントの data の例。rollRequests はサーバーが振るもの、invalidRollRequests は ROLL_REJECTED の invalid で断るもの。reasons は断る理由のすべて。authorityOnly はサーバーだけが送り、クライアントから来ても届けないもの",
-  "authorityOnly": [
-    "AUTHORITATIVE_OBJECT",
-    "WITHDRAW_GAME_OBJECT",
-    "ROLE_REJECTED",
-    "ROLL_REJECTED"
-  ],
+  "authorityOnly": ["AUTHORITATIVE_OBJECT", "WITHDRAW_GAME_OBJECT", "ROLE_REJECTED", "ROLL_REJECTED"],
   "roleRequest": { "peerId": "Zz9Yy8XyZq9W8e7r6-", "role": "gm" },
   "roleRejected": { "peerId": "Zz9Yy8XyZq9W8e7r6-", "role": "gm", "reason": "not-game-master" },
   "roleRejectReasons": ["not-game-master", "unknown-peer", "not-logged-in", "last-game-master"],
@@ -86,13 +81,6 @@
     }
   ],
   "rollRejected": { "identifier": "msg-1", "reason": "rate-limited" },
-  "rollRejectReasons": [
-    "invalid",
-    "not-allowed",
-    "rate-limited",
-    "busy",
-    "not-a-command",
-    "failed"
-  ],
+  "rollRejectReasons": ["invalid", "not-allowed", "rate-limited", "busy", "not-a-command", "failed"],
   "withdraw": { "identifier": "front_card-1" }
 }

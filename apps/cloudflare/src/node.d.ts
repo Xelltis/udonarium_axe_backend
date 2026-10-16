@@ -21,6 +21,6 @@ declare module 'node:crypto' {
     salt: Uint8Array,
     iterations: number,
     keylen: number,
-    digest: 'sha256',
+    digest: 'sha256'
   ): Uint8Array;
 }

@@ -23,13 +23,10 @@ export const configOf = (env: Record<string, string> = {}) =>
   });
 
 /** 部屋のサーバーのものを、渡した Redis の接続で作る */
-export const depsOf = (
-  redis: Redis,
-  options: Partial<DepsOptions> = {},
-  env?: Record<string, string>,
-) => {
+export const depsOf = (redis: Redis, options: Partial<DepsOptions> = {}, env?: Record<string, string>) => {
   const bucket = memoryBucket();
-  return createServerDeps(configOf(env), { bucketOf: () => bucket, ...options }, redis).then(
-    (deps) => ({ ...deps, bucket }),
-  );
+  return createServerDeps(configOf(env), { bucketOf: () => bucket, ...options }, redis).then((deps) => ({
+    ...deps,
+    bucket,
+  }));
 };

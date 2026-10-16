@@ -22,15 +22,7 @@ import {
 import type { RoomHost, RoomStore } from '../../src/core/rooms/host.js';
 import { harness } from '../harness.js';
 import { accessTokenFor } from './helpers.js';
-import {
-  chatTabList,
-  connect,
-  contextOf,
-  createRoom,
-  join,
-  listedTabOf,
-  refusalOf,
-} from './room-helpers.js';
+import { chatTabList, connect, contextOf, createRoom, join, listedTabOf, refusalOf } from './room-helpers.js';
 
 // 部屋のサーバーを、名乗り・書き込み・送りすぎで壊させないための守り
 
@@ -88,16 +80,14 @@ describe('versions', () => {
 
     alice.client.emit([update(contextOf('leapt', MAX_VERSION_STEP + 1, 0.5))]);
     alice.client.emit([update(contextOf('climbing', 1, 0.5))]);
-    expect(
-      (await bob.client.events()).map(({ data }) => (data as ObjectContext).identifier),
-    ).toEqual(['climbing']);
+    expect((await bob.client.events()).map(({ data }) => (data as ObjectContext).identifier)).toEqual(['climbing']);
 
     alice.client.emit([update(contextOf('climbing', MAX_VERSION_STEP + 2, 0.5))]);
     await bob.client.expectQuiet();
     alice.client.emit([update(contextOf('climbing', MAX_VERSION_STEP + 1, 0.5))]);
-    expect(
-      (await bob.client.events()).map(({ data }) => (data as ObjectContext).majorVersion),
-    ).toEqual([MAX_VERSION_STEP + 1]);
+    expect((await bob.client.events()).map(({ data }) => (data as ObjectContext).majorVersion)).toEqual([
+      MAX_VERSION_STEP + 1,
+    ]);
   });
 });
 
@@ -153,21 +143,13 @@ describe('what a write may change', () => {
   it('never lets a write turn one kind of object into another', async () => {
     const roomKey = await createRoom();
     const gm = await join(roomKey, 'gm');
-    const tab = contextOf(
-      'tab',
-      1,
-      0.5,
-      { attributes: { name: 'gm', plCanView: false } },
-      'chat-tab',
-    );
+    const tab = contextOf('tab', 1, 0.5, { attributes: { name: 'gm', plCanView: false } }, 'chat-tab');
     gm.client.emit([update(tab)]);
     await gm.client.expectQuiet();
     const guest = await join(roomKey, 'guest', { accessToken: null, userId: 'guest-1' });
     await gm.client.next('join');
 
-    guest.client.emit([
-      update(contextOf('tab', 9, 0.5, { peerId: 'guest', name: 'guest' }, 'PeerCursor')),
-    ]);
+    guest.client.emit([update(contextOf('tab', 9, 0.5, { peerId: 'guest', name: 'guest' }, 'PeerCursor'))]);
 
     // 書き戻させるのは、置いてあるタブのまま
     const [answer] = await guest.client.events();
@@ -180,13 +162,7 @@ describe('what a write may change', () => {
     const roomKey = await createRoom();
     const gm = await join(roomKey, 'gm');
     const longParent = contextOf('a', 1, 0.5, { parentIdentifier: 'p'.repeat(300) });
-    const wideWhisper = contextOf(
-      'b',
-      1,
-      0.5,
-      { attributes: { to: 'u '.repeat(MAX_VIEW_BYTES) } },
-      'chat',
-    );
+    const wideWhisper = contextOf('b', 1, 0.5, { attributes: { to: 'u '.repeat(MAX_VIEW_BYTES) } }, 'chat');
 
     gm.client.emit([update(longParent), update(wideWhisper)]);
 
@@ -199,9 +175,7 @@ describe('what a write may change', () => {
   it('takes no new object past the most a room holds', async () => {
     const roomKey = await createRoom();
     const gm = await join(roomKey, 'gm');
-    await inside(roomKey, (room) =>
-      vi.spyOn(room.store, 'size', 'get').mockReturnValue(MAX_OBJECTS),
-    );
+    await inside(roomKey, (room) => vi.spyOn(room.store, 'size', 'get').mockReturnValue(MAX_OBJECTS));
 
     gm.client.emit([update(contextOf('one-too-many', 1, 0.5))]);
 
@@ -225,10 +199,9 @@ describe('what a write may change', () => {
         major,
         0.5,
         { attributes: { owner, disclosureMode: mode, disclosureUserIds: users } },
-        'text-note',
+        'text-note'
       );
-    const refusedTo = async (client: Awaited<ReturnType<typeof table>>['bob']) =>
-      (await client.events())[0].eventName;
+    const refusedTo = async (client: Awaited<ReturnType<typeof table>>['bob']) => (await client.events())[0].eventName;
 
     it('lets only the owner of a memo widen who reads it, and the GM', async () => {
       const t = await table();
@@ -284,13 +257,7 @@ describe('what a write may change', () => {
     it('lets only the one who said a line change who it is said to, or take its secret off', async () => {
       const t = await table();
       const line = (to: string, tag: string, major: number) =>
-        contextOf(
-          'line',
-          major,
-          0.5,
-          { value: 'hi', attributes: { from: 'user-alice', to, tag } },
-          'chat',
-        );
+        contextOf('line', major, 0.5, { value: 'hi', attributes: { from: 'user-alice', to, tag } }, 'chat');
       t.alice.emit([update(line('', 'secret', 1))]);
       await t.gm.events();
       await t.bob.events();
@@ -361,8 +328,7 @@ describe('sending too much', () => {
       data: null,
     }));
 
-    for (let i = 0; i * MAX_EVENTS_PER_MESSAGE <= MAX_EVENTS_PER_WINDOW; i++)
-      noisy.client.emit(frame);
+    for (let i = 0; i * MAX_EVENTS_PER_MESSAGE <= MAX_EVENTS_PER_WINDOW; i++) noisy.client.emit(frame);
 
     expect((await noisy.client.next('error')).code).toBe('too-many-messages');
   }, 90_000);
@@ -373,13 +339,7 @@ describe('sending too much', () => {
     const ask = (identifier: string) => ({
       eventName: AuthorityEvent.ROLL_REQUEST,
       data: {
-        message: contextOf(
-          identifier,
-          1,
-          0.5,
-          { parentIdentifier: 'main', value: '', attributes: {} },
-          'chat',
-        ),
+        message: contextOf(identifier, 1, 0.5, { parentIdentifier: 'main', value: '', attributes: {} }, 'chat'),
         command: '1d6',
         gameSystem: 'DiceBot',
         speaker: 'roller',
@@ -395,7 +355,7 @@ describe('sending too much', () => {
     ]);
     roller.client.emit(
       Array.from({ length: MAX_ROLLS_PER_WINDOW + 1 }, (_, i) => ask(`r${i}`)),
-      '@authority',
+      '@authority'
     );
     const rolled = new Set<string>();
     const refused: unknown[] = [];
@@ -437,8 +397,7 @@ describe('a login that runs out while connected', () => {
     await inside(roomKey, (_room, host) => {
       for (const conn of host.connections()) {
         const seat = host.seatOf(conn);
-        if (seat?.peerId === 'bob')
-          host.setSeat(conn, { ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1 });
+        if (seat?.peerId === 'bob') host.setSeat(conn, { ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1 });
       }
     });
 

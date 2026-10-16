@@ -16,7 +16,7 @@ afterEach(() => {
 /** サーバーを立て、その番号を返す */
 const listen = async (
   fetch: (request: Request) => Response | Promise<Response>,
-  upgrades: Upgrades = new WeakMap(),
+  upgrades: Upgrades = new WeakMap()
 ) => {
   const server = createServer(fetch, upgrades);
   servers.push({ close: () => server.close() });
@@ -32,9 +32,7 @@ const tryUpgrade = (port: number, headers: Record<string, string> = {}) =>
   >((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/rooms/r/ws`, { headers });
     // つながってすぐに届くものを落とさないよう、先に受けておく
-    const first = new Promise<string>((resolveFirst) =>
-      ws.once('message', (data) => resolveFirst(String(data))),
-    );
+    const first = new Promise<string>((resolveFirst) => ws.once('message', (data) => resolveFirst(String(data))));
     ws.once('open', () => resolve({ open: true, ws, first }));
     ws.once('unexpected-response', (_req, res) => {
       let body = '';
@@ -99,17 +97,12 @@ describe('the Node server', () => {
 });
 
 describe('headersOf', () => {
-  const incoming = (
-    headers: Record<string, string | string[] | undefined>,
-    remoteAddress?: string,
-  ) => ({ headers, socket: { remoteAddress } }) as unknown as IncomingMessage;
+  const incoming = (headers: Record<string, string | string[] | undefined>, remoteAddress?: string) =>
+    ({ headers, socket: { remoteAddress } }) as unknown as IncomingMessage;
 
   it('copies every header, repeated ones too, and adds where the request came from', () => {
     const headers = headersOf(
-      incoming(
-        { 'set-cookie': ['a=1', 'b=2'], skipped: undefined, origin: 'https://app.example' },
-        '192.0.2.9',
-      ),
+      incoming({ 'set-cookie': ['a=1', 'b=2'], skipped: undefined, origin: 'https://app.example' }, '192.0.2.9')
     );
 
     expect(headers.get('set-cookie')).toBe('a=1, b=2');
@@ -119,9 +112,7 @@ describe('headersOf', () => {
   });
 
   it('keeps the sender a proxy named, and names none it does not know', () => {
-    expect(headersOf(incoming({ 'x-real-ip': '198.51.100.1' }, '10.0.0.1')).get('x-real-ip')).toBe(
-      '198.51.100.1',
-    );
+    expect(headersOf(incoming({ 'x-real-ip': '198.51.100.1' }, '10.0.0.1')).get('x-real-ip')).toBe('198.51.100.1');
     expect(headersOf(incoming({})).has('x-real-ip')).toBe(false);
   });
 });

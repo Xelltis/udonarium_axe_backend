@@ -15,8 +15,7 @@ const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 /** 配列と map の要素数の上限。短いバイト列で大きな配列を作らせない */
 const MAX_COLLECTION_LENGTH = 200_000;
 
-const isGzip = (bytes: Uint8Array): boolean =>
-  bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+const isGzip = (bytes: Uint8Array): boolean => bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 
 /** 送るフレーム。MessagePack にし、1KiB を超えて gzip で縮むなら縮める */
 export const encodeFrame = (message: ServerMessage): Uint8Array => {

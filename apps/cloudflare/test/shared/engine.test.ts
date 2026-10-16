@@ -14,7 +14,7 @@ const contextOf = (
   identifier: string,
   majorVersion = 1,
   syncData: Record<string, unknown> = { value: identifier },
-  aliasName = 'character',
+  aliasName = 'character'
 ) => ({ aliasName, identifier, majorVersion, minorVersion: 0.5, syncData });
 
 const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
@@ -66,12 +66,7 @@ describe('a room being deleted', () => {
     host.emit(gm, [
       update(contextOf(CHAT_TAB_LIST_IDENTIFIER, 1, { attributes: {} }, 'chat-tab-list')),
       update(
-        contextOf(
-          'main',
-          1,
-          { parentIdentifier: CHAT_TAB_LIST_IDENTIFIER, attributes: { name: 'main' } },
-          'chat-tab',
-        ),
+        contextOf('main', 1, { parentIdentifier: CHAT_TAB_LIST_IDENTIFIER, attributes: { name: 'main' } }, 'chat-tab')
       ),
     ]);
     host.emit(gm, [

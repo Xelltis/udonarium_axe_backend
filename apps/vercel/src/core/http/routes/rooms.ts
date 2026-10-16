@@ -2,21 +2,11 @@ import { Hono } from 'hono';
 import { maxLength, minLength, nullish, object, pipe, safeParse, string } from 'valibot';
 
 import { MAX_PASSWORD_LENGTH, MAX_ROOM_NAME_LENGTH } from '../../../../contracts/protocol.js';
-import type {
-  CreateRoomResponse,
-  RoomListResponse,
-  RoomResponse,
-} from '../../../../contracts/protocol.js';
+import type { CreateRoomResponse, RoomListResponse, RoomResponse } from '../../../../contracts/protocol.js';
 import type { ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
 import { bearerOf } from '../request.js';
-import {
-  completeUpload,
-  getRoomAsset,
-  listRoomAssets,
-  putRoomAsset,
-  requestUpload,
-} from './assets.js';
+import { completeUpload, getRoomAsset, listRoomAssets, putRoomAsset, requestUpload } from './assets.js';
 
 /** 部屋の鍵。128 ビットの乱数を小文字の16進で書いたもの */
 const ROOM_KEY = /^[0-9a-f]{32}$/;
@@ -29,9 +19,7 @@ const createSchema = object({
 });
 
 const randomRoomKey = (): string =>
-  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
+  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
 /** 表示用の3文字。ぶつかっても困らない（部屋は鍵で区別する） */
 const randomRoomId = (): string =>
@@ -106,20 +94,20 @@ roomRoutes.delete('/:roomKey', async (c) => {
 
 /** 部屋のアセット。部屋の鍵の形が違えば、部屋のサーバーに尋ねるまでもない */
 roomRoutes.get('/:roomKey/assets', (c) =>
-  ROOM_KEY.test(c.req.param('roomKey')) ? listRoomAssets(c) : fail(c, 400, 'invalid-id'),
+  ROOM_KEY.test(c.req.param('roomKey')) ? listRoomAssets(c) : fail(c, 400, 'invalid-id')
 );
 roomRoutes.get('/:roomKey/assets/:id', (c) =>
-  ROOM_KEY.test(c.req.param('roomKey')) ? getRoomAsset(c) : fail(c, 400, 'invalid-id'),
+  ROOM_KEY.test(c.req.param('roomKey')) ? getRoomAsset(c) : fail(c, 400, 'invalid-id')
 );
 roomRoutes.put('/:roomKey/assets/:id', (c) =>
-  ROOM_KEY.test(c.req.param('roomKey')) ? putRoomAsset(c) : fail(c, 400, 'invalid-id'),
+  ROOM_KEY.test(c.req.param('roomKey')) ? putRoomAsset(c) : fail(c, 400, 'invalid-id')
 );
 // 置き場所へ直接上げる流れ。持たない部屋のサーバー（Cloudflare 版）では not-found
 roomRoutes.post('/:roomKey/assets/:id/uploads', (c) =>
-  ROOM_KEY.test(c.req.param('roomKey')) ? requestUpload(c) : fail(c, 400, 'invalid-id'),
+  ROOM_KEY.test(c.req.param('roomKey')) ? requestUpload(c) : fail(c, 400, 'invalid-id')
 );
 roomRoutes.post('/:roomKey/assets/:id/uploads/complete', (c) =>
-  ROOM_KEY.test(c.req.param('roomKey')) ? completeUpload(c) : fail(c, 400, 'invalid-id'),
+  ROOM_KEY.test(c.req.param('roomKey')) ? completeUpload(c) : fail(c, 400, 'invalid-id')
 );
 
 roomRoutes.get('/:roomKey/ws', async (c) => {

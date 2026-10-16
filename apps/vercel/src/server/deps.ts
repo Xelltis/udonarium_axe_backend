@@ -20,10 +20,7 @@ import { roomSweeper } from './rooms/sweep.js';
 /**
  * WebSocket につなぎ替える要求。Node のサーバーと、部屋の経路が同じものを見る
  */
-export const upgrades: Upgrades = new WeakMap<
-  Request,
-  (onSocket: (ws: WebSocket) => void) => void
->();
+export const upgrades: Upgrades = new WeakMap<Request, (onSocket: (ws: WebSocket) => void) => void>();
 
 /** 新しく置いたこの回数ごとに、消しそこねのアセットを掃除する */
 export const ORPHAN_SWEEP_EVERY = 20;
@@ -55,7 +52,7 @@ export interface DepsOptions {
 export const createServerDeps = async (
   config: VercelServerConfig,
   options: DepsOptions,
-  redis?: Redis,
+  redis?: Redis
 ): Promise<ServerDeps> => {
   const connection = redis ?? (await connectRedis(config.redisUrl as string));
   const key = keyOf(config.redisKeyPrefix);
@@ -84,18 +81,15 @@ export const createServerDeps = async (
       instance,
       isAlive: (other) => relay.isAlive(other),
       retentionSeconds: config.roomRetentionSeconds,
-      sessionSecret: (roomKey) =>
-        options.withoutLogin?.has(roomKey) ? null : (config.login?.sessionSecret ?? null),
+      sessionSecret: (roomKey) => (options.withoutLogin?.has(roomKey) ? null : (config.login?.sessionSecret ?? null)),
       // 本文に上限があるので、超えるものは置き場所へ直接上げてもらう（手元のディレクトリでは上限が無い）
-      assetUpload: assets.direct
-        ? { maxPutBytes: assets.direct.maxPutBytes, directUpload: true }
-        : null,
+      assetUpload: assets.direct ? { maxPutBytes: assets.direct.maxPutBytes, directUpload: true } : null,
       deleteAssets,
       defer,
       timing: options.timing,
     },
     { socketSeconds: config.roomSocketSeconds, parkMs: options.parkMs },
-    relay,
+    relay
   );
   return {
     redis: connection,
@@ -142,7 +136,6 @@ export const backendProvider = (options: DepsOptions) => {
       return { rooms: await deps.sweeper.now(), assets: await deps.orphans() };
     },
     /** 作ったもの（テストが中に触るため） */
-    depsFor: (config: VercelServerConfig) =>
-      made.get(`${config.redisUrl}|${config.redisKeyPrefix}`),
+    depsFor: (config: VercelServerConfig) => made.get(`${config.redisUrl}|${config.redisKeyPrefix}`),
   };
 };

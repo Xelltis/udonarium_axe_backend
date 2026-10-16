@@ -68,7 +68,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
       room.name,
       room.hasPassword ? 1 : 0,
       room.members,
-      Date.now(),
+      Date.now()
     );
   }
 
@@ -86,7 +86,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
          SELECT ?, ? WHERE EXISTS (SELECT 1 FROM rooms WHERE room_key = ?)`,
         roomKey,
         userId,
-        roomKey,
+        roomKey
       );
     }
   }
@@ -107,7 +107,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
       const rows = this.ctx.storage.sql
         .exec<{ room_key: string }>(
           `SELECT room_key FROM rooms WHERE room_key IN (${part.map(() => '?').join(', ')})`,
-          ...part,
+          ...part
         )
         .toArray();
       found.push(...rows.map((row) => row.room_key));
@@ -122,11 +122,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
   list(userId?: string): RoomSummary[] {
     const sql = this.ctx.storage.sql;
     const newest = sql
-      .exec<RoomRow>(
-        `${SUMMARY_COLUMNS} ORDER BY created_at DESC, room_key LIMIT ?`,
-        userId ?? '',
-        MAX_LISTED_ROOMS,
-      )
+      .exec<RoomRow>(`${SUMMARY_COLUMNS} ORDER BY created_at DESC, room_key LIMIT ?`, userId ?? '', MAX_LISTED_ROOMS)
       .toArray();
     const listed = new Set(newest.map((row) => row.room_key));
     const mine = userId
@@ -134,7 +130,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
           .exec<RoomRow>(
             `${SUMMARY_COLUMNS} WHERE room_key IN (SELECT room_key FROM game_masters WHERE user_id = ?)`,
             userId,
-            userId,
+            userId
           )
           .toArray()
           .filter((row) => !listed.has(row.room_key))

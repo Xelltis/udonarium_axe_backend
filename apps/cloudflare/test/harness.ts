@@ -1,9 +1,4 @@
-import {
-  createExecutionContext,
-  env,
-  runInDurableObject,
-  waitOnExecutionContext,
-} from 'cloudflare:test';
+import { createExecutionContext, env, runInDurableObject, waitOnExecutionContext } from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
 
 import app from '../src/index';
@@ -26,10 +21,8 @@ const socketOf = (ws: WebSocket): TestSocket => {
   return {
     send: (data) => ws.send(data),
     close: (code, reason) => ws.close(code, reason),
-    onMessage: (listener) =>
-      ws.addEventListener('message', (event) => listener(event.data as ArrayBuffer | string)),
-    onClose: (listener) =>
-      ws.addEventListener('close', (event) => listener(event.code, event.reason)),
+    onMessage: (listener) => ws.addEventListener('message', (event) => listener(event.data as ArrayBuffer | string)),
+    onClose: (listener) => ws.addEventListener('close', (event) => listener(event.code, event.reason)),
   };
 };
 
@@ -60,7 +53,7 @@ export const harness: Harness = {
       run({
         engine: (instance as unknown as { engine: RoomEngine<object> }).engine,
         host: instance as unknown as RoomHost<object>,
-      }),
+      })
     ),
 
   createRoom: (init) => room(init.roomKey).create(init),

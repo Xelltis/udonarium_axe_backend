@@ -61,10 +61,7 @@ describe('issueSkywayToken', () => {
         return 'S';
       },
     });
-    await issueSkywayToken(
-      { channelName: 'room', peerId: 'peer', jti: 'supplied-jti', iat: 42 },
-      deps,
-    );
+    await issueSkywayToken({ channelName: 'room', peerId: 'peer', jti: 'supplied-jti', iat: 42 }, deps);
     expect(capturedPayload.jti).toBe('supplied-jti');
     expect(capturedPayload.iat).toBe(42);
   });

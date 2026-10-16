@@ -40,7 +40,7 @@ export const migrate = (sql: SqlStorage): void => {
 export class RoomStore extends ObjectIndex {
   constructor(
     private readonly storage: DurableObjectStorage,
-    tombstoneLimits?: TombstoneLimits,
+    tombstoneLimits?: TombstoneLimits
   ) {
     super(tombstoneLimits);
   }
@@ -68,15 +68,12 @@ export class RoomStore extends ObjectIndex {
     const row = this.storage.sql
       .exec<{ chunks: number; data: ArrayBuffer | null }>(
         'SELECT chunks, data FROM objects WHERE identifier = ?',
-        identifier,
+        identifier
       )
       .one();
     if (row.chunks === 0) return decodeData(new Uint8Array(row.data as ArrayBuffer));
     const parts = this.storage.sql
-      .exec<{ data: ArrayBuffer }>(
-        'SELECT data FROM object_chunks WHERE identifier = ? ORDER BY seq',
-        identifier,
-      )
+      .exec<{ data: ArrayBuffer }>('SELECT data FROM object_chunks WHERE identifier = ? ORDER BY seq', identifier)
       .toArray()
       .map((part) => new Uint8Array(part.data));
     const bytes = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
@@ -101,8 +98,7 @@ export class RoomStore extends ObjectIndex {
     try {
       rows = this.storage.transactionSync(() => {
         let written = 0;
-        for (const [identifier, write] of this.pending)
-          written += this.writePending(identifier, write);
+        for (const [identifier, write] of this.pending) written += this.writePending(identifier, write);
         return written;
       });
     } catch {
@@ -113,9 +109,7 @@ export class RoomStore extends ObjectIndex {
           console.error('Could not keep an object:', identifier, err);
           const [row] = this.indexRows(identifier);
           const marked =
-            this.storage.sql
-              .exec('SELECT 1 FROM tombstones WHERE identifier = ?', identifier)
-              .toArray().length > 0;
+            this.storage.sql.exec('SELECT 1 FROM tombstones WHERE identifier = ?', identifier).toArray().length > 0;
           this.resync(identifier, row ? entryOf(row) : null, marked);
         }
       }
@@ -140,7 +134,7 @@ export class RoomStore extends ObjectIndex {
       rows += this.run(
         'INSERT OR REPLACE INTO tombstones (identifier, deleted_at) VALUES (?, ?)',
         identifier,
-        Date.now(),
+        Date.now()
       );
     } else if (write.tombstone === false) {
       rows += this.run('DELETE FROM tombstones WHERE identifier = ?', identifier);
@@ -161,10 +155,7 @@ export class RoomStore extends ObjectIndex {
     if (over === 0) return;
     const sql = this.storage.sql;
     const oldest = sql
-      .exec<{ identifier: string }>(
-        'SELECT identifier FROM tombstones ORDER BY deleted_at LIMIT ?',
-        over,
-      )
+      .exec<{ identifier: string }>('SELECT identifier FROM tombstones ORDER BY deleted_at LIMIT ?', over)
       .toArray();
     for (const { identifier } of oldest) {
       sql.exec('DELETE FROM tombstones WHERE identifier = ?', identifier);
@@ -189,14 +180,14 @@ export class RoomStore extends ObjectIndex {
       parent,
       view === null ? null : JSON.stringify(view),
       chunks,
-      chunks === 0 ? data : null,
+      chunks === 0 ? data : null
     );
     for (let seq = 0; seq < chunks; seq++) {
       rows += this.run(
         'INSERT INTO object_chunks (identifier, seq, data) VALUES (?, ?, ?)',
         context.identifier,
         seq,
-        data.slice(seq * CHUNK_BYTES, (seq + 1) * CHUNK_BYTES),
+        data.slice(seq * CHUNK_BYTES, (seq + 1) * CHUNK_BYTES)
       );
     }
     return rows;

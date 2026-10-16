@@ -20,11 +20,7 @@ export const bearerOf = (c: Context, login: LoginConfig): Claims<'access'> | nul
  * 部屋のアセットのトークン。Authorization: Bearer に付いたもので、この部屋のために部屋のサーバーが
  * 渡したものだけを受ける。ログインを置いていない部屋のサーバーには部屋が無いので、受けるものも無い
  */
-export const assetClaimsOf = (
-  c: Context,
-  login: LoginConfig | null,
-  roomKey: string,
-): Claims<'asset'> | null => {
+export const assetClaimsOf = (c: Context, login: LoginConfig | null, roomKey: string): Claims<'asset'> | null => {
   const token = bearerTokenOf(c);
   if (!login || token === null) return null;
   const claims = readToken(token, 'asset', login.sessionSecret);

@@ -87,9 +87,7 @@ describe('encodeDetail', () => {
     [{ success: true }, 'success'],
     [{ failure: true }, 'failure'],
   ])('names %o as %s', (flags, outcome) => {
-    expect(JSON.parse(encodeDetail('S', { text: '', secret: false, ...flags })).outcome).toBe(
-      outcome,
-    );
+    expect(JSON.parse(encodeDetail('S', { text: '', secret: false, ...flags })).outcome).toBe(outcome);
   });
 
   it('writes nothing when there are no dice and no outcome', () => {
@@ -98,7 +96,7 @@ describe('encodeDetail', () => {
         text: '',
         secret: false,
         detailedRands: [{ value: 'x' as unknown as number }],
-      }),
+      })
     ).toBe('');
   });
 });

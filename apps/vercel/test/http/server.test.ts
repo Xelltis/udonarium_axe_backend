@@ -18,7 +18,7 @@ describe('serverApp', () => {
       app.fetch(
         new Request('https://backend.example/v1/rooms', {
           headers: { Origin: 'https://app.example' },
-        }),
+        })
       );
 
     rawEnv = {};

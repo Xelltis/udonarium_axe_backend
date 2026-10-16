@@ -1,9 +1,4 @@
-import {
-  env,
-  evictDurableObject,
-  runDurableObjectAlarm,
-  runInDurableObject,
-} from 'cloudflare:test';
+import { env, evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AUTHORITY_PEER_ID, SyncEvent } from '../contracts/protocol';
@@ -12,15 +7,7 @@ import { LOBBY_NAME } from '../src/rooms/lobby';
 import { ACCESS_TOKEN_SECONDS } from '../src/core/auth/tokens';
 import { OCCUPIED_CHECK_MS, TOKEN_GRACE_MS } from '../src/core/rooms/limits';
 import { CHUNK_BYTES } from '../src/rooms/store';
-import {
-  connect,
-  contextOf,
-  createRoom,
-  eventually,
-  join,
-  listRooms,
-  refusalOf,
-} from './shared/room-helpers';
+import { connect, contextOf, createRoom, eventually, join, listRooms, refusalOf } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
 
 afterEach(() => {
@@ -72,7 +59,7 @@ describe('peer cursors', () => {
       majorVersion,
       0.5,
       { peerId, userId: `user-${peerId}`, name: peerId, role: 'pl' },
-      'PeerCursor',
+      'PeerCursor'
     );
 
   it('clears away the cursor of someone who went without a word', async () => {
@@ -103,11 +90,11 @@ describe('keeping the room', () => {
     }
     await client.expectQuiet();
     const before = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      countRows(state.storage.sql, 'objects'),
+      countRows(state.storage.sql, 'objects')
     );
     await new Promise((resolve) => setTimeout(resolve, 1200));
     const after = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      state.storage.sql.exec<{ major: number }>('SELECT major FROM objects').toArray(),
+      state.storage.sql.exec<{ major: number }>('SELECT major FROM objects').toArray()
     );
 
     expect(before).toBe(0);
@@ -134,7 +121,7 @@ describe('keeping the room', () => {
         { eventName: SyncEvent.REQUEST, data: 'piece' },
         { eventName: SyncEvent.REQUEST, data: 'gone' },
       ],
-      AUTHORITY_PEER_ID,
+      AUTHORITY_PEER_ID
     );
 
     expect(chunks).toBe(2);
@@ -143,7 +130,7 @@ describe('keeping the room', () => {
       expect.arrayContaining([
         { identifier: 'board', version: 1.5 },
         { identifier: 'piece', version: 1.5 },
-      ]),
+      ])
     );
     const answers = await bob.client.events();
     expect(answers[0].data).toEqual(contextOf('board', 1, 0.5, big, 'white-board'));
@@ -175,10 +162,7 @@ describe('keeping the room', () => {
       { eventName: SyncEvent.DELETE, data: { identifier: 'board' } },
     ]);
     await client.expectQuiet();
-    const third = await flushed(roomKey, (sql) => [
-      countRows(sql, 'objects'),
-      countRows(sql, 'tombstones'),
-    ]);
+    const third = await flushed(roomKey, (sql) => [countRows(sql, 'objects'), countRows(sql, 'tombstones')]);
     client.emit([{ eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['board'] } }]);
     await client.expectQuiet();
     const fourth = await flushed(roomKey, (sql) => countRows(sql, 'tombstones'));
@@ -190,9 +174,7 @@ describe('keeping the room', () => {
 /** 部屋が空になった時刻と、時計が鳴る時刻 */
 const clockOf = (roomKey: string) =>
   runInDurableObject(stubOf(roomKey), async (_instance, state) => ({
-    emptiedAt: state.storage.sql
-      .exec<{ emptied_at: number | null }>('SELECT emptied_at FROM room')
-      .one().emptied_at,
+    emptiedAt: state.storage.sql.exec<{ emptied_at: number | null }>('SELECT emptied_at FROM room').one().emptied_at,
     alarm: await state.storage.getAlarm(),
   }));
 
@@ -207,7 +189,7 @@ describe('closing the room', () => {
     client.close();
     const emptied = await eventually(
       () => clockOf(roomKey),
-      (clock) => clock.emptiedAt !== null,
+      (clock) => clock.emptiedAt !== null
     );
     const ran = await runDurableObjectAlarm(stubOf(roomKey));
 
@@ -252,9 +234,7 @@ describe('closing the room', () => {
   it('keeps a room someone is in, and looks again later', async () => {
     const roomKey = await createRoom();
     await join(roomKey, 'alice', { accessToken: null });
-    await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      state.storage.setAlarm(Date.now() + 60_000),
-    );
+    await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.setAlarm(Date.now() + 60_000));
 
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
     expect((await listRooms()).find((room) => room.roomKey === roomKey)?.members).toBe(1);
@@ -271,7 +251,7 @@ describe('closing the room', () => {
 
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
     const counted = await eventually(listRooms, (all) =>
-      all.some((room) => room.roomKey === roomKey && room.members === 0),
+      all.some((room) => room.roomKey === roomKey && room.members === 0)
     );
     const clock = await clockOf(roomKey);
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
@@ -284,9 +264,7 @@ describe('closing the room', () => {
 
   it('cleans up a store that never became a room', async () => {
     const stub = env.ROOMS.getByName('f'.repeat(32));
-    await runInDurableObject(stub, (_instance, state) =>
-      state.storage.setAlarm(Date.now() + 60_000),
-    );
+    await runInDurableObject(stub, (_instance, state) => state.storage.setAlarm(Date.now() + 60_000));
 
     expect(await runDurableObjectAlarm(stub)).toBe(true);
   });
@@ -305,7 +283,7 @@ describe('the lobby', () => {
 
     await eventually(
       async () => failure.mock.calls.length,
-      (calls) => calls > 0,
+      (calls) => calls > 0
     );
     expect(failure).toHaveBeenCalledWith('Lobby update failed:', expect.any(Error));
   });

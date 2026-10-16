@@ -47,12 +47,9 @@ export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
 
   server.on('upgrade', (incoming: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Node の HTTP サーバーは、Host の無い要求を受けない
-    const request = new Request(
-      `http://${incoming.headers.host as string}${incoming.url as string}`,
-      {
-        headers: headersOf(incoming),
-      },
-    );
+    const request = new Request(`http://${incoming.headers.host as string}${incoming.url as string}`, {
+      headers: headersOf(incoming),
+    });
     let upgraded = false;
     upgrades.set(request, (onSocket) => {
       upgraded = true;

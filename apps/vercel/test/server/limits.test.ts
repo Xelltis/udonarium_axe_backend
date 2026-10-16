@@ -31,14 +31,7 @@ describe('redisLimiter', () => {
     const limit = redisLimiter(connection.redis, freshKey(), FIVE);
     const sender = request({ 'x-real-ip': '192.0.2.10' });
 
-    expect(await statuses(() => limit(sender, 'room'))).toEqual([
-      true,
-      true,
-      true,
-      true,
-      true,
-      false,
-    ]);
+    expect(await statuses(() => limit(sender, 'room'))).toEqual([true, true, true, true, true, false]);
   });
 
   it('counts every IPv6 address in a /64 as one sender, and each kind apart', async () => {
@@ -46,14 +39,7 @@ describe('redisLimiter', () => {
     let i = 0;
     const next = () => request({ 'x-real-ip': `2001:db8:1:2::${++i}` });
 
-    expect(await statuses(() => limit(next(), 'upload'))).toEqual([
-      true,
-      true,
-      true,
-      true,
-      true,
-      false,
-    ]);
+    expect(await statuses(() => limit(next(), 'upload'))).toEqual([true, true, true, true, true, false]);
     expect(await limit(next(), 'read')).toBe(true);
   });
 

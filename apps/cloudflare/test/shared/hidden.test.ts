@@ -16,13 +16,7 @@ const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
 /** カードと、Axe の Card.create と同じ形のデータ要素 */
 const cardTree = (id: string, attributes: Record<string, unknown>, version = 1) => {
   const data = (name: string, parent: string, value: unknown = '') =>
-    contextOf(
-      `${name}_${id}`,
-      1,
-      0.5,
-      { parentIdentifier: parent, value, attributes: { name } },
-      'data',
-    );
+    contextOf(`${name}_${id}`, 1, 0.5, { parentIdentifier: parent, value, attributes: { name } }, 'data');
   return {
     card: contextOf(id, version, 0.5, { attributes }, 'card'),
     elements: [
@@ -122,9 +116,7 @@ describe('cards', () => {
       { eventName: SyncEvent.REQUEST, data: 'back_c3' },
     ]);
 
-    const listed = (late.catalog[0].data as { identifier: string }[]).map(
-      (item) => item.identifier,
-    );
+    const listed = (late.catalog[0].data as { identifier: string }[]).map((item) => item.identifier);
     expect(listed).toContain('back_c3');
     expect(listed).not.toContain('front_c3');
     expect(ids(await late.client.events())).toEqual([['UPDATE_GAME_OBJECT', 'back_c3']]);
@@ -161,9 +153,7 @@ describe('cards', () => {
     const { card, elements } = cardTree('c7', { state: 1 });
     await place(t, [card, ...elements]);
 
-    t.alice.emit([
-      { eventName: SyncEvent.DELETE, data: { aliasName: 'data', identifier: 'front_c7' } },
-    ]);
+    t.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'data', identifier: 'front_c7' } }]);
 
     await t.gm.expectQuiet();
     t.gm.emit([{ eventName: SyncEvent.REQUEST, data: 'front_c7' }]);
@@ -190,10 +180,8 @@ describe('cards', () => {
     expect(
       ids(toGm.slice(1))
         .map(([, id]) => id)
-        .sort(),
-    ).toEqual(
-      ['back_c5', 'card_c5', 'common_c5', 'detail_c5', 'front_c5', 'image_c5', 'name_c5'].sort(),
-    );
+        .sort()
+    ).toEqual(['back_c5', 'card_c5', 'common_c5', 'detail_c5', 'front_c5', 'image_c5', 'name_c5'].sort());
     const toBob = await t.bob.events();
     expect(ids(toBob).map(([, id]) => id)).not.toContain('front_c5');
   });
@@ -212,7 +200,7 @@ describe('parts that arrive before what they belong to', () => {
       expect(seen[0]).toEqual(['UPDATE_GAME_OBJECT', 'c6']);
       expect(seen.slice(1).map(([name]) => name)).toEqual(Array(5).fill('AUTHORITATIVE_OBJECT'));
       expect(seen.map(([, id]) => id).sort()).toEqual(
-        ['back_c6', 'c6', 'card_c6', 'common_c6', 'detail_c6', 'image_c6'].sort(),
+        ['back_c6', 'c6', 'card_c6', 'common_c6', 'detail_c6', 'image_c6'].sort()
       );
     }
     // 子を送ってきた本人は、もう持っている
@@ -221,26 +209,10 @@ describe('parts that arrive before what they belong to', () => {
 
   it('hands players the text of a memo kept to the GM only once the memo is there, blacked out', async () => {
     const t = await table();
-    const memo = contextOf(
-      'm1',
-      1,
-      0.5,
-      { attributes: { disclosureMode: 'gm', owner: '' } },
-      'text-note',
-    );
+    const memo = contextOf('m1', 1, 0.5, { attributes: { disclosureMode: 'gm', owner: '' } }, 'text-note');
     const part = (name: string, parent: string, value = '') =>
-      contextOf(
-        `${name}_m1`,
-        1,
-        0.5,
-        { parentIdentifier: parent, value, attributes: { name } },
-        'data',
-      );
-    const parts = [
-      part('text', 'common_m1', 'the secret'),
-      part('common', 'text-note_m1'),
-      part('text-note', 'm1'),
-    ];
+      contextOf(`${name}_m1`, 1, 0.5, { parentIdentifier: parent, value, attributes: { name } }, 'data');
+    const parts = [part('text', 'common_m1', 'the secret'), part('common', 'text-note_m1'), part('text-note', 'm1')];
 
     t.gm.emit([...parts, memo].map(update));
 
@@ -259,13 +231,7 @@ describe('parts that arrive before what they belong to', () => {
     // 裏向きのカードの絵の入れ物を、表向きのカードの下へ移す
     t.gm.emit([
       update(
-        contextOf(
-          'image_c8',
-          2,
-          0.5,
-          { parentIdentifier: 'card_c7', value: '', attributes: { name: 'image' } },
-          'data',
-        ),
+        contextOf('image_c8', 2, 0.5, { parentIdentifier: 'card_c7', value: '', attributes: { name: 'image' } }, 'data')
       ),
     ]);
 
@@ -300,8 +266,8 @@ describe('writes that would uncover what is kept back', () => {
           2,
           0.5,
           { parentIdentifier: 'card_u1', value: '', attributes: { name: 'picture' } },
-          'data',
-        ),
+          'data'
+        )
       ),
     ]);
 
@@ -314,9 +280,7 @@ describe('writes that would uncover what is kept back', () => {
     const { card, elements } = cardTree('u2', { state: 1, location: { name: 'table' } });
     await place(t, [card, ...elements]);
 
-    t.alice.emit([
-      update(contextOf('common_u2', 2, 0.5, { value: '', attributes: { name: 'common' } }, 'data')),
-    ]);
+    t.alice.emit([update(contextOf('common_u2', 2, 0.5, { value: '', attributes: { name: 'common' } }, 'data'))]);
 
     await expectRefused(t, 'common_u2');
   });
@@ -328,7 +292,7 @@ describe('writes that would uncover what is kept back', () => {
       1,
       0.5,
       { attributes: { name: 'main', plCanView: true, guestCanView: true } },
-      'chat-tab',
+      'chat-tab'
     );
     const line = contextOf(
       'line-u3',
@@ -339,7 +303,7 @@ describe('writes that would uncover what is kept back', () => {
         value: 'the GM rolled 6',
         attributes: { from: 'user-gm', tag: 'secret', to: '' },
       },
-      'chat',
+      'chat'
     );
     await place(t, [tab, line]);
 
@@ -362,10 +326,7 @@ describe('writes that would uncover what is kept back', () => {
   it.each([
     ['peeks at', { owner: 'user-alice' }],
     ['takes into its own hand face up', { location: { name: 'hand:user-alice' }, state: 0 }],
-    [
-      'takes into its own hand peeking',
-      { location: { name: 'hand:user-alice' }, owner: 'user-alice' },
-    ],
+    ['takes into its own hand peeking', { location: { name: 'hand:user-alice' }, owner: 'user-alice' }],
     ['turns up', { state: 0 }],
   ])('refuses a player who %s a card in the hand of another', async (_what, change) => {
     const t = await table();
@@ -426,13 +387,7 @@ describe('writes that would uncover what is kept back', () => {
     const t = await table();
     const memo = memoOf('m9', 'gm');
     const part = (name: string, parent: string, value = '') =>
-      contextOf(
-        `${name}_m9`,
-        1,
-        0.5,
-        { parentIdentifier: parent, value, attributes: { name } },
-        'data',
-      );
+      contextOf(`${name}_m9`, 1, 0.5, { parentIdentifier: parent, value, attributes: { name } }, 'data');
     await place(t, [
       memo,
       part('text-note', 'm9'),
@@ -479,11 +434,7 @@ describe('writes that would uncover what is kept back', () => {
 
   it('keeps a reaction from everyone until the line it is on is there', async () => {
     const t = await table();
-    t.bob.emit([
-      update(
-        contextOf('r9', 1, 0.5, { messageIdentifier: 'later-line', stamps: 'ok' }, 'chat-reaction'),
-      ),
-    ]);
+    t.bob.emit([update(contextOf('r9', 1, 0.5, { messageIdentifier: 'later-line', stamps: 'ok' }, 'chat-reaction'))]);
 
     await t.alice.expectQuiet();
     await t.carol.expectQuiet();
@@ -495,9 +446,7 @@ describe('writes that would uncover what is kept back', () => {
     // 別の WebSocket どうしは、着く順が決まらない。GM の書き込みが着いてから
     await t.gm.expectQuiet();
 
-    t.alice.emit([
-      { eventName: SyncEvent.CATALOG, data: [{ identifier: 'orphan', version: 1.5 }] },
-    ]);
+    t.alice.emit([{ eventName: SyncEvent.CATALOG, data: [{ identifier: 'orphan', version: 1.5 }] }]);
 
     expect(ids(await t.alice.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'orphan']]);
   });
@@ -547,18 +496,12 @@ describe('whispers and secrets', () => {
     1,
     0.5,
     { attributes: { name: 'main', plCanView: true, guestCanView: true } },
-    'chat-tab',
+    'chat-tab'
   );
   // 振った結果は、タブの一覧の直下のタブにだけ置ける
   const listedTab = listedTabOf('tab', { name: 'main', plCanView: true, guestCanView: true });
   const line = (id: string, attributes: Record<string, unknown>, version = 1) =>
-    contextOf(
-      id,
-      version,
-      0.5,
-      { parentIdentifier: 'tab', value: `text of ${id}`, attributes },
-      'chat',
-    );
+    contextOf(id, version, 0.5, { parentIdentifier: 'tab', value: `text of ${id}`, attributes }, 'chat');
 
   it('hands a whisper to the ones it is sent to and nobody else, and moves it when it is resent', async () => {
     const t = await table();
@@ -578,9 +521,7 @@ describe('whispers and secrets', () => {
     const t = await table();
     await place(t, [tab]);
 
-    t.alice.emit([
-      update(line('s1', { from: 'user-alice', tag: 'DiceBot secret', dicebot: '{}' })),
-    ]);
+    t.alice.emit([update(line('s1', { from: 'user-alice', tag: 'DiceBot secret', dicebot: '{}' }))]);
     const [masked] = await t.bob.events();
     const [full] = await t.gm.events();
     expect((masked.data as ObjectContext).syncData.value).toBe('');
@@ -661,13 +602,7 @@ describe('whispers and secrets', () => {
     t.alice.emit([update(line('w2', { from: 'user-alice', to: 'user-bob' }))]);
     await t.bob.events();
 
-    const reaction = contextOf(
-      'r1',
-      1,
-      0.5,
-      { messageIdentifier: 'w2', stamps: 'ok' },
-      'chat-reaction',
-    );
+    const reaction = contextOf('r1', 1, 0.5, { messageIdentifier: 'w2', stamps: 'ok' }, 'chat-reaction');
     t.bob.emit([update(reaction)]);
     expect(ids(await t.alice.events())).toEqual([['UPDATE_GAME_OBJECT', 'r1']]);
     await t.carol.expectQuiet();
@@ -708,13 +643,7 @@ describe('whispers and secrets', () => {
 describe('dice', () => {
   it('shows the face of a die only to its owner, and keeps the face when another moves it', async () => {
     const t = await table();
-    const die = contextOf(
-      'd1',
-      1,
-      0.5,
-      { attributes: { face: '6', owner: 'user-alice', x: 0 } },
-      'dice-symbol',
-    );
+    const die = contextOf('d1', 1, 0.5, { attributes: { face: '6', owner: 'user-alice', x: 0 } }, 'dice-symbol');
 
     t.alice.emit([update(die)]);
     const [toBob] = await t.bob.events();
@@ -772,9 +701,7 @@ describe('roles and what they see', () => {
 
     const versionFor = async (peerId: string) => {
       const { client, catalog } = await join(roomKey, peerId);
-      const items = catalog.flatMap(
-        (event) => event.data as { identifier: string; version: number }[],
-      );
+      const items = catalog.flatMap((event) => event.data as { identifier: string; version: number }[]);
       client.close();
       return items.find((item) => item.identifier === 'd3')?.version;
     };
@@ -791,13 +718,7 @@ describe('roles and what they see', () => {
 
   it('sends a stale writer the kept version in the form it may see', async () => {
     const t = await table();
-    const die = contextOf(
-      'd2',
-      3,
-      0.5,
-      { attributes: { face: '2', owner: 'user-alice' } },
-      'dice-symbol',
-    );
+    const die = contextOf('d2', 3, 0.5, { attributes: { face: '2', owner: 'user-alice' } }, 'dice-symbol');
     t.alice.emit([update(die)]);
     await t.bob.events();
 

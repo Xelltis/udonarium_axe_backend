@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { verifyPassword } from '../../../src/core/rooms/password.js';
-import {
-  createRoom,
-  expiryKeyOf,
-  readRoomMeta,
-  roomKeysOf,
-} from '../../../src/server/rooms/keys.js';
+import { createRoom, expiryKeyOf, readRoomMeta, roomKeysOf } from '../../../src/server/rooms/keys.js';
 import { freshKey, useRedis } from '../redis-helpers.js';
 
 const connection = useRedis();

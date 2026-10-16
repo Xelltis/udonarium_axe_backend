@@ -49,9 +49,7 @@ describe('skywayTokenRoute', () => {
   });
 
   it('returns 400 with VALIDATION_FAILED on bad body', async () => {
-    const res = await buildApp().fetch(
-      post('/skyway/tokens', JSON.stringify({ formatVersion: 2 })),
-    );
+    const res = await buildApp().fetch(post('/skyway/tokens', JSON.stringify({ formatVersion: 2 })));
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: { code: 'VALIDATION_FAILED', message: 'Invalid request body.' },
@@ -59,9 +57,7 @@ describe('skywayTokenRoute', () => {
   });
 
   it('returns 400 with VALIDATION_FAILED on bad body for legacy path too', async () => {
-    const res = await buildApp().fetch(
-      post('/skyway2023/token', JSON.stringify({ formatVersion: 2 })),
-    );
+    const res = await buildApp().fetch(post('/skyway2023/token', JSON.stringify({ formatVersion: 2 })));
     expect(res.status).toBe(400);
   });
 

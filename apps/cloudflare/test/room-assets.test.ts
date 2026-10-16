@@ -28,7 +28,7 @@ const tryPut = async (roomKey: string, token: string) => {
         'CF-Connecting-IP': freshIp(),
         Authorization: `Bearer ${token}`,
       },
-    }),
+    })
   );
   return { res, id };
 };
@@ -55,7 +55,7 @@ describe('a room’s assets when the room goes', () => {
             'CF-Connecting-IP': freshIp(),
             Authorization: `Bearer ${accessTokenFor('user-gm')}`,
           },
-        }),
+        })
       );
       expect(deleted.status).toBe(204);
       return put(...args);
@@ -74,7 +74,7 @@ describe('a room’s assets when the room goes', () => {
     client.close();
     await client.closed;
     await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      state.storage.sql.exec('UPDATE room SET emptied_at = 0'),
+      state.storage.sql.exec('UPDATE room SET emptied_at = 0')
     );
 
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
@@ -88,14 +88,11 @@ describe('a room’s assets when the room goes', () => {
     await putIn(roomKey, welcome.assetToken);
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const outcome = await runInDurableObject(
-      stubOf(roomKey),
-      async (instance: RoomDurableObject) => {
-        const broken = { list: () => Promise.reject(new Error('R2 down')) };
-        (instance as unknown as { env: Env }).env = { ...env, ASSETS: broken } as unknown as Env;
-        return instance.deleteRoom('user-host');
-      },
-    );
+    const outcome = await runInDurableObject(stubOf(roomKey), async (instance: RoomDurableObject) => {
+      const broken = { list: () => Promise.reject(new Error('R2 down')) };
+      (instance as unknown as { env: Env }).env = { ...env, ASSETS: broken } as unknown as Env;
+      return instance.deleteRoom('user-host');
+    });
 
     expect(outcome).toBe('deleted');
     expect(failure).toHaveBeenCalledWith('Room asset deletion failed:', expect.any(Error));
@@ -119,7 +116,7 @@ describe('the lobby’s view of which rooms are still there', () => {
         state.storage.sql.exec(
           `INSERT INTO rooms (room_key, room_id, name, has_password, members, created_at)
            VALUES (?, 'abc', 'r', 0, 0, 0)`,
-          key,
+          key
         );
       }
     });

@@ -4,15 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { AuthorityEvent, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { FLUSH_TALLY_MS } from '../src/core/rooms/limits';
-import {
-  chatTabList,
-  connect,
-  contextOf,
-  createRoom,
-  eventually,
-  join,
-  listedTabOf,
-} from './shared/room-helpers';
+import { chatTabList, connect, contextOf, createRoom, eventually, join, listedTabOf } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
 
 /** 部屋が Analytics Engine に書いたものを手元に集める */
@@ -25,8 +17,7 @@ const recordPoints = async (roomKey: string) => {
   return points;
 };
 
-const summary = (points: AnalyticsEngineDataPoint[]) =>
-  points.map((point) => [point.blobs?.[1], point.blobs?.[2]]);
+const summary = (points: AnalyticsEngineDataPoint[]) => points.map((point) => [point.blobs?.[1], point.blobs?.[2]]);
 
 describe('room metrics', () => {
   it('writes who came and went, why a socket was closed, what was written and how dice rolled', async () => {
@@ -60,7 +51,7 @@ describe('room metrics', () => {
     alice.client.close();
     await eventually(
       async () => points.length,
-      (count) => count >= 6,
+      (count) => count >= 6
     );
     await eventually(async () => summary(points).some(([event]) => event === 'flush'), Boolean);
 
@@ -76,7 +67,7 @@ describe('room metrics', () => {
         ['refuse', 'bad-message'],
         ['leave', 'guest'],
         ['flush', ''],
-      ]),
+      ])
     );
     // 書いたのは4つ（コマ、タブの一覧、タブ、振った結果）。それぞれの行と、その主キーの索引の行を書く
     const flush = points.find((point) => point.blobs?.[1] === 'flush');
@@ -88,9 +79,7 @@ describe('room metrics', () => {
     const points = await recordPoints(roomKey);
     const alice = await join(roomKey, 'alice');
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (
-        instance as unknown as { engine: { flushTally: { count: number; since: number } } }
-      ).engine.flushTally = {
+      (instance as unknown as { engine: { flushTally: { count: number; since: number } } }).engine.flushTally = {
         count: 3,
         since: Date.now() - FLUSH_TALLY_MS,
       };

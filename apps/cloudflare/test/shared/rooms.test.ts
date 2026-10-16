@@ -84,7 +84,7 @@ describe('POST /v1/rooms', () => {
       new Request(ROOMS, {
         method: 'OPTIONS',
         headers: { ...elsewhere, 'Access-Control-Request-Method': 'POST' },
-      }),
+      })
     );
 
     for (const res of [post, list, preflight]) {
@@ -102,14 +102,12 @@ describe('POST /v1/rooms', () => {
           'Access-Control-Request-Method': 'POST',
           'Access-Control-Request-Headers': 'content-type',
         },
-      }),
+      })
     );
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST,PUT,DELETE');
-    expect(res.headers.get('Access-Control-Allow-Headers')).toBe(
-      'Content-Type,Authorization,X-Asset-Name',
-    );
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization,X-Asset-Name');
   });
 
   it('stops one address once it has opened its share of rooms', async () => {
@@ -126,13 +124,7 @@ describe('GET /v1/rooms/:roomKey/ws', () => {
   it.each([
     ['a key in the wrong form', 'abc', {}, 400, 'invalid-id'],
     ['a request that is not a WebSocket', '0'.repeat(32), { Upgrade: '' }, 426, 'upgrade-required'],
-    [
-      'a page that is not listed',
-      '0'.repeat(32),
-      { Origin: 'https://x.example' },
-      403,
-      'origin-not-allowed',
-    ],
+    ['a page that is not listed', '0'.repeat(32), { Origin: 'https://x.example' }, 403, 'origin-not-allowed'],
   ])('turns away %s', async (_name, roomKey, headers, status, error) => {
     const res = await upgrade(roomKey, headers);
     expect(res.status).toBe(status);
@@ -181,11 +173,9 @@ describe('joining a room', () => {
       ...(harness.assetUpload ? { assetUpload: harness.assetUpload } : {}),
     });
     expect(keysOf(welcome)).toEqual(
-      keysOf(harness.assetUpload ? messages.server.welcomeWithUpload : messages.server.welcome),
+      keysOf(harness.assetUpload ? messages.server.welcomeWithUpload : messages.server.welcome)
     );
-    expect(catalog).toEqual([
-      { eventName: SyncEvent.CATALOG, data: [], sendFrom: AUTHORITY_PEER_ID },
-    ]);
+    expect(catalog).toEqual([{ eventName: SyncEvent.CATALOG, data: [], sendFrom: AUTHORITY_PEER_ID }]);
   });
 
   it('tells those inside who came in, and the newcomer who is inside', async () => {
@@ -202,11 +192,9 @@ describe('joining a room', () => {
     });
     expect(keysOf(joined)).toEqual(keysOf(messages.server.join));
     expect(
-      (
-        await eventually(listRooms, (rooms) =>
-          rooms.some((r) => r.roomKey === roomKey && r.members === 2),
-        )
-      ).find((room) => room.roomKey === roomKey)?.members,
+      (await eventually(listRooms, (rooms) => rooms.some((r) => r.roomKey === roomKey && r.members === 2))).find(
+        (room) => room.roomKey === roomKey
+      )?.members
     ).toBe(2);
   });
 
@@ -223,9 +211,7 @@ describe('joining a room', () => {
     // 閉じてきた人には閉じ返す
     expect(await bob.client.closed).toEqual({ code: 1000, reason: 'bye' });
     expect(keysOf(left)).toEqual(keysOf(messages.server.leave));
-    const rooms = await eventually(listRooms, (all) =>
-      all.some((r) => r.roomKey === roomKey && r.members === 1),
-    );
+    const rooms = await eventually(listRooms, (all) => all.some((r) => r.roomKey === roomKey && r.members === 1));
     expect(rooms.find((room) => room.roomKey === roomKey)?.members).toBe(1);
   });
 
@@ -304,10 +290,7 @@ describe('joining a room', () => {
     const roomKey = await createRoom();
     const client = await connect(roomKey);
 
-    client.send(
-      { type: 'hello', protocolVersion: PROTOCOL_VERSION, peerId: 'alice', userId: 'u' },
-      { gzip: true },
-    );
+    client.send({ type: 'hello', protocolVersion: PROTOCOL_VERSION, peerId: 'alice', userId: 'u' }, { gzip: true });
 
     expect((await client.next('welcome')).peerId).toBe('alice');
   });
@@ -335,9 +318,7 @@ describe('joining a room', () => {
     expect(await bob.client.closed).toEqual({ code: CLOSE_CODE, reason: 'replaced' });
     await alice.client.expectQuiet();
     again.client.emit([{ eventName: 'CHAT', data: 'still here' }]);
-    expect(await alice.client.events()).toEqual([
-      { eventName: 'CHAT', data: 'still here', sendFrom: 'bob' },
-    ]);
+    expect(await alice.client.events()).toEqual([{ eventName: 'CHAT', data: 'still here', sendFrom: 'bob' }]);
   });
 
   it('answers ping with pong without a frame of its own, and closes on other text', async () => {
@@ -474,14 +455,10 @@ describe('relaying', () => {
         { eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) },
         { eventName: 'WHISPER', data: 'after' },
       ],
-      'bob',
+      'bob'
     );
 
-    expect((await bob.events()).map((event) => event.eventName)).toEqual([
-      'WHISPER',
-      SyncEvent.UPDATE,
-      'WHISPER',
-    ]);
+    expect((await bob.events()).map((event) => event.eventName)).toEqual(['WHISPER', SyncEvent.UPDATE, 'WHISPER']);
     expect((await carol.events()).map((event) => event.eventName)).toEqual([SyncEvent.UPDATE]);
   });
 
@@ -549,9 +526,7 @@ describe('the state of the room', () => {
     await bob.events();
     bob.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 3, 0.9) }]);
 
-    expect(await bob.events()).toEqual([
-      { eventName: SyncEvent.UPDATE, data: newer, sendFrom: AUTHORITY_PEER_ID },
-    ]);
+    expect(await bob.events()).toEqual([{ eventName: SyncEvent.UPDATE, data: newer, sendFrom: AUTHORITY_PEER_ID }]);
     await alice.expectQuiet();
   });
 
@@ -572,9 +547,7 @@ describe('the state of the room', () => {
 
     alice.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     await bob.events();
-    alice.emit([
-      { eventName: SyncEvent.DELETE, data: { aliasName: 'character', identifier: 'piece' } },
-    ]);
+    alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'character', identifier: 'piece' } }]);
     expect(await bob.events()).toEqual([
       {
         eventName: SyncEvent.DELETE,
@@ -587,15 +560,9 @@ describe('the state of the room', () => {
     bob.emit([{ eventName: SyncEvent.REQUEST, data: 'piece' }]);
 
     const deleteAgain = { eventName: SyncEvent.DELETE, sendFrom: AUTHORITY_PEER_ID };
-    expect(await bob.events()).toEqual([
-      { ...deleteAgain, data: { aliasName: 'character', identifier: 'piece' } },
-    ]);
-    expect(await bob.events()).toEqual([
-      { ...deleteAgain, data: { aliasName: '', identifier: 'piece' } },
-    ]);
-    expect(await bob.events()).toEqual([
-      { ...deleteAgain, data: { aliasName: '', identifier: 'piece' } },
-    ]);
+    expect(await bob.events()).toEqual([{ ...deleteAgain, data: { aliasName: 'character', identifier: 'piece' } }]);
+    expect(await bob.events()).toEqual([{ ...deleteAgain, data: { aliasName: '', identifier: 'piece' } }]);
+    expect(await bob.events()).toEqual([{ ...deleteAgain, data: { aliasName: '', identifier: 'piece' } }]);
     await alice.expectQuiet();
     expect((await join(roomKey, 'carol')).catalog[0].data).toEqual([]);
   });
@@ -610,10 +577,7 @@ describe('the state of the room', () => {
       { eventName: SyncEvent.UPDATE, data: contextOf('effect', 1, 0.5) },
     ]);
 
-    expect((await bob.events()).map((event) => event.eventName)).toEqual([
-      SyncEvent.FORGET_DELETED,
-      SyncEvent.UPDATE,
-    ]);
+    expect((await bob.events()).map((event) => event.eventName)).toEqual([SyncEvent.FORGET_DELETED, SyncEvent.UPDATE]);
   });
 
   it('passes over sync events whose data it cannot read', async () => {
@@ -629,9 +593,7 @@ describe('the state of the room', () => {
     ]);
     alice.emit([{ eventName: SyncEvent.FORGET_DELETED, data: {} }]);
 
-    expect(await bob.events()).toEqual([
-      { eventName: SyncEvent.FORGET_DELETED, data: {}, sendFrom: 'alice' },
-    ]);
+    expect(await bob.events()).toEqual([{ eventName: SyncEvent.FORGET_DELETED, data: {}, sendFrom: 'alice' }]);
     await alice.expectQuiet();
   });
 
@@ -656,7 +618,7 @@ describe('the state of the room', () => {
           ],
         },
       ],
-      AUTHORITY_PEER_ID,
+      AUTHORITY_PEER_ID
     );
 
     expect(await bob.events()).toEqual([
@@ -680,7 +642,7 @@ describe('the state of the room', () => {
       Array.from({ length: count }, (_, i) => ({
         eventName: SyncEvent.UPDATE,
         data: contextOf(`piece-${i}`, 1, 0.5, {}),
-      })),
+      }))
     );
     await bob.events();
 
@@ -699,7 +661,7 @@ describe('the state of the room', () => {
         majorVersion,
         0.5,
         { peerId, userId: `user-${peerId}`, name: peerId, role: 'pl' },
-        'PeerCursor',
+        'PeerCursor'
       );
 
     it('keeps a cursor while its peer is here, and drops it without a trace once the peer leaves', async () => {
@@ -707,9 +669,7 @@ describe('the state of the room', () => {
 
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);
       await alice.events();
-      expect((await join(roomKey, 'carol')).catalog[0].data).toEqual([
-        { identifier: 'cursor-bob', version: 1.5 },
-      ]);
+      expect((await join(roomKey, 'carol')).catalog[0].data).toEqual([{ identifier: 'cursor-bob', version: 1.5 }]);
       bob.close();
       await alice.next('join');
       await alice.next('leave');
@@ -753,19 +713,15 @@ describe('the state of the room', () => {
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);
       await alice.events();
 
-      bob.emit([
-        { eventName: SyncEvent.DELETE, data: { aliasName: '', identifier: 'cursor-bob' } },
-      ]);
-      alice.emit([
-        { eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'cursor-x' } },
-      ]);
+      bob.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: '', identifier: 'cursor-bob' } }]);
+      alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'cursor-x' } }]);
       await alice.events();
       await bob.events();
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob', 2) }]);
 
       expect((await alice.events())[0].data).toEqual(cursorOf('bob', 2));
       const marked = await harness.inside(roomKey, ({ host }) =>
-        ['cursor-bob', 'cursor-x'].some((identifier) => host.store().isDeleted(identifier)),
+        ['cursor-bob', 'cursor-x'].some((identifier) => host.store().isDeleted(identifier))
       );
       expect(marked).toBe(false);
     });

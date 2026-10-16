@@ -7,8 +7,7 @@ export const ROOMS_PREFIX = 'rooms/';
 /** 部屋のアセットの置き場所。部屋ごとに分け、部屋が消えるときにまとめて消す */
 export const roomAssetPrefix = (roomKey: string): string => `${ROOMS_PREFIX}${roomKey}/`;
 
-export const roomAssetKey = (roomKey: string, id: string): string =>
-  `${roomAssetPrefix(roomKey)}${id}`;
+export const roomAssetKey = (roomKey: string, id: string): string => `${roomAssetPrefix(roomKey)}${id}`;
 
 /** 置き場所から、その部屋の鍵を取り出す。部屋のアセットでなければ null */
 export const roomKeyOf = (key: string): string | null => {

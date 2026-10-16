@@ -1,20 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  AUTHORITY_PEER_ID,
-  AuthorityEvent,
-  MAX_VERSION_STEP,
-  SyncEvent,
-} from '../../contracts/protocol.js';
+import { AUTHORITY_PEER_ID, AuthorityEvent, MAX_VERSION_STEP, SyncEvent } from '../../contracts/protocol.js';
 import { harness } from '../harness.js';
-import {
-  chatTabList,
-  contextOf,
-  createRoom,
-  eventually,
-  join,
-  listedTabOf,
-} from './room-helpers.js';
+import { chatTabList, contextOf, createRoom, eventually, join, listedTabOf } from './room-helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -40,19 +28,13 @@ const prepared = (identifier: string, tab = 'main') =>
       value: '',
       attributes: { to: '', messColor: '#000000', timestamp: STAMP },
     },
-    'chat',
+    'chat'
   );
 
 type Message = ReturnType<typeof prepared>;
-const attributes = (message: unknown) =>
-  (message as Message).syncData.attributes as Record<string, unknown>;
+const attributes = (message: unknown) => (message as Message).syncData.attributes as Record<string, unknown>;
 
-const rollRequest = (
-  identifier: string,
-  command: string,
-  extra: Record<string, unknown> = {},
-  tab = 'main',
-) => ({
+const rollRequest = (identifier: string, command: string, extra: Record<string, unknown> = {}, tab = 'main') => ({
   eventName: AuthorityEvent.ROLL_REQUEST,
   data: {
     message: prepared(identifier, tab),
@@ -214,9 +196,7 @@ describe('rolling on the server', () => {
       },
     ]);
 
-    expect((await alice.events()).map((event) => event.data)).toEqual([
-      { identifier: 'leapt', reason: 'invalid' },
-    ]);
+    expect((await alice.events()).map((event) => event.data)).toEqual([{ identifier: 'leapt', reason: 'invalid' }]);
   });
 
   it('relays a roll request meant for another peer', async () => {
@@ -270,9 +250,7 @@ describe('rolling on the server', () => {
       }
     }
     expect(told).toEqual([{ identifier: 'orphaned', reason: 'invalid' }]);
-    expect((await bob.events()).map((event) => (event.data as Message).identifier)).not.toContain(
-      'orphaned',
-    );
+    expect((await bob.events()).map((event) => (event.data as Message).identifier)).not.toContain('orphaned');
   });
 
   it('keeps going after a roll that fails', async () => {
@@ -287,7 +265,7 @@ describe('rolling on the server', () => {
     alice.emit([rollRequest('broken', '1d1')]);
     await eventually(
       async () => failure.mock.calls.length,
-      (calls) => calls > 0,
+      (calls) => calls > 0
     );
     alice.emit([rollRequest('after', '1d1')]);
 
@@ -386,7 +364,7 @@ describe('a rolled result', () => {
     const clients = await room();
     const loose = rollRequest('loose', '1d1');
     const syncData = Object.fromEntries(
-      Object.entries(loose.data.message.syncData).filter(([field]) => field !== 'parentIdentifier'),
+      Object.entries(loose.data.message.syncData).filter(([field]) => field !== 'parentIdentifier')
     );
     clients.alice.emit([
       {
@@ -437,8 +415,8 @@ describe('a rolled result', () => {
       const request = rollRequest(identifier, '1d1');
       const syncData = Object.fromEntries(
         Object.entries(request.data.message.syncData).filter(
-          ([field]) => field !== 'majorIndex' && field !== 'minorIndex',
-        ),
+          ([field]) => field !== 'majorIndex' && field !== 'minorIndex'
+        )
       );
       return {
         ...request,
@@ -618,22 +596,20 @@ describe('a rolled result', () => {
             value: 'psst',
             attributes: { from: 'user-bob', to: 'user-carol' },
           },
-          'chat',
+          'chat'
         ),
       },
     ]);
     await clients.carol.events();
 
-    clients.alice.emit([
-      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
-    ]);
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } }]);
 
     const back = await clients.alice.events();
     expect(back.map((event) => [event.eventName, (event.data as Message).identifier])).toEqual(
       expect.arrayContaining([
         [AuthorityEvent.AUTHORITATIVE, 'main'],
         [AuthorityEvent.AUTHORITATIVE, original.identifier],
-      ]),
+      ])
     );
     expect(back.map((event) => (event.data as Message).identifier)).not.toContain('aside');
     await clients.bob.expectQuiet();
@@ -663,13 +639,7 @@ describe('a rolled result', () => {
     clients.alice.emit([
       {
         eventName: SyncEvent.UPDATE,
-        data: contextOf(
-          'plain',
-          1,
-          0.5,
-          { parentIdentifier: 'main', value: 'hi', attributes: {} },
-          'chat',
-        ),
+        data: contextOf('plain', 1, 0.5, { parentIdentifier: 'main', value: 'hi', attributes: {} }, 'chat'),
       },
     ]);
     await clients.bob.events();
@@ -681,16 +651,14 @@ describe('a rolled result', () => {
       { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
     ]);
     const back = await clients.alice.events();
-    clients.alice.emit([
-      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
-    ]);
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } }]);
     back.push(...(await clients.alice.events()));
 
     expect(back.map((event) => [event.eventName, (event.data as Message).identifier])).toEqual(
       expect.arrayContaining([
         [AuthorityEvent.AUTHORITATIVE, 'main'],
         [AuthorityEvent.AUTHORITATIVE, 'plain'],
-      ]),
+      ])
     );
     expect(back.map((event) => (event.data as Message).identifier)).not.toContain('whispered');
     await clients.bob.expectQuiet();
@@ -706,13 +674,7 @@ describe('a rolled result', () => {
     clients.alice.emit([
       {
         eventName: SyncEvent.UPDATE,
-        data: contextOf(
-          'plain',
-          1,
-          0.5,
-          { parentIdentifier: 'main', value: 'hi', attributes: {} },
-          'chat',
-        ),
+        data: contextOf('plain', 1, 0.5, { parentIdentifier: 'main', value: 'hi', attributes: {} }, 'chat'),
       },
     ]);
     await clients.bob.events();
@@ -730,16 +692,11 @@ describe('a rolled result', () => {
       const room = engine as unknown as { keptFromDeleting: Map<string, { until: number }> };
       for (const kept of room.keptFromDeleting.values()) kept.until = 0;
     });
-    clients.alice.emit([
-      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
-    ]);
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } }]);
 
-    expect(
-      (await clients.bob.events()).map((event) => [
-        event.eventName,
-        (event.data as Message).identifier,
-      ]),
-    ).toEqual([[SyncEvent.DELETE, 'plain']]);
+    expect((await clients.bob.events()).map((event) => [event.eventName, (event.data as Message).identifier])).toEqual([
+      [SyncEvent.DELETE, 'plain'],
+    ]);
   });
 
   it('is rolled once for a request sent twice before either is rolled', async () => {
@@ -763,8 +720,7 @@ describe('a rolled result', () => {
           ...listedTabOf('main', { plCanView: true, guestCanView: true, guestCanSpeak: true }),
           majorVersion: 2,
           syncData: {
-            ...listedTabOf('main', { plCanView: true, guestCanView: true, guestCanSpeak: true })
-              .syncData,
+            ...listedTabOf('main', { plCanView: true, guestCanView: true, guestCanSpeak: true }).syncData,
             parentIdentifier: 'elsewhere',
           },
         },
@@ -880,9 +836,7 @@ describe('a rolled result', () => {
     const clients = await room();
     const secret = await secretIn(clients);
     // bob の手元にあるのは伏せた形。振っていない人の公開は、まるごと断る
-    clients.bob.emit([
-      { eventName: SyncEvent.UPDATE, data: edited(secret, '', { tag: 'system', dicebot: '' }) },
-    ]);
+    clients.bob.emit([{ eventName: SyncEvent.UPDATE, data: edited(secret, '', { tag: 'system', dicebot: '' }) }]);
     expect((await clients.bob.events())[0]).toMatchObject({
       eventName: AuthorityEvent.AUTHORITATIVE,
     });
@@ -901,9 +855,7 @@ describe('a rolled result', () => {
     const clients = await room();
     const original = await rolledIn(clients);
 
-    clients.alice.emit([
-      { eventName: SyncEvent.UPDATE, data: edited(original, original.syncData.value, { tag: '' }) },
-    ]);
+    clients.alice.emit([{ eventName: SyncEvent.UPDATE, data: edited(original, original.syncData.value, { tag: '' }) }]);
 
     expect(attributes((await clients.bob.events())[0].data).tag).toBe('system');
   });
@@ -919,7 +871,7 @@ describe('a rolled result', () => {
         value: 'DiceBot : 6',
         attributes: { from: 'System-BCDice', serverRoll: true },
       },
-      'chat',
+      'chat'
     );
 
     alice.emit([{ eventName: SyncEvent.UPDATE, data: forged }]);

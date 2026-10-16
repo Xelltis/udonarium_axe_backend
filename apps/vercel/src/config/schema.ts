@@ -26,7 +26,7 @@ export const envSchema = object({
   SKYWAY_UDONARIUM_LOBBY_SIZE: optional(pipe(numericInput, minValue(1)), DEFAULT_LOBBY_SIZE),
   SKYWAY_TOKEN_TTL_SECONDS: optional(
     pipe(numericInput, minValue(MIN_TOKEN_TTL_SECONDS), maxValue(MAX_TOKEN_TTL_SECONDS)),
-    DEFAULT_TOKEN_TTL_SECONDS,
+    DEFAULT_TOKEN_TTL_SECONDS
   ),
   ENVIRONMENT: optional(string()),
 });

@@ -4,17 +4,7 @@ import { AuthorityEvent } from '../../contracts/protocol.js';
 import type { ErrorMessage, RoomSummary } from '../../contracts/protocol.js';
 import { harness } from '../harness.js';
 import { ORIGIN, accessTokenFor, freshIp, jsonOf } from './helpers.js';
-import {
-  Client,
-  connect,
-  createRoom,
-  eventually,
-  HOST,
-  join,
-  listRooms,
-  refusalOf,
-  ROOMS,
-} from './room-helpers.js';
+import { Client, connect, createRoom, eventually, HOST, join, listRooms, refusalOf, ROOMS } from './room-helpers.js';
 
 // GM が部屋を削除するときと、一覧で削除できる部屋に印を付けるとき
 
@@ -32,7 +22,7 @@ const deleteRoom = (roomKey: string, userId: string | null, ip = freshIp()) =>
         'CF-Connecting-IP': ip,
         ...(userId === null ? {} : { Authorization: `Bearer ${accessTokenFor(userId)}` }),
       },
-    }),
+    })
   );
 
 /** アクセストークンを付けて一覧を取る */
@@ -40,7 +30,7 @@ const listAs = async (authorization: string): Promise<RoomSummary[]> => {
   const res = await harness.fetch(
     new Request(ROOMS, {
       headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: authorization },
-    }),
+    })
   );
   return (await jsonOf<{ rooms: RoomSummary[] }>(res)).rooms;
 };
@@ -136,7 +126,7 @@ describe('deleting a room', () => {
   it('is not offered on a Worker without login', async () => {
     const res = await harness.fetchWith(
       new Request(`${ROOMS}/${'c'.repeat(32)}`, { method: 'DELETE', headers: { Origin: ORIGIN } }),
-      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined },
+      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined }
     );
 
     expect(res.status).toBe(503);
@@ -166,12 +156,12 @@ describe('the room list', () => {
     promote(gm.client, 'pl', 'gm');
     const given = await eventually(
       () => listFor('user-pl'),
-      (rooms) => rowOf(rooms, roomKey)?.deletable === true,
+      (rooms) => rowOf(rooms, roomKey)?.deletable === true
     );
     promote(gm.client, 'pl', 'pl');
     const taken = await eventually(
       () => listFor('user-pl'),
-      (rooms) => rowOf(rooms, roomKey)?.deletable === undefined,
+      (rooms) => rowOf(rooms, roomKey)?.deletable === undefined
     );
 
     expect(rowOf(given, roomKey)?.deletable).toBe(true);
@@ -187,7 +177,7 @@ describe('the room list', () => {
     await join(roomKey, 'co-gm', { invite });
     const rooms = await eventually(
       () => listFor('user-co-gm'),
-      (listed) => rowOf(listed, roomKey)?.deletable === true,
+      (listed) => rowOf(listed, roomKey)?.deletable === true
     );
 
     expect(rowOf(rooms, roomKey)?.deletable).toBe(true);
@@ -212,15 +202,11 @@ describe('the room list', () => {
             'CF-Connecting-IP': freshIp(),
             ...(userId ? { Authorization: `Bearer ${accessTokenFor(userId)}` } : {}),
           },
-        }),
+        })
       );
 
-    expect(
-      (await jsonOf<{ room: RoomSummary }>(await find(roomKey, 'user-finder-gm'))).room.deletable,
-    ).toBe(true);
-    expect((await jsonOf<{ room: RoomSummary }>(await find(roomKey))).room).not.toHaveProperty(
-      'deletable',
-    );
+    expect((await jsonOf<{ room: RoomSummary }>(await find(roomKey, 'user-finder-gm'))).room.deletable).toBe(true);
+    expect((await jsonOf<{ room: RoomSummary }>(await find(roomKey))).room).not.toHaveProperty('deletable');
     const missing = await find('0'.repeat(32));
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'room-not-found' });
@@ -231,9 +217,7 @@ describe('the room list', () => {
     const ip = freshIp();
     const statuses: number[] = [];
     for (let i = 0; i < 6; i++) {
-      const res = await harness.fetch(
-        new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }),
-      );
+      const res = await harness.fetch(new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }));
       statuses.push(res.status);
     }
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
@@ -245,7 +229,7 @@ describe('the room list', () => {
     const statuses: number[] = [];
     for (let i = 0; i < 6; i++) {
       const res = await harness.fetch(
-        new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }),
+        new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } })
       );
       statuses.push(res.status);
     }
@@ -265,10 +249,11 @@ describe('the room list', () => {
 
   it('finds a room by its key on a Worker without login, marked for nobody', async () => {
     const roomKey = await createRoom({}, 'loginless-gm');
-    const res = await harness.fetchWith(
-      new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN } }),
-      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined },
-    );
+    const res = await harness.fetchWith(new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN } }), {
+      DISCORD_CLIENT_ID: undefined,
+      DISCORD_CLIENT_SECRET: undefined,
+      SESSION_SECRET: undefined,
+    });
 
     expect(res.status).toBe(200);
     expect((await jsonOf<{ room: RoomSummary }>(res)).room).not.toHaveProperty('deletable');

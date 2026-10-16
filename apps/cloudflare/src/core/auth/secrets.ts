@@ -37,8 +37,7 @@ export interface IssuedToken {
 
 export const nowSeconds = () => Math.floor(Date.now() / 1000);
 
-export const randomText = (bytes: number) =>
-  base64url(crypto.getRandomValues(new Uint8Array(bytes)));
+export const randomText = (bytes: number) => base64url(crypto.getRandomValues(new Uint8Array(bytes)));
 
 export const sha256 = async (text: string): Promise<string> =>
   base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))));

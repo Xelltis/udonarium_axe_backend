@@ -106,7 +106,7 @@ export class VercelRoom implements RoomHost<Conn> {
     private meta: RoomMeta | null,
     private readonly lease: string,
     private readonly roleMap: Map<string, PeerRole>,
-    private readonly objects: RedisRoomStore | null,
+    private readonly objects: RedisRoomStore | null
   ) {}
 
   /**
@@ -146,7 +146,7 @@ export class VercelRoom implements RoomHost<Conn> {
       meta,
       lease,
       new Map(Object.entries(roles) as [string, PeerRole][]),
-      objects,
+      objects
     );
     room.start();
     return { room };
@@ -190,9 +190,7 @@ export class VercelRoom implements RoomHost<Conn> {
     this.engine.dropStrayCursors();
     if (this.engine.seats().length > 0) this.persist([this.expiry()]);
     this.lobbyChanged(this.roomKey);
-    this.dropLostInstances().catch((err: unknown) =>
-      console.error('Could not look for lost instances:', err),
-    );
+    this.dropLostInstances().catch((err: unknown) => console.error('Could not look for lost instances:', err));
   }
 
   /** 落ちたインスタンス（生きている印の切れたもの）に着いていた接続を、出たことにする */
@@ -200,8 +198,7 @@ export class VercelRoom implements RoomHost<Conn> {
     const isAlive = this.deps.isAlive;
     if (!isAlive) return;
     for (const conn of [...this.conns]) {
-      if (conn.instance && !(await isAlive(conn.instance)) && this.conns.has(conn))
-        this.closed(conn);
+      if (conn.instance && !(await isAlive(conn.instance)) && this.conns.has(conn)) this.closed(conn);
     }
   }
 
@@ -344,7 +341,7 @@ export class VercelRoom implements RoomHost<Conn> {
     this.persist(
       seat.closed
         ? [{ command: 'HDEL', key: this.keys.seats, args: [conn.id] }]
-        : [{ command: 'HSET', key: this.keys.seats, args: [conn.id, JSON.stringify(seat)] }],
+        : [{ command: 'HSET', key: this.keys.seats, args: [conn.id, JSON.stringify(seat)] }]
     );
   }
 
@@ -400,10 +397,7 @@ export class VercelRoom implements RoomHost<Conn> {
 
   /** だれもいなくなった。ここから保持期間を数える */
   emptied(): void {
-    this.persist([
-      { command: 'HSET', key: this.keys.meta, args: ['emptiedAt', String(Date.now())] },
-      this.expiry(),
-    ]);
+    this.persist([{ command: 'HSET', key: this.keys.meta, args: ['emptiedAt', String(Date.now())] }, this.expiry()]);
   }
 
   /** 消す時刻を、いまから保持期間のあとにする */
@@ -423,7 +417,7 @@ export class VercelRoom implements RoomHost<Conn> {
         await this.deps.lobby.setMembers(roomKey, this.engine.seats().length);
         await this.deps.lobby.setGameMasters(
           roomKey,
-          gameMasters.map(([userId]) => userId),
+          gameMasters.map(([userId]) => userId)
         );
       })
       .catch((err: unknown) => console.error('Lobby update failed:', err));
@@ -441,7 +435,7 @@ export class VercelRoom implements RoomHost<Conn> {
         event,
         detail,
         value,
-      }),
+      })
     );
   }
 

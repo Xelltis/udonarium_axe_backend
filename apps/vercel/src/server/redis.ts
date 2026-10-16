@@ -6,8 +6,7 @@ export type Redis = ReturnType<typeof createClient>;
 /** 同じ接続で、値をバイト列（Buffer）のまま受けるもの。部屋のオブジェクトは MessagePack で置く */
 export type BinaryRedis = ReturnType<typeof binaryOf>;
 
-export const binaryOf = (redis: Redis) =>
-  redis.withTypeMapping({ [RESP_TYPES.BLOB_STRING]: Buffer });
+export const binaryOf = (redis: Redis) => redis.withTypeMapping({ [RESP_TYPES.BLOB_STRING]: Buffer });
 
 /** つなぐ。切れたときは node-redis がつなぎ直す */
 export const connectRedis = async (url: string): Promise<Redis> => {

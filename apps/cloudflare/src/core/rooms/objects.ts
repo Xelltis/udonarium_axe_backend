@@ -12,10 +12,7 @@ export const attributesOf = (context: ObjectContext): Record<string, unknown> =>
   isRecord(context.syncData.attributes) ? context.syncData.attributes : {};
 
 /** attributes の一部を替えた写し。元は変えない */
-export const withAttributes = (
-  context: ObjectContext,
-  changes: Record<string, unknown>,
-): ObjectContext => ({
+export const withAttributes = (context: ObjectContext, changes: Record<string, unknown>): ObjectContext => ({
   ...context,
   syncData: { ...context.syncData, attributes: { ...attributesOf(context), ...changes } },
 });

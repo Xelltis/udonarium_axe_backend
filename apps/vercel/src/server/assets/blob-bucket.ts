@@ -44,7 +44,7 @@ export const blobBucket = (): AssetBucket => ({
       (err: unknown) => {
         if (err instanceof BlobNotFoundError) return false;
         throw err;
-      },
+      }
     ),
   delete: async (paths) => {
     if (paths.length > 0) await del(paths);

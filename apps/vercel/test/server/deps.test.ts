@@ -23,9 +23,7 @@ describe('the server dependencies', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const secrets = await Promise.all(
-      ['quiet', 'loud'].map((roomKey) =>
-        deps.runtime.withRoom(roomKey, (room) => room.sessionSecret()),
-      ),
+      ['quiet', 'loud'].map((roomKey) => deps.runtime.withRoom(roomKey, (room) => room.sessionSecret()))
     );
     await deps.runtime.withRoom('quiet', (room) => room.defer(Promise.reject(new Error('later'))));
 
@@ -65,9 +63,7 @@ describe('the server dependencies', () => {
       deps.runtime.withRoom('room', (room) => room.assetUploadPolicy());
 
     const toStore = await policyOf(await depsOf(connection.redis));
-    const toDirectory = await policyOf(
-      await depsOf(connection.redis, { bucketOf: () => localBucket('/nowhere') }),
-    );
+    const toDirectory = await policyOf(await depsOf(connection.redis, { bucketOf: () => localBucket('/nowhere') }));
 
     expect(toStore).toEqual({ maxPutBytes: MAX_PUT_BYTES, directUpload: true });
     expect(toDirectory).toBeNull();
@@ -81,7 +77,7 @@ describe('the server dependencies', () => {
         DISCORD_CLIENT_ID: '',
         DISCORD_CLIENT_SECRET: '',
         SESSION_SECRET: '',
-      },
+      }
     );
 
     expect(await deps.runtime.withRoom('room', (room) => room.sessionSecret())).toBeNull();

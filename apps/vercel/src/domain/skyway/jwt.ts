@@ -26,12 +26,10 @@ export const signJwt = async (
   header: JwtHeader,
   payload: JwtPayload,
   secret: string,
-  deps: SignJwtDeps,
+  deps: SignJwtDeps
 ): Promise<string> => {
   const encodedHeader = deps.encode(JSON.stringify(header));
   const encodedPayload = deps.encode(JSON.stringify(payload));
-  const signature = deps.encode(
-    await deps.hmacSHA256(`${encodedHeader}.${encodedPayload}`, secret),
-  );
+  const signature = deps.encode(await deps.hmacSHA256(`${encodedHeader}.${encodedPayload}`, secret));
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 };

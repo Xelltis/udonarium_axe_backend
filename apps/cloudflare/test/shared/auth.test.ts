@@ -44,15 +44,12 @@ const refresh = (refreshToken: string) =>
     body: { grant_type: 'refresh_token', refresh_token: refreshToken },
   });
 
-const accountKeyOf = (tokens: TokenResponse) =>
-  unpackSecret(tokens.refreshToken)?.accountKey as string;
+const accountKeyOf = (tokens: TokenResponse) => unpackSecret(tokens.refreshToken)?.accountKey as string;
 
 describe('GET /v1/auth/config', () => {
   it('names Discord while login is set up, and nothing otherwise', async () => {
     const on = await callApi('/v1/auth/config');
-    const off = await withoutLogin(
-      new Request(`${BACKEND}/v1/auth/config`, { headers: { Origin: ORIGIN } }),
-    );
+    const off = await withoutLogin(new Request(`${BACKEND}/v1/auth/config`, { headers: { Origin: ORIGIN } }));
 
     expect(await on.json()).toEqual({ providers: ['discord'] });
     expect(on.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
@@ -63,7 +60,7 @@ describe('GET /v1/auth/config', () => {
 describe('GET /v1/login/discord', () => {
   it('sends the browser to Discord asking only who the user is', async () => {
     const res = await navigate(
-      `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`,
+      `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`
     );
 
     expect(res.status).toBe(302);
@@ -86,7 +83,7 @@ describe('GET /v1/login/discord', () => {
     ['a challenge of the wrong shape', APP, 'short'],
   ])('turns away %s', async (_name, redirect, challenge) => {
     const res = await navigate(
-      `/v1/login/discord?redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${challenge}`,
+      `/v1/login/discord?redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${challenge}`
     );
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid-request' });
@@ -99,9 +96,9 @@ describe('GET /v1/login/discord', () => {
   it('does not count `*` as a page it may send the code to', async () => {
     const res = await harness.fetchWith(
       new Request(
-        `${BACKEND}/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${'c'.repeat(43)}`,
+        `${BACKEND}/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${'c'.repeat(43)}`
       ),
-      { ACCESS_CONTROL_ALLOW_ORIGIN: '*' },
+      { ACCESS_CONTROL_ALLOW_ORIGIN: '*' }
     );
     expect(res.status).toBe(400);
   });
@@ -123,9 +120,7 @@ describe('GET /v1/login/discord/callback', () => {
     expect(fragmentOf(back).get('login_code')).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
     const [tokenCall, userCall] = discord.mock.calls;
     const tokenRequest = new Request(tokenCall[0] as string, tokenCall[1]);
-    expect(tokenRequest.headers.get('Authorization')).toBe(
-      `Basic ${btoa('test-client:test-client-secret')}`,
-    );
+    expect(tokenRequest.headers.get('Authorization')).toBe(`Basic ${btoa('test-client:test-client-secret')}`);
     expect(Object.fromEntries(new URLSearchParams(await tokenRequest.text()))).toEqual({
       grant_type: 'authorization_code',
       code: 'discord-code',
@@ -149,15 +144,13 @@ describe('GET /v1/login/discord/callback', () => {
 
   it('returns with denied when the user said no on Discord', async () => {
     const start = await navigate(
-      `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`,
+      `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`
     );
     const state = new URL(start.headers.get('Location') as string).searchParams.get('state');
 
     const back = await navigate(`/v1/login/discord/callback?error=access_denied&state=${state}`);
 
-    expect(fragmentOf(new URL(back.headers.get('Location') as string)).get('login_error')).toBe(
-      'denied',
-    );
+    expect(fragmentOf(new URL(back.headers.get('Location') as string)).get('login_error')).toBe('denied');
   });
 
   it('turns away a state it did not sign, or none at all', async () => {
@@ -168,7 +161,7 @@ describe('GET /v1/login/discord/callback', () => {
   it('stops one address once it has come back too often', async () => {
     fakeDiscord();
     const start = await navigate(
-      `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`,
+      `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`
     );
     const state = new URL(start.headers.get('Location') as string).searchParams.get('state');
     const ip = freshIp();
@@ -218,9 +211,7 @@ describe('POST /v1/auth/token', () => {
     const once = await exchange(right);
     const twice = await exchange(right);
 
-    expect([withWrongVerifier.status, afterwards.status, once.status, twice.status]).toEqual([
-      400, 400, 200, 400,
-    ]);
+    expect([withWrongVerifier.status, afterwards.status, once.status, twice.status]).toEqual([400, 400, 200, 400]);
     expect(await twice.json()).toEqual({ error: 'invalid-grant' });
   });
 
@@ -302,10 +293,7 @@ describe('POST /v1/auth/token', () => {
   it.each([
     ['a body that is not JSON', 'grant_type=login_code'],
     ['an unknown grant', { grant_type: 'password' }],
-    [
-      'a verifier of the wrong shape',
-      { grant_type: 'login_code', code: 'a.b.c', code_verifier: 'x' },
-    ],
+    ['a verifier of the wrong shape', { grant_type: 'login_code', code: 'a.b.c', code_verifier: 'x' }],
   ])('turns away %s', async (_name, body) => {
     const res = await callApi('/v1/auth/token', { method: 'POST', body });
     expect(res.status).toBe(400);
@@ -328,7 +316,7 @@ describe('POST /v1/auth/token', () => {
 
   it('answers 503 while login is not set up', async () => {
     const res = await withoutLogin(
-      new Request(`${BACKEND}/v1/auth/token`, { method: 'POST', headers: { Origin: ORIGIN } }),
+      new Request(`${BACKEND}/v1/auth/token`, { method: 'POST', headers: { Origin: ORIGIN } })
     );
     expect(res.status).toBe(503);
   });
@@ -432,9 +420,7 @@ describe('/v1/account', () => {
   });
 
   it('answers 503 while login is not set up', async () => {
-    const res = await withoutLogin(
-      new Request(`${BACKEND}/v1/account`, { headers: { Origin: ORIGIN } }),
-    );
+    const res = await withoutLogin(new Request(`${BACKEND}/v1/account`, { headers: { Origin: ORIGIN } }));
     expect(res.status).toBe(503);
   });
 
@@ -447,9 +433,7 @@ describe('/v1/account', () => {
       },
     });
     expect(res.status).toBe(204);
-    expect(res.headers.get('Access-Control-Allow-Headers')).toBe(
-      'Content-Type,Authorization,X-Asset-Name',
-    );
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization,X-Asset-Name');
     expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST,PUT,DELETE');
   });
 });

@@ -16,7 +16,7 @@ export const skywayTokenRequestSchema = object({
   formatVersion: pipe(number(), value(1)),
   channelName: pipe(
     scopeName,
-    check((name) => !name.startsWith(LOBBY_CHANNEL_PREFIX)),
+    check((name) => !name.startsWith(LOBBY_CHANNEL_PREFIX))
   ),
   peerId: scopeName,
 });

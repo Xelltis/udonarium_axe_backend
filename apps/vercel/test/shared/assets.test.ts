@@ -36,8 +36,7 @@ afterEach(() => {
 });
 
 /** 部屋の鍵の形が違うものも含めて、どこかの部屋のアセットの URL */
-const urlIn = (roomKey: string, id: string) =>
-  `https://backend.example/v1/rooms/${roomKey}/assets/${id}`;
+const urlIn = (roomKey: string, id: string) => `https://backend.example/v1/rooms/${roomKey}/assets/${id}`;
 
 describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
   it('stores bytes under their own hash in the room, with the type read from the bytes', async () => {
@@ -92,7 +91,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
           'CF-Connecting-IP': freshIp(),
           Authorization: `Bearer ${assetTokenFor('pl', OTHER_ROOM_KEY)}`,
         },
-      }),
+      })
     );
 
     expect(res.status).toBe(201);
@@ -110,14 +109,11 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
     expect(await harness.assetStored(ROOM_KEY, wrongId)).toBeNull();
   });
 
-  it.each(['abc', 'A'.repeat(64), 'g'.repeat(64), '0'.repeat(63)])(
-    'turns away the name %s',
-    async (id) => {
-      const res = await put(id, fileOf(PNG_HEAD, 64));
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: 'invalid-id' });
-    },
-  );
+  it.each(['abc', 'A'.repeat(64), 'g'.repeat(64), '0'.repeat(63)])('turns away the name %s', async (id) => {
+    const res = await put(id, fileOf(PNG_HEAD, 64));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid-id' });
+  });
 
   it('turns away a room key that cannot be one', async () => {
     const { file, id } = await freshFile();
@@ -127,7 +123,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
         method: 'PUT',
         body: file,
         headers: { Origin: ORIGIN, 'Content-Length': String(file.byteLength) },
-      }),
+      })
     );
 
     expect(res.status).toBe(400);
@@ -174,7 +170,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
           Authorization: `Bearer ${assetTokenFor('pl')}`,
         },
       }),
-      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined },
+      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined }
     );
 
     expect(res.status).toBe(401);
@@ -200,7 +196,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
 
   it('stores an SVG longer than the part it reads to tell the type', async () => {
     const svg = textOf(
-      `<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg">${'<rect/>'.repeat(2000)}</svg>`,
+      `<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg">${'<rect/>'.repeat(2000)}</svg>`
     );
     const id = await sha256Hex(svg);
 
@@ -282,7 +278,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
           'CF-Connecting-IP': freshIp(),
           Authorization: `Bearer ${assetTokenFor('pl')}`,
         },
-      }),
+      })
     );
 
     expect(res.status).toBe(403);
@@ -302,9 +298,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
 
     it('stops one address once it has uploaded its share', async () => {
       const ip = freshIp();
-      expect(await uploadSix(() => ({ 'CF-Connecting-IP': ip }))).toEqual([
-        201, 201, 201, 201, 201, 429,
-      ]);
+      expect(await uploadSix(() => ({ 'CF-Connecting-IP': ip }))).toEqual([201, 201, 201, 201, 201, 429]);
     });
 
     it('counts every IPv6 address in a /64 as one sender', async () => {
@@ -326,7 +320,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
             'CF-Connecting-IP': ip,
             Authorization: `Bearer ${assetTokenFor('pl')}`,
           },
-        }),
+        })
       );
 
       expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
@@ -404,7 +398,7 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
           'CF-Connecting-IP': freshIp(),
           Authorization: `Bearer ${assetTokenFor('gm', OTHER_ROOM_KEY)}`,
         },
-      }),
+      })
     );
 
     expect(res.status).toBe(404);
@@ -421,9 +415,7 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
   });
 
   it('serves an SVG in a sandbox, so a script inside it cannot run', async () => {
-    const svg = textOf(
-      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>',
-    );
+    const svg = textOf('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>');
     const id = await sha256Hex(svg);
     await put(id, svg);
 
@@ -436,7 +428,7 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     for (const response of [res, head]) {
       const policy = response.headers.get('Content-Security-Policy') ?? '';
       expect(policy.split(';').map((directive) => directive.trim())).toEqual(
-        expect.arrayContaining(["default-src 'none'", 'sandbox']),
+        expect.arrayContaining(["default-src 'none'", 'sandbox'])
       );
     }
   });
@@ -503,9 +495,7 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'not-found' });
     expect((await call('not-a-hash')).status).toBe(400);
-    const badRoom = await harness.fetch(
-      new Request(urlIn('not-a-room', id), { headers: { Origin: ORIGIN } }),
-    );
+    const badRoom = await harness.fetch(new Request(urlIn('not-a-room', id), { headers: { Origin: ORIGIN } }));
     expect(badRoom.status).toBe(400);
   });
 });
@@ -522,9 +512,7 @@ describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
     expect(present.status).toBe(200);
     expect(present.headers.get('Content-Length')).toBe('300');
     expect(present.headers.get('Content-Type')).toBe('image/png');
-    expect(present.headers.get('Cache-Control')).toBe(
-      `private, max-age=${WEEK_SECONDS}, immutable`,
-    );
+    expect(present.headers.get('Cache-Control')).toBe(`private, max-age=${WEEK_SECONDS}, immutable`);
     expect(present.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(await present.text()).toBe('');
   });
@@ -557,7 +545,7 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
           Authorization: `Bearer ${assetTokenFor('guest', roomKey)}`,
           ...headers,
         },
-      }),
+      })
     );
 
   it('lists what is in the room, with the names they were put up under', async () => {
@@ -607,9 +595,7 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
 
   it('asks for the room’s token, and turns away a room key that cannot be one', async () => {
     expect((await list({ Authorization: '' })).status).toBe(401);
-    expect(
-      (await list({ Authorization: `Bearer ${assetTokenFor('pl', OTHER_ROOM_KEY)}` })).status,
-    ).toBe(401);
+    expect((await list({ Authorization: `Bearer ${assetTokenFor('pl', OTHER_ROOM_KEY)}` })).status).toBe(401);
     expect((await list({}, 'nope')).status).toBe(400);
   });
 
@@ -636,9 +622,7 @@ describe('OPTIONS /v1/rooms/:roomKey/assets/:id', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain(method);
-    expect(res.headers.get('Access-Control-Allow-Headers')).toBe(
-      'Content-Type,Authorization,X-Asset-Name',
-    );
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe('Content-Type,Authorization,X-Asset-Name');
     expect(res.headers.get('Vary')).toContain('Origin');
   });
 
@@ -654,7 +638,7 @@ describe('the store that held assets for every room', () => {
     const { id } = await freshFile();
 
     const res = await harness.fetch(
-      new Request(`https://backend.example/v1/assets/${id}`, { headers: { Origin: ORIGIN } }),
+      new Request(`https://backend.example/v1/assets/${id}`, { headers: { Origin: ORIGIN } })
     );
 
     expect(res.status).toBe(404);

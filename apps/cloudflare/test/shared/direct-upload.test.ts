@@ -2,11 +2,7 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import http from '../../contracts/fixtures/http.json' with { type: 'json' };
-import type {
-  AssetStoredResponse,
-  ErrorCode,
-  UploadTicketResponse,
-} from '../../contracts/protocol.js';
+import type { AssetStoredResponse, ErrorCode, UploadTicketResponse } from '../../contracts/protocol.js';
 import { MAX_ANY_BYTES, MAX_BYTES } from '../../src/core/assets/limits.js';
 import { UPLOAD_TICKET_SECONDS, signToken } from '../../src/core/auth/tokens.js';
 import type { DirectUploads, ServerBackend, ServerEnv } from '../../src/core/http/backend.js';
@@ -75,7 +71,7 @@ const setUp = (options: { direct?: boolean } = {}) => {
         body: ReadableStream<Uint8Array>,
         length: number,
         type: string,
-        name: string,
+        name: string
       ) => {
         const bytes = new Uint8Array(await new Response(body).arrayBuffer()) as Bytes;
         if (bytes.byteLength !== length || (await sha256Hex(bytes)) !== id) return 'hash-mismatch';
@@ -113,7 +109,7 @@ const setUp = (options: { direct?: boolean } = {}) => {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-      }),
+      })
     );
   /** 上げる先を尋ねる */
   const ask = (id: string, body: unknown, token?: string | null) =>
@@ -208,22 +204,20 @@ describe('putting up an asset straight to the store', () => {
     backend.limit.mockResolvedValueOnce(false);
     answers.push(await ask(id, { size }));
 
-    expect(await Promise.all(answers.map(async (res) => [res.status, await errorOf(res)]))).toEqual(
-      [
-        [400, 'invalid-id'],
-        [400, 'invalid-id'],
-        [400, 'invalid-request'],
-        [400, 'invalid-request'],
-        [400, 'invalid-request'],
-        [413, 'too-large'],
-        [401, 'asset-token-required'],
-        [403, 'not-a-player'],
-        [451, 'blocked'],
-        [404, 'room-not-found'],
-        [403, 'not-a-player'],
-        [429, 'rate-limited'],
-      ],
-    );
+    expect(await Promise.all(answers.map(async (res) => [res.status, await errorOf(res)]))).toEqual([
+      [400, 'invalid-id'],
+      [400, 'invalid-id'],
+      [400, 'invalid-request'],
+      [400, 'invalid-request'],
+      [400, 'invalid-request'],
+      [413, 'too-large'],
+      [401, 'asset-token-required'],
+      [403, 'not-a-player'],
+      [451, 'blocked'],
+      [404, 'room-not-found'],
+      [403, 'not-a-player'],
+      [429, 'rate-limited'],
+    ]);
   });
 
   it('takes only a ticket given to this person for this asset in this room', async () => {
@@ -242,7 +236,7 @@ describe('putting up an asset straight to the store', () => {
           ...claims,
         },
         UPLOAD_TICKET_SECONDS,
-        SESSION_SECRET,
+        SESSION_SECRET
       );
 
     const answers = [
@@ -258,29 +252,23 @@ describe('putting up an asset straight to the store', () => {
       await finish(id, ticketFor({})),
     ];
 
-    expect(await Promise.all(answers.map(async (res) => [res.status, await errorOf(res)]))).toEqual(
-      [
-        [400, 'invalid-id'],
-        [400, 'invalid-id'],
-        [400, 'invalid-request'],
-        [400, 'invalid-request'],
-        [401, 'asset-token-required'],
-        [400, 'invalid-request'],
-        [400, 'invalid-request'],
-        [400, 'invalid-request'],
-        [400, 'invalid-request'],
-        [404, 'not-found'],
-      ],
-    );
+    expect(await Promise.all(answers.map(async (res) => [res.status, await errorOf(res)]))).toEqual([
+      [400, 'invalid-id'],
+      [400, 'invalid-id'],
+      [400, 'invalid-request'],
+      [400, 'invalid-request'],
+      [401, 'asset-token-required'],
+      [400, 'invalid-request'],
+      [400, 'invalid-request'],
+      [400, 'invalid-request'],
+      [400, 'invalid-request'],
+      [404, 'not-found'],
+    ]);
   });
 
   it('keeps nothing that is not what was promised, and lets the upload go each time', async () => {
     const { backend, uploaded, kept, ask, finish, upload } = setUp();
-    const tryWith = async (
-      file: { bytes: Bytes; id: string },
-      size: number,
-      bytes: Bytes = file.bytes,
-    ) => {
+    const tryWith = async (file: { bytes: Bytes; id: string }, size: number, bytes: Bytes = file.bytes) => {
       const ticket = await jsonOf<UploadTicketResponse>(await ask(file.id, { size }));
       upload(ticket, bytes);
       const res = await finish(file.id, ticket.ticket);
@@ -325,7 +313,7 @@ describe('putting up an asset straight to the store', () => {
           'Content-Length': String(bytes.byteLength),
           Authorization: `Bearer ${assetTokenFor('pl')}`,
         },
-      }),
+      })
     );
 
     expect(res.status).toBe(413);
@@ -338,12 +326,10 @@ describe('putting up an asset straight to the store', () => {
 
     const answers = [await ask(id, { size: 200 }), await finish(id, 'a.b.c')];
 
-    expect(await Promise.all(answers.map(async (res) => [res.status, await errorOf(res)]))).toEqual(
-      [
-        [404, 'not-found'],
-        [404, 'not-found'],
-      ],
-    );
+    expect(await Promise.all(answers.map(async (res) => [res.status, await errorOf(res)]))).toEqual([
+      [404, 'not-found'],
+      [404, 'not-found'],
+    ]);
   });
 });
 
@@ -364,7 +350,7 @@ describe('this room server', () => {
     if (harness.assetUpload?.directUpload) {
       expect(res.status).toBe(201);
       expect(ticketShapeOf(await jsonOf<UploadTicketResponse>(res))).toEqual(
-        ticketShapeOf(http.uploadTicket as UploadTicketResponse),
+        ticketShapeOf(http.uploadTicket as UploadTicketResponse)
       );
     } else {
       expect(res.status).toBe(404);

@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  ACCOUNT_USER_ID_PREFIX,
-  AUTHORITY_PEER_ID,
-  AuthorityEvent,
-  SyncEvent,
-} from '../../contracts/protocol.js';
+import { ACCOUNT_USER_ID_PREFIX, AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../../contracts/protocol.js';
 import { readToken, signToken } from '../../src/core/auth/tokens.js';
 import { harness } from '../harness.js';
 import { ORIGIN, SESSION_SECRET, accessTokenFor } from './helpers.js';
@@ -21,7 +16,7 @@ const cursorOf = (peerId: string, role: string, majorVersion = 1) =>
     majorVersion,
     0.5,
     { peerId, userId: `user-${peerId}`, name: peerId, role },
-    'PeerCursor',
+    'PeerCursor'
   );
 
 // タブも発言も ObjectNode なので、SyncVar は attributes に入る
@@ -31,17 +26,11 @@ const tabOf = (identifier: string, guestCanSpeak: boolean) =>
     1,
     0.5,
     { attributes: { name: identifier, plCanView: true, guestCanView: true, guestCanSpeak } },
-    'chat-tab',
+    'chat-tab'
   );
 
 const messageOf = (identifier: string, tab: string, from: string, majorVersion = 1) =>
-  contextOf(
-    identifier,
-    majorVersion,
-    0.5,
-    { parentIdentifier: tab, value: 'hi', attributes: { from } },
-    'chat',
-  );
+  contextOf(identifier, majorVersion, 0.5, { parentIdentifier: tab, value: 'hi', attributes: { from } }, 'chat');
 
 /** GM（gm）と PL（pl）と見学者（guest）のいる部屋 */
 const table = async () => {
@@ -63,7 +52,7 @@ describe('opening a room', () => {
         headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'room' }),
       }),
-      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined },
+      { DISCORD_CLIENT_ID: undefined, DISCORD_CLIENT_SECRET: undefined, SESSION_SECRET: undefined }
     );
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'login-unavailable' });
@@ -71,10 +60,7 @@ describe('opening a room', () => {
 
   it('asks for login', async () => {
     const none = await postRoom({ name: 'room' }, { Authorization: '' });
-    const expired = await postRoom(
-      { name: 'room' },
-      { Authorization: `Bearer ${accessTokenFor('late', -1)}` },
-    );
+    const expired = await postRoom({ name: 'room' }, { Authorization: `Bearer ${accessTokenFor('late', -1)}` });
 
     for (const res of [none, expired]) {
       expect(res.status).toBe(401);
@@ -93,7 +79,7 @@ describe('roles', () => {
       expect.arrayContaining([
         { peerId: 'gm', userId: 'user-gm', role: 'gm' },
         { peerId: 'pl', userId: 'user-pl', role: 'pl' },
-      ]),
+      ])
     );
   });
 
@@ -147,11 +133,7 @@ describe('roles', () => {
     const roomKey = await createRoom({}, 'gm');
     const gm = await join(roomKey, 'gm');
     await harness.dropLogin(roomKey);
-    const forged = signToken<'access'>(
-      { aud: 'access', sub: 'discord:gm', uid: 'user-gm', name: 'gm' },
-      60,
-      '',
-    );
+    const forged = signToken<'access'>({ aud: 'access', sub: 'discord:gm', uid: 'user-gm', name: 'gm' }, 60, '');
 
     const impostor = await connect(roomKey);
     impostor.hello('impostor', { userId: 'user-gm', accessToken: forged });
@@ -211,11 +193,7 @@ describe('invites', () => {
 
   it('honours a GM invite made before invites said who gave them', async () => {
     const roomKey = await createRoom();
-    const older = signToken<'invite'>(
-      { aud: 'invite', room: roomKey, role: 'gm' },
-      60,
-      SESSION_SECRET,
-    );
+    const older = signToken<'invite'>({ aud: 'invite', room: roomKey, role: 'gm' }, 60, SESSION_SECRET);
 
     const visitor = await join(roomKey, 'visitor', { invite: older });
 
@@ -224,11 +202,7 @@ describe('invites', () => {
 
   it('ignores an invite to another room', async () => {
     const roomKey = await createRoom();
-    const elsewhere = signToken<'invite'>(
-      { aud: 'invite', room: 'another-room', role: 'gm' },
-      60,
-      SESSION_SECRET,
-    );
+    const elsewhere = signToken<'invite'>({ aud: 'invite', room: 'another-room', role: 'gm' }, 60, SESSION_SECRET);
 
     const visitor = await join(roomKey, 'visitor', { invite: elsewhere });
 
@@ -334,9 +308,7 @@ describe('whose cursor a seat may write', () => {
     gm.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     await pl.events();
 
-    pl.emit([
-      { eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'piece' } },
-    ]);
+    pl.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'piece' } }]);
     await gm.events();
     gm.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
 
@@ -422,7 +394,7 @@ describe('what a guest may write', () => {
       1,
       0.5,
       { parentIdentifier: 'open', attributes: { from: 'System', originFrom: 'user-guest' } },
-      'chat',
+      'chat'
     );
     gm.emit([
       { eventName: SyncEvent.UPDATE, data: tabOf('open', true) },
@@ -509,12 +481,7 @@ describe('changing a role', () => {
     ['asked by a player', 'pl', { peerId: 'gm', role: 'pl' }, 'not-game-master'],
     ['for someone not here', 'gm', { peerId: 'nobody', role: 'pl' }, 'unknown-peer'],
     ['for a guest who has not logged in', 'gm', { peerId: 'guest', role: 'pl' }, 'not-logged-in'],
-    [
-      'that would leave the room without a GM',
-      'gm',
-      { peerId: 'gm', role: 'pl' },
-      'last-game-master',
-    ],
+    ['that would leave the room without a GM', 'gm', { peerId: 'gm', role: 'pl' }, 'last-game-master'],
   ] as const)('is refused when %s', async (_name, asker, request, reason) => {
     const clients = await table();
 

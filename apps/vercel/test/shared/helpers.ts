@@ -1,10 +1,6 @@
 import type { PeerRole } from '../../contracts/protocol.js';
 import { roomAssetKey } from '../../src/core/assets/keys.js';
-import {
-  ACCESS_TOKEN_SECONDS,
-  ASSET_TOKEN_SECONDS,
-  signToken,
-} from '../../src/core/auth/tokens.js';
+import { ACCESS_TOKEN_SECONDS, ASSET_TOKEN_SECONDS, signToken } from '../../src/core/auth/tokens.js';
 import { harness } from '../harness.js';
 
 export const ORIGIN = 'https://app.example';
@@ -23,22 +19,14 @@ export const SESSION_SECRET = 'test-session-secret-0123456789abcdef';
 
 /** ログインした人のアクセストークン。userId を指定しなければ、同じ1人 */
 export const accessTokenFor = (userId = 'uploader', seconds = ACCESS_TOKEN_SECONDS) =>
-  signToken<'access'>(
-    { aud: 'access', sub: `discord:${userId}`, uid: userId, name: userId },
-    seconds,
-    SESSION_SECRET,
-  );
+  signToken<'access'>({ aud: 'access', sub: `discord:${userId}`, uid: userId, name: userId }, seconds, SESSION_SECRET);
 
 /** アセットを置く人。ROOM_KEY と OTHER_ROOM_KEY の部屋を作った GM */
 export const UPLOADER = 'uploader';
 
 /** 部屋のサーバーが席に渡す、部屋のアセットのトークン */
-export const assetTokenFor = (
-  role: PeerRole = 'pl',
-  room = ROOM_KEY,
-  seconds = ASSET_TOKEN_SECONDS,
-  uid = UPLOADER,
-) => signToken<'asset'>({ aud: 'asset', room, role, uid }, seconds, SESSION_SECRET);
+export const assetTokenFor = (role: PeerRole = 'pl', room = ROOM_KEY, seconds = ASSET_TOKEN_SECONDS, uid = UPLOADER) =>
+  signToken<'asset'>({ aud: 'asset', room, role, uid }, seconds, SESSION_SECRET);
 
 /** ROOM_KEY の部屋に置いたアセットが、バケットで置かれる名前 */
 export const storedKeyOf = (id: string) => roomAssetKey(ROOM_KEY, id);
@@ -61,7 +49,7 @@ export const fileOf = (head: number[], size: number, seed = 0): Bytes => {
 
 export const sha256Hex = async (data: Bytes): Promise<string> =>
   Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data)), (byte) =>
-    byte.toString(16).padStart(2, '0'),
+    byte.toString(16).padStart(2, '0')
   ).join('');
 
 let seed = 0;
@@ -83,8 +71,7 @@ export const call = (path: string, init: RequestInit = {}) => {
   const headers = new Headers(init.headers);
   if (!headers.has('CF-Connecting-IP')) headers.set('CF-Connecting-IP', freshIp());
   if (!headers.has('Origin')) headers.set('Origin', ORIGIN);
-  if (!headers.has('Authorization'))
-    headers.set('Authorization', `Bearer ${assetTokenFor('guest')}`);
+  if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${assetTokenFor('guest')}`);
   return harness.fetch(new Request(`${BASE}/${path}`, { ...init, headers }));
 };
 
@@ -111,7 +98,7 @@ export const shapeOf = (value: unknown): unknown => {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, shapeOf(item)]),
+        .map(([key, item]) => [key, shapeOf(item)])
     );
   }
   return typeof value;

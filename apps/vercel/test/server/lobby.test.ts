@@ -48,7 +48,7 @@ describe('a Redis lobby', () => {
     await connection.redis.zAdd(key('lobby', 'rooms'), newer);
     await connection.redis.hSet(
       key('lobby', 'meta'),
-      Object.fromEntries(newer.map(({ value }) => [value, JSON.stringify(room(value))])),
+      Object.fromEntries(newer.map(({ value }) => [value, JSON.stringify(room(value))]))
     );
 
     const anybody = await lobby.list();

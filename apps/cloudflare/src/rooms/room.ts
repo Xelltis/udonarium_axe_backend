@@ -80,7 +80,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       password?.hash ?? null,
       init.host,
       Date.now(),
-      Date.now(),
+      Date.now()
     );
     // だれも入らなければ、入った人が出たときと同じく保持期間で消える
     await this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
@@ -196,7 +196,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
         await this.ctx.storage.setAlarm(Date.now() + WIPE_RETRY_MS);
         await this.lobby().remove(roomKey);
         await deleteRoomAssets(this.env.ASSETS, roomKey).catch((err: unknown) =>
-          console.error('Room asset deletion failed:', err),
+          console.error('Room asset deletion failed:', err)
         );
       }
       this.engine.stopFlushing();
@@ -215,9 +215,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   /** 消しはじめて、消しきれていない部屋の鍵。無ければ null */
   private deletingRoomKey(): string | null {
     const sql = this.ctx.storage.sql;
-    const exists = sql
-      .exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'deleting'")
-      .toArray();
+    const exists = sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'deleting'").toArray();
     if (exists.length === 0) return null;
     // 消しはじめるときに1行だけ書き、消しおわると表ごと消える
     return sql.exec<{ room_key: string }>('SELECT room_key FROM deleting').one().room_key;
@@ -272,9 +270,8 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   /** ログインした人ごとの役割。seats の表に置く */
   readonly roles: RoleBook = {
     roleOf: (userId) =>
-      this.ctx.storage.sql
-        .exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId)
-        .toArray()[0]?.role ?? null,
+      this.ctx.storage.sql.exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId).toArray()[0]
+        ?.role ?? null,
     add: (userId, role) => {
       this.ctx.storage.sql.exec('INSERT INTO seats (user_id, role) VALUES (?, ?)', userId, role);
     },
@@ -282,9 +279,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       this.ctx.storage.sql.exec('UPDATE seats SET role = ? WHERE user_id = ?', role, userId);
     },
     gameMasterCount: () =>
-      this.ctx.storage.sql
-        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM seats WHERE role = 'gm'")
-        .one().count,
+      this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM seats WHERE role = 'gm'").one().count,
   };
 
   /**
@@ -356,17 +351,13 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   private roomRow(): RoomRow | null {
     const sql = this.ctx.storage.sql;
     const tables = sql
-      .exec<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'deleting')",
-      )
+      .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'deleting')")
       .toArray()
       .map((table) => table.name);
     // 消しはじめた部屋は、消しきれていなくても無いものとして扱う
     if (!tables.includes('room') || tables.includes('deleting')) return null;
     return sql
-      .exec<RoomRow>(
-        'SELECT room_key, room_id, name, password_salt, password_hash, host, emptied_at FROM room',
-      )
+      .exec<RoomRow>('SELECT room_key, room_id, name, password_salt, password_hash, host, emptied_at FROM room')
       .one();
   }
 

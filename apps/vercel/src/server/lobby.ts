@@ -54,10 +54,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
   /** 鍵の並びの要約。一覧に無いもの（消えかけ）は外す */
   const summariesOf = async (roomKeys: string[], deletable: Set<string>) => {
     if (roomKeys.length === 0) return [];
-    const [metas, members] = await Promise.all([
-      redis.hmGet(META, roomKeys),
-      redis.hmGet(MEMBERS, roomKeys),
-    ]);
+    const [metas, members] = await Promise.all([redis.hmGet(META, roomKeys), redis.hmGet(MEMBERS, roomKeys)]);
     return roomKeys.flatMap((roomKey, index): RoomSummary[] => {
       const meta = metas[index];
       if (meta === null) return [];
@@ -75,8 +72,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
     });
   };
 
-  const mineOf = async (userId: string | undefined) =>
-    new Set(userId ? await redis.sMembers(gmIndexOf(userId)) : []);
+  const mineOf = async (userId: string | undefined) => new Set(userId ? await redis.sMembers(gmIndexOf(userId)) : []);
 
   return {
     async register(room: RoomSummary): Promise<void> {
@@ -107,12 +103,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
 
     async remove(roomKey: string): Promise<void> {
       const before = await gameMastersOf(roomKey);
-      const removal = redis
-        .multi()
-        .zRem(ROOMS, roomKey)
-        .hDel(META, roomKey)
-        .hDel(MEMBERS, roomKey)
-        .hDel(GMS, roomKey);
+      const removal = redis.multi().zRem(ROOMS, roomKey).hDel(META, roomKey).hDel(MEMBERS, roomKey).hDel(GMS, roomKey);
       for (const userId of before) removal.sRem(gmIndexOf(userId), roomKey);
       await removal.exec();
     },

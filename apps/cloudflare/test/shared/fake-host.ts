@@ -1,23 +1,11 @@
 import { encode } from '@msgpack/msgpack';
 
 import { PROTOCOL_VERSION } from '../../contracts/protocol.js';
-import type {
-  AssetUploadPolicy,
-  ObjectContext,
-  PeerRole,
-  ServerMessage,
-} from '../../contracts/protocol.js';
+import type { AssetUploadPolicy, ObjectContext, PeerRole, ServerMessage } from '../../contracts/protocol.js';
 import { ACCESS_TOKEN_SECONDS, signToken } from '../../src/core/auth/tokens.js';
 import { decodeFrame } from '../../src/core/rooms/codec.js';
 import { RoomEngine } from '../../src/core/rooms/engine.js';
-import type {
-  RoleBook,
-  RoomEvent,
-  RoomFacts,
-  RoomHost,
-  RoomStore,
-  Seat,
-} from '../../src/core/rooms/host.js';
+import type { RoleBook, RoomEvent, RoomFacts, RoomHost, RoomStore, Seat } from '../../src/core/rooms/host.js';
 import { ObjectIndex } from '../../src/core/rooms/object-index.js';
 import type { StoredEntry } from '../../src/core/rooms/object-index.js';
 import { describe } from '../../src/core/rooms/visibility.js';
@@ -81,9 +69,7 @@ export class FakeConn {
 
   /** 届いたうち、その種類のもの */
   of<T extends ServerMessage['type']>(type: T): Extract<ServerMessage, { type: T }>[] {
-    return this.received.filter(
-      (message): message is Extract<ServerMessage, { type: T }> => message.type === type,
-    );
+    return this.received.filter((message): message is Extract<ServerMessage, { type: T }> => message.type === type);
   }
 }
 
@@ -197,17 +183,14 @@ export class FakeHost implements RoomHost<FakeConn> {
         accessToken: signToken<'access'>(
           { aud: 'access', sub: `discord:${peerId}`, uid: userId, name: peerId },
           ACCESS_TOKEN_SECONDS,
-          SECRET,
+          SECRET
         ),
-      }),
+      })
     );
   }
 
   /** 部屋にイベントを送る */
   emit(conn: FakeConn, events: { eventName: string; data: unknown }[], to?: string): void {
-    this.engine.receive(
-      conn,
-      encode({ type: 'send', ...(to === undefined ? {} : { to }), events }),
-    );
+    this.engine.receive(conn, encode({ type: 'send', ...(to === undefined ? {} : { to }), events }));
   }
 }

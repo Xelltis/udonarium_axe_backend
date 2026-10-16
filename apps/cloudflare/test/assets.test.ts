@@ -36,7 +36,7 @@ const readOnce = async (id: string) => {
       headers: { Origin: ORIGIN, Authorization: `Bearer ${assetTokenFor('guest')}` },
     }),
     env,
-    ctx,
+    ctx
   );
   await first.arrayBuffer();
   await waitOnExecutionContext(ctx);
@@ -74,7 +74,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
         },
       }),
       env,
-      ctx,
+      ctx
     );
     await waitOnExecutionContext(ctx);
 
@@ -194,7 +194,7 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
         ],
         truncated: true,
         cursor: String(Number(options.cursor ?? 0) + 1),
-      }),
+      })
     );
     const res = await app.fetch(
       new Request(`https://backend.example/v1/rooms/${ROOM_KEY}/assets`, {
@@ -205,7 +205,7 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
         },
       }),
       { ...env, ASSETS: { list: pages } } as unknown as Env,
-      createExecutionContext(),
+      createExecutionContext()
     );
     const { assets } = await res.json<{ assets: { type: string }[] }>();
 
@@ -217,11 +217,7 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
 
 describe('GET /', () => {
   it('says hello', async () => {
-    const res = await app.fetch(
-      new Request('https://backend.example/'),
-      env,
-      createExecutionContext(),
-    );
+    const res = await app.fetch(new Request('https://backend.example/'), env, createExecutionContext());
     expect(await res.json()).toEqual({ message: 'Hello udonarium-axe-backend!' });
   });
 });

@@ -37,8 +37,7 @@ const HEADER = base64url(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
-const hmac = (body: string, secret: string): Uint8Array =>
-  createHmac('sha256', secret).update(body).digest();
+const hmac = (body: string, secret: string): Uint8Array => createHmac('sha256', secret).update(body).digest();
 
 /** 種類（aud）ごとの中身。種類の違うトークンを取り違えて受けないよう、aud まで確かめる */
 const claimSchemas = {
@@ -97,11 +96,9 @@ export type Claims<A extends Audience> = InferOutput<(typeof claimSchemas)[A]>;
 export const signToken = <A extends Audience>(
   claims: Omit<Claims<A>, 'exp'>,
   seconds: number,
-  secret: string,
+  secret: string
 ): string => {
-  const payload = base64url(
-    encoder.encode(JSON.stringify({ ...claims, exp: nowSeconds() + seconds })),
-  );
+  const payload = base64url(encoder.encode(JSON.stringify({ ...claims, exp: nowSeconds() + seconds })));
   const body = `${HEADER}.${payload}`;
   return `${body}.${base64url(hmac(body, secret))}`;
 };
@@ -110,11 +107,7 @@ export const signToken = <A extends Audience>(
  * 署名と期限と種類を確かめて、中身を返す。どれかが合わなければ null。
  * 鍵が空なら何も通さない。空の鍵の署名は、だれにでも作れる
  */
-export const readToken = <A extends Audience>(
-  token: string,
-  audience: A,
-  secret: string,
-): Claims<A> | null => {
+export const readToken = <A extends Audience>(token: string, audience: A, secret: string): Claims<A> | null => {
   if (!secret) return null;
   const [header, payload, signature, ...rest] = token.split('.');
   if (header !== HEADER || rest.length > 0) return null;
@@ -122,10 +115,7 @@ export const readToken = <A extends Audience>(
     const expected = hmac(`${header}.${payload}`, secret);
     const given = fromBase64url(signature);
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
-    const parsed = safeParse(
-      claimSchemas[audience],
-      JSON.parse(new TextDecoder().decode(fromBase64url(payload))),
-    );
+    const parsed = safeParse(claimSchemas[audience], JSON.parse(new TextDecoder().decode(fromBase64url(payload))));
     return parsed.success && parsed.output.exp > nowSeconds() ? (parsed.output as Claims<A>) : null;
   } catch {
     return null;

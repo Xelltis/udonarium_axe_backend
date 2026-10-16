@@ -49,7 +49,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
     const now = Date.now();
     const wipeAt = await redis.zmScore(
       expiryKeyOf(key),
-      rooms.map((room) => room.roomKey),
+      rooms.map((room) => room.roomKey)
     );
     return rooms.filter((_, index) => Number(wipeAt[index]) > now);
   };
@@ -92,9 +92,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
         const seats = await redis.hVals(roomKeysOf(key, roomKey).seats);
         const seated = seats.some((value) => {
           const seat = JSON.parse(value) as { userId: string; account: boolean; role: string };
-          return (
-            seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl')
-          );
+          return seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl');
         });
         return seated ? 'ok' : 'not-a-player';
       },

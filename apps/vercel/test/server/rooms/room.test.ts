@@ -33,7 +33,7 @@ const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
       creatorUserId: 'user-gm',
       host: 'h',
     },
-    3600,
+    3600
   );
   await lobby.register({
     roomKey: 'room',
@@ -89,9 +89,9 @@ const seat = (room: VercelRoom, peerId: string) => {
       accessToken: signToken<'access'>(
         { aud: 'access', sub: `discord:${peerId}`, uid: `user-${peerId}`, name: peerId },
         ACCESS_TOKEN_SECONDS,
-        SECRET,
+        SECRET
       ),
-    }),
+    })
   );
   return conn;
 };
@@ -157,7 +157,7 @@ describe('a room held on Vercel', () => {
         minorVersion: 0.5,
         syncData: {},
       },
-      null,
+      null
     );
     room.store().flush();
 
@@ -182,13 +182,9 @@ describe('a room held on Vercel', () => {
     const room = await VercelRoom.open(deps, 'room');
     const evaluate = connection.redis.eval.bind(connection.redis);
     vi.spyOn(connection.redis, 'eval').mockImplementation(((script: string, options: never) =>
-      script.includes('PEXPIRE')
-        ? Promise.reject(new Error('down'))
-        : evaluate(script, options)) as never);
+      script.includes('PEXPIRE') ? Promise.reject(new Error('down')) : evaluate(script, options)) as never);
 
-    await vi.waitFor(() =>
-      expect(error).toHaveBeenCalledWith('Could not keep the room’s lease:', expect.any(Error)),
-    );
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('Could not keep the room’s lease:', expect.any(Error)));
     vi.restoreAllMocks();
     await room.release();
   });
@@ -244,9 +240,7 @@ describe('a room held on Vercel', () => {
 
     room.tick();
 
-    await vi.waitFor(() =>
-      expect(error).toHaveBeenCalledWith('Could not look for lost instances:', expect.any(Error)),
-    );
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('Could not look for lost instances:', expect.any(Error)));
     await room.release();
   });
 
@@ -271,10 +265,7 @@ describe('a room held on Vercel', () => {
 
     await room.deleteRoom('user-gm');
 
-    expect(error).toHaveBeenCalledWith(
-      'Room deletion failed, to be tried again:',
-      expect.any(Error),
-    );
+    expect(error).toHaveBeenCalledWith('Room deletion failed, to be tried again:', expect.any(Error));
     expect(await connection.redis.hGet(roomKeysOf(key, 'room').meta, 'deleting')).toBe('1');
   });
 

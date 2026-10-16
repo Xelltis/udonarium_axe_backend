@@ -86,9 +86,7 @@ export const deleteSchema = object({
   identifier: identifierSchema,
 });
 
-export const catalogSchema = array(
-  object({ identifier: identifierSchema, version: pipe(number(), finite()) }),
-);
+export const catalogSchema = array(object({ identifier: identifierSchema, version: pipe(number(), finite()) }));
 
 export const requestSchema = identifierSchema;
 

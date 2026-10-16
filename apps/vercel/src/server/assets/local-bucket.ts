@@ -24,7 +24,7 @@ export const localBucket = (dir: string): AssetBucket => {
     exists: async (path) =>
       stat(fileOf(path)).then(
         () => true,
-        () => false,
+        () => false
       ),
     delete: async (paths) => {
       await Promise.all(paths.map((path) => rm(fileOf(path), { force: true })));

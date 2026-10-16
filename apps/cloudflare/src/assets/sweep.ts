@@ -8,9 +8,7 @@ export const ORPHAN_GRACE_MS = 60 * 60 * 1000;
 
 /** 掃除を始める位置。部屋の鍵と同じ形の乱数 */
 export const randomStart = (): string =>
-  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('');
+  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
 /**
  * 部屋のアセットをすべて消す。部屋を削除したときと、保持期間が過ぎて部屋を消すときに呼ぶ。
@@ -43,7 +41,7 @@ export const deleteRoomAssets = async (bucket: R2Bucket, roomKey: string): Promi
 export const sweepOrphans = async (
   bucket: R2Bucket,
   knownRooms: (roomKeys: string[]) => Promise<string[]>,
-  start: string,
+  start: string
 ): Promise<number> => {
   const { objects } = await bucket.list({
     prefix: ROOMS_PREFIX,

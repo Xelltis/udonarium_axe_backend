@@ -10,10 +10,7 @@ import { AppError } from '../../errors/app-error.js';
 import type { AppEnv } from '../../context.js';
 import { skywayTokenRequestSchema } from './schemas.js';
 
-const issueAndRespond = async (
-  c: Context<AppEnv>,
-  body: { channelName: string; peerId: string },
-) => {
+const issueAndRespond = async (c: Context<AppEnv>, body: { channelName: string; peerId: string }) => {
   const token = await issueSkywayToken(
     { channelName: body.channelName, peerId: body.peerId },
     {
@@ -22,7 +19,7 @@ const issueAndRespond = async (
       now: () => Math.floor(Date.now() / 1000),
       hmacSHA256,
       encode: base64UrlEncode,
-    },
+    }
   );
   return c.json({ token }, 200);
 };

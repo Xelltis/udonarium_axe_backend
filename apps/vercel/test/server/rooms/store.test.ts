@@ -18,7 +18,7 @@ const contextOf = (
   identifier: string,
   majorVersion = 1,
   syncData: Record<string, unknown> = { value: identifier },
-  aliasName = 'character',
+  aliasName = 'character'
 ) => ({ aliasName, identifier, majorVersion, minorVersion: 0.5, syncData });
 
 /** 部屋の持ち主として、lease を取った置き場所を作る */
@@ -46,9 +46,7 @@ describe('a room store in Redis', () => {
     await store.settle();
     const again = await open();
 
-    expect(again.get('piece')).toEqual(
-      contextOf('piece', 2, { value: 'p', parentIdentifier: 'table' }),
-    );
+    expect(again.get('piece')).toEqual(contextOf('piece', 2, { value: 'p', parentIdentifier: 'table' }));
     expect(again.entryOf('piece')).toMatchObject({ parent: 'table', majorVersion: 2 });
     expect(again.ownedBy('a')).toEqual(['cursor-a']);
     expect(again.catalog()).toHaveLength(2);
@@ -149,9 +147,7 @@ describe('fenced writes', () => {
     const key = freshKey();
     const fence = { lease: key('lease'), meta: key('meta') };
     const write = () =>
-      fencedWrite(connection.redis, fence, LEASE, [
-        { command: 'SET', key: key('value'), args: ['1'] },
-      ]);
+      fencedWrite(connection.redis, fence, LEASE, [{ command: 'SET', key: key('value'), args: ['1'] }]);
     await connection.redis.set(fence.lease, 'other');
     const someoneElse = await write();
     await connection.redis.set(fence.lease, LEASE);
@@ -176,7 +172,7 @@ describe('fenced writes', () => {
       batchesOf([
         { command: 'DEL', key: 'a', args: [] },
         { command: 'DEL', key: 'b', args: [] },
-      ]),
+      ])
     ).toHaveLength(1);
   });
 });

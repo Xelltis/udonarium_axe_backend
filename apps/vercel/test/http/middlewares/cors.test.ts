@@ -34,7 +34,7 @@ describe('createCorsMiddleware', () => {
 
   it('returns 403 when Origin is not in the allow list', async () => {
     const res = await buildApp(['https://example.com']).fetch(
-      new Request('http://localhost/', { headers: { Origin: 'https://evil.example' } }),
+      new Request('http://localhost/', { headers: { Origin: 'https://evil.example' } })
     );
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({
@@ -44,7 +44,7 @@ describe('createCorsMiddleware', () => {
 
   it('allows requests from listed origins and sets CORS headers', async () => {
     const res = await buildApp(['https://example.com']).fetch(
-      new Request('http://localhost/', { headers: { Origin: 'https://example.com' } }),
+      new Request('http://localhost/', { headers: { Origin: 'https://example.com' } })
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://example.com');

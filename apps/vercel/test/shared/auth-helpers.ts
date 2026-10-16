@@ -10,9 +10,7 @@ export const APP = `${ORIGIN}/`;
 export const VERIFIER = 'verifier-for-tests-0123456789-abcdefghijklmnopq';
 
 export const challengeOf = async (verifier: string) =>
-  base64url(
-    new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))),
-  );
+  base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
 
 /** Discord の API の答え。数なら、その状態で失敗する */
 type Answer = object | number;
@@ -26,7 +24,7 @@ const answer = (value: Answer) =>
  */
 export const fakeDiscord = (
   user: Answer = { id: '42', username: 'kai', global_name: 'Kai', avatar: 'face' },
-  token: Answer = { access_token: 'discord-token', token_type: 'Bearer' },
+  token: Answer = { access_token: 'discord-token', token_type: 'Bearer' }
 ) =>
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -37,14 +35,12 @@ export const fakeDiscord = (
 
 /** ブラウザがページとして開く。Origin は付かない */
 export const navigate = (path: string, ip = freshIp()) =>
-  harness.fetch(
-    new Request(`${BACKEND}${path}`, { headers: { 'CF-Connecting-IP': ip }, redirect: 'manual' }),
-  );
+  harness.fetch(new Request(`${BACKEND}${path}`, { headers: { 'CF-Connecting-IP': ip }, redirect: 'manual' }));
 
 /** Axe から API を呼ぶ */
 export const callApi = (
   path: string,
-  init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {},
+  init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {}
 ) =>
   harness.fetch(
     new Request(`${BACKEND}${path}`, {
@@ -56,19 +52,14 @@ export const callApi = (
         ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}),
         ...init.headers,
       },
-      body:
-        init.body === undefined
-          ? undefined
-          : typeof init.body === 'string'
-            ? init.body
-            : JSON.stringify(init.body),
-    }),
+      body: init.body === undefined ? undefined : typeof init.body === 'string' ? init.body : JSON.stringify(init.body),
+    })
   );
 
 /** ログインを始めて、Discord の同意の画面から戻ってくるまで。戻り先の URL を返す */
 export const signInWithDiscord = async (verifier = VERIFIER, redirect = APP) => {
   const start = await navigate(
-    `/v1/login/discord?redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${await challengeOf(verifier)}`,
+    `/v1/login/discord?redirect_uri=${encodeURIComponent(redirect)}&code_challenge=${await challengeOf(verifier)}`
   );
   const state = new URL(start.headers.get('Location') as string).searchParams.get('state');
   const back = await navigate(`/v1/login/discord/callback?code=discord-code&state=${state}`);

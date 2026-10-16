@@ -2,15 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import http from '../../contracts/fixtures/http.json' with { type: 'json' };
 import { callApi, logIn } from './auth-helpers.js';
-import {
-  ROOM_KEY,
-  accessTokenFor,
-  assetTokenFor,
-  freshFile,
-  put,
-  jsonOf,
-  shapeOf,
-} from './helpers.js';
+import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put, jsonOf, shapeOf } from './helpers.js';
 import { createRoom, prepareAssetRooms } from './room-helpers.js';
 
 // HTTP の返事が、contracts/fixtures/http.json の例と同じ形かを、実際に呼んで確かめる
@@ -32,12 +24,8 @@ describe('the HTTP contract', () => {
     const res = await callApi('/v1/rooms', { token: accessTokenFor('user-shape-gm') });
     const { rooms } = await jsonOf<{ rooms: { roomKey: string }[] }>(res);
 
-    expect(shapeOf(rooms.find((room) => room.roomKey === mine))).toEqual(
-      shapeOf(http.roomList.rooms[0]),
-    );
-    expect(shapeOf(rooms.find((room) => room.roomKey === theirs))).toEqual(
-      shapeOf(http.roomList.rooms[1]),
-    );
+    expect(shapeOf(rooms.find((room) => room.roomKey === mine))).toEqual(shapeOf(http.roomList.rooms[0]));
+    expect(shapeOf(rooms.find((room) => room.roomKey === theirs))).toEqual(shapeOf(http.roomList.rooms[1]));
   });
 
   it('finds a room by its key as the example says', async () => {

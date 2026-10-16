@@ -75,9 +75,7 @@ export const rollLine = async (gameType: string, text: string): Promise<Rolled |
   let command = match[3] ?? text;
   const system =
     (await loadGameSystem(gameType)) ??
-    ((await loadGameSystem(PLAIN_DICE_BOT)) as NonNullable<
-      Awaited<ReturnType<typeof loadGameSystem>>
-    >);
+    ((await loadGameSystem(PLAIN_DICE_BOT)) as NonNullable<Awaited<ReturnType<typeof loadGameSystem>>>);
   if (system.COMMAND_PATTERN && !system.COMMAND_PATTERN.test(command)) return null;
   if (!command || repeat < 1) return null;
   if (repeat > 1) command = `x${repeat} ${command}`;

@@ -1,21 +1,16 @@
 import { describe as group, expect, it } from 'vitest';
 
 import type { ObjectContext } from '../../contracts/protocol.js';
-import {
-  describe,
-  masked,
-  maskedMinor,
-  unmasked,
-  viewFor,
-  viewKind,
-} from '../../src/core/rooms/visibility.js';
+import { describe, masked, maskedMinor, unmasked, viewFor, viewKind } from '../../src/core/rooms/visibility.js';
 import type { Lookup, ViewEntry, Viewer } from '../../src/core/rooms/visibility.js';
 
-const context = (
-  aliasName: string,
-  identifier: string,
-  syncData: Record<string, unknown>,
-): ObjectContext => ({ aliasName, identifier, majorVersion: 1, minorVersion: 0.5, syncData });
+const context = (aliasName: string, identifier: string, syncData: Record<string, unknown>): ObjectContext => ({
+  aliasName,
+  identifier,
+  majorVersion: 1,
+  minorVersion: 0.5,
+  syncData,
+});
 
 const gm: Viewer = { userId: 'u-gm', role: 'gm' };
 const owner: Viewer = { userId: 'u-owner', role: 'pl' };
@@ -43,7 +38,7 @@ const dataUnder = (holder: string, alias: string, paths: string[]) => {
         context('data', `${section}_${holder}`, {
           parentIdentifier: `${alias}_${holder}`,
           attributes: { name: section },
-        }),
+        })
       );
     }
     if (name) {
@@ -52,7 +47,7 @@ const dataUnder = (holder: string, alias: string, paths: string[]) => {
           parentIdentifier: `${section}_${holder}`,
           value: `${name} of ${holder}`,
           attributes: { name },
-        }),
+        })
       );
     }
   }
@@ -65,8 +60,8 @@ group('describe', () => {
       describe(
         context('card', 'c', {
           attributes: { state: 1, owner: 'u-owner', location: { name: 'hand:u-pl' } },
-        }),
-      ),
+        })
+      )
     ).toEqual({ parent: '', view: { kind: 'card', front: false, owner: 'u-owner', hand: 'u-pl' } });
     expect(describe(context('card', 'c', {})).view).toEqual({
       kind: 'card',
@@ -82,8 +77,8 @@ group('describe', () => {
             disclosureUserIds: ['u-pl', 3],
             owner: 'u-owner',
           },
-        }),
-      ).view,
+        })
+      ).view
     ).toEqual({ kind: 'note', mode: 'selected', users: ['u-pl'], owner: 'u-owner' });
     expect(describe(context('text-note', 'n', {})).view).toEqual({
       kind: 'note',
@@ -101,8 +96,8 @@ group('describe', () => {
             originFrom: '',
             tag: 'DiceBot secret',
           },
-        }),
-      ),
+        })
+      )
     ).toEqual({
       parent: 'tab',
       view: { kind: 'chat', to: ['u-pl', 'u-gm'], from: 'u-owner', originFrom: '', secret: true },
@@ -175,12 +170,7 @@ group('cards', () => {
 group('notes', () => {
   const note = (attributes: Record<string, unknown>) => [
     context('text-note', 'note1', { attributes }),
-    ...dataUnder('note1', 'text-note', [
-      'common/title',
-      'common/text',
-      'common/width',
-      'detail/secret',
-    ]),
+    ...dataUnder('note1', 'text-note', ['common/title', 'common/text', 'common/width', 'detail/secret']),
   ];
 
   it.each([
@@ -190,12 +180,7 @@ group('notes', () => {
     ['the GM only, seen by the GM', { disclosureMode: 'gm' }, gm, 'full'],
     ['the GM only, seen by its owner', { disclosureMode: 'gm', owner: 'u-owner' }, owner, 'full'],
     ['picked players', { disclosureMode: 'selected', disclosureUserIds: ['u-pl'] }, player, 'full'],
-    [
-      'picked players, seen by another',
-      { disclosureMode: 'selected', disclosureUserIds: ['u-x'] },
-      player,
-      'masked',
-    ],
+    ['picked players, seen by another', { disclosureMode: 'selected', disclosureUserIds: ['u-x'] }, player, 'masked'],
   ] as const)('shows a note disclosed to %s as %s', (_name, attributes, viewer, kind) => {
     const lookup = world(...note(attributes));
     expect(viewKind('title_note1', viewer, lookup)).toBe(kind);
@@ -207,15 +192,11 @@ group('notes', () => {
 
 group('dice', () => {
   it('hides the face of a die from all but its owner and the GM', () => {
-    const lookup = world(
-      context('dice-symbol', 'd', { attributes: { owner: 'u-owner', face: '3' } }),
-    );
+    const lookup = world(context('dice-symbol', 'd', { attributes: { owner: 'u-owner', face: '3' } }));
     expect(viewKind('d', player, lookup)).toBe('masked');
     expect(viewKind('d', owner, lookup)).toBe('full');
     expect(viewKind('d', gm, lookup)).toBe('full');
-    expect(
-      viewKind('d', player, world(context('dice-symbol', 'd', { attributes: { face: '3' } }))),
-    ).toBe('full');
+    expect(viewKind('d', player, world(context('dice-symbol', 'd', { attributes: { face: '3' } })))).toBe('full');
   });
 });
 
@@ -234,10 +215,7 @@ group('chat', () => {
   });
 
   it('shows a secret line to its sender and the GM, and only its frame to the rest', () => {
-    const lookup = world(
-      open,
-      line({ tag: 'system secret', from: 'System-BCDice', originFrom: 'u-owner' }),
-    );
+    const lookup = world(open, line({ tag: 'system secret', from: 'System-BCDice', originFrom: 'u-owner' }));
     expect(viewKind('line', owner, lookup)).toBe('full');
     expect(viewKind('line', gm, lookup)).toBe('full');
     expect(viewKind('line', player, lookup)).toBe('masked');
@@ -255,7 +233,7 @@ group('chat', () => {
     const lookup = world(
       open,
       line({ to: 'u-pl', from: 'u-owner' }),
-      context('chat-reaction', 'react', { messageIdentifier: 'line' }),
+      context('chat-reaction', 'react', { messageIdentifier: 'line' })
     );
     expect(viewKind('react', player, lookup)).toBe('full');
     expect(viewKind('react', guest, lookup)).toBe('hidden');
@@ -266,11 +244,11 @@ group('the walk up the parents', () => {
   it('holds back what waits for a parent that is not there yet, and stops at a loop', () => {
     const orphan = world(
       context('data', 'lost', { parentIdentifier: 'nowhere', attributes: { name: 'front' } }),
-      context('chat-reaction', 'nod', { messageIdentifier: 'lost' }),
+      context('chat-reaction', 'nod', { messageIdentifier: 'lost' })
     );
     const loop = world(
       context('data', 'a', { parentIdentifier: 'b', attributes: { name: 'x' } }),
-      context('data', 'b', { parentIdentifier: 'a', attributes: { name: 'y' } }),
+      context('data', 'b', { parentIdentifier: 'a', attributes: { name: 'y' } })
     );
     expect(viewKind('lost', player, orphan)).toBe('pending');
     expect(viewKind('lost', gm, orphan)).toBe('pending');
@@ -337,9 +315,7 @@ group('the version of a masked copy', () => {
 
 group('a line said by nobody', () => {
   it('is not taken as said by a viewer whose user id is empty', () => {
-    const entry: ViewEntry = describe(
-      context('chat', 'w', { attributes: { to: 'u-someone', from: 'u-sender' } }),
-    );
+    const entry: ViewEntry = describe(context('chat', 'w', { attributes: { to: 'u-someone', from: 'u-sender' } }));
     const lookup: Lookup = (id) => (id === 'w' ? entry : null);
 
     expect(viewKind('w', { userId: '', role: 'pl' }, lookup)).toBe('hidden');

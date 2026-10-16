@@ -15,10 +15,7 @@ const LIMITERS = {
  * Worker の部屋のサーバー。部屋・一覧・アカウントは Durable Object に、部屋のアセットは R2 に置き、
  * 送信元ごとの数はレート制限のバインディングで数える
  */
-export const cloudflareBackend = (
-  env: Env,
-  waitUntil: (work: Promise<unknown>) => void,
-): ServerBackend => {
+export const cloudflareBackend = (env: Env, waitUntil: (work: Promise<unknown>) => void): ServerBackend => {
   /**
    * 送信元（IPv6 は /64 ごと）の数が上限のうちか。namespace_id は同じアカウントの Worker どうしで
    * 共有されるので、鍵の頭に受けたホスト名を付けて、同じアカウントに置いた別のインスタンスと

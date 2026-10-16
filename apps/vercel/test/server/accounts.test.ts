@@ -11,10 +11,7 @@ const connection = useRedis();
 
 const VERIFIER = 'verifier-for-tests-0123456789-abcdefghijklmnopq';
 
-const profile = (
-  name = 'Kai',
-  avatarUrl: string | null = 'https://cdn.example/a.png',
-): Profile => ({
+const profile = (name = 'Kai', avatarUrl: string | null = 'https://cdn.example/a.png'): Profile => ({
   accountKey: 'discord:42',
   name,
   avatarUrl,
@@ -52,10 +49,7 @@ describe('a Redis account', () => {
 
     const wrong = await account.redeem(code, 'another-verifier-0123456789-abcdefghijklmnop');
     const { code: second } = await signedIn();
-    const session = await redisAccount(connection.redis, freshKey(), 'discord:42').redeem(
-      second,
-      VERIFIER,
-    );
+    const session = await redisAccount(connection.redis, freshKey(), 'discord:42').redeem(second, VERIFIER);
 
     expect(wrong).toBeNull();
     expect(await account.redeem(code, VERIFIER)).toBeNull();
@@ -104,10 +98,7 @@ describe('a Redis account', () => {
   it('takes a refresh token sent twice at once only once', async () => {
     const { account, refreshToken } = await loggedIn();
 
-    const answers = await Promise.all([
-      account.refresh(refreshToken),
-      account.refresh(refreshToken),
-    ]);
+    const answers = await Promise.all([account.refresh(refreshToken), account.refresh(refreshToken)]);
     const winner = answers.find((answer) => answer !== null);
 
     expect(answers.filter((answer) => answer === null)).toHaveLength(1);
@@ -116,9 +107,7 @@ describe('a Redis account', () => {
 
   it('turns away a refresh token that is unknown, wrong, or ran out', async () => {
     const { key, account, refreshToken } = await loggedIn();
-    const family = (await connection.redis.get(
-      key('acct', 'discord:42', 'rt', refreshToken.id),
-    )) as string;
+    const family = (await connection.redis.get(key('acct', 'discord:42', 'rt', refreshToken.id))) as string;
 
     expect(await account.refresh({ id: 'nope', secret: 'nope' })).toBeNull();
     expect(await account.refresh({ ...refreshToken, secret: 'wrong' })).toBeNull();

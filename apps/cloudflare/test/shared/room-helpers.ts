@@ -6,15 +6,7 @@ import type { CreateRoomResponse, ServerMessage } from '../../contracts/protocol
 import { decodeFrame } from '../../src/core/rooms/codec.js';
 import { harness } from '../harness.js';
 import type { TestSocket } from './harness-api.js';
-import {
-  ORIGIN,
-  OTHER_ROOM_KEY,
-  ROOM_KEY,
-  UPLOADER,
-  accessTokenFor,
-  freshIp,
-  jsonOf,
-} from './helpers.js';
+import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp, jsonOf } from './helpers.js';
 
 export const ROOMS = 'https://backend.example/v1/rooms';
 
@@ -34,29 +26,22 @@ export const postRoom = (body: unknown, headers: Record<string, string> = {}) =>
         ...headers,
       },
       body: typeof body === 'string' ? body : JSON.stringify(body),
-    }),
+    })
   );
 
 /** 部屋を作り、その鍵を返す。creator を指定すれば、その peerId の人が GM になる */
-export const createRoom = async (
-  body: { name?: string; password?: string } = {},
-  creator?: string,
-) => {
+export const createRoom = async (body: { name?: string; password?: string } = {}, creator?: string) => {
   const res = await postRoom(
     { name: 'test room', ...body },
-    creator ? { Authorization: `Bearer ${accessTokenFor(`user-${creator}`)}` } : {},
+    creator ? { Authorization: `Bearer ${accessTokenFor(`user-${creator}`)}` } : {}
   );
   if (res.status !== 201) throw new Error(`room not created: ${res.status}`);
   return (await jsonOf<CreateRoomResponse>(res)).roomKey;
 };
 
 export const listRooms = async () => {
-  const res = await harness.fetch(
-    new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() } }),
-  );
-  return (
-    await jsonOf<{ rooms: { roomKey: string; members: number; hasPassword: boolean }[] }>(res)
-  ).rooms;
+  const res = await harness.fetch(new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() } }));
+  return (await jsonOf<{ rooms: { roomKey: string; members: number; hasPassword: boolean }[] }>(res)).rooms;
 };
 
 /** 部屋への WebSocket を開く要求 */
@@ -64,7 +49,7 @@ export const upgrade = (roomKey: string, headers: Record<string, string> = {}) =
   harness.upgrade(
     new Request(`${ROOMS}/${roomKey}/ws`, {
       headers: { Upgrade: 'websocket', Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), ...headers },
-    }),
+    })
   );
 
 const WAIT_MS = 30_000;
@@ -101,9 +86,7 @@ export class Client {
   }
 
   /** 次に届いたメッセージ。種類が違えば例外 */
-  async next<T extends ServerMessage['type']>(
-    type: T,
-  ): Promise<Extract<ServerMessage, { type: T }>> {
+  async next<T extends ServerMessage['type']>(type: T): Promise<Extract<ServerMessage, { type: T }>> {
     const { message } = await this.nextRaw();
     if (typeof message === 'string' || message.type !== type) {
       throw new Error(`expected ${type} but got ${JSON.stringify(message)}`);
@@ -164,11 +147,7 @@ export const refusalOf = async (roomKey: string) => {
 };
 
 /** 部屋に入る。welcome と、続くサーバーのカタログまで読んだところで返す */
-export const join = async (
-  roomKey: string,
-  peerId: string,
-  extra: Record<string, unknown> = {},
-) => {
+export const join = async (roomKey: string, peerId: string, extra: Record<string, unknown> = {}) => {
   const client = await connect(roomKey);
   client.hello(peerId, extra);
   const welcome = await client.next('welcome');
@@ -210,12 +189,11 @@ export const contextOf = (
   majorVersion: number,
   minorVersion: number,
   syncData: Record<string, unknown> = { value: `${identifier}@${majorVersion}` },
-  aliasName = 'character',
+  aliasName = 'character'
 ) => ({ aliasName, identifier, majorVersion, minorVersion, syncData });
 
 /** Axe のチャットのタブの一覧。タブはこの下に置き、振った結果はこの直下のタブにだけ置ける */
-export const chatTabList = () =>
-  contextOf(CHAT_TAB_LIST_IDENTIFIER, 1, 0.5, { attributes: {} }, 'chat-tab-list');
+export const chatTabList = () => contextOf(CHAT_TAB_LIST_IDENTIFIER, 1, 0.5, { attributes: {} }, 'chat-tab-list');
 
 /** タブの一覧の直下に置くタブ */
 export const listedTabOf = (identifier: string, attributes: Record<string, unknown> = {}) =>
@@ -224,7 +202,7 @@ export const listedTabOf = (identifier: string, attributes: Record<string, unkno
     1,
     0.5,
     { parentIdentifier: CHAT_TAB_LIST_IDENTIFIER, attributes: { name: identifier, ...attributes } },
-    'chat-tab',
+    'chat-tab'
   );
 
 /** 条件が満たされるまで待つ。部屋の一覧への知らせは、応答のあとに届く */

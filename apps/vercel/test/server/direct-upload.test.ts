@@ -3,16 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AssetStoredResponse, UploadTicketResponse } from '../../contracts/protocol.js';
 import { MAX_PUT_BYTES } from '../../src/server/assets/backend.js';
 import { bucket, harness } from '../harness.js';
-import {
-  OGG_HEAD,
-  ROOM_KEY,
-  assetTokenFor,
-  call,
-  fileOf,
-  jsonOf,
-  put,
-  sha256Hex,
-} from '../shared/helpers.js';
+import { OGG_HEAD, ROOM_KEY, assetTokenFor, call, fileOf, jsonOf, put, sha256Hex } from '../shared/helpers.js';
 import { prepareAssetRooms } from '../shared/room-helpers.js';
 
 // Vercel の Function は、本文が 4.5MB を超える要求を受けない。大きい音声は、置き場所へ直接上げる

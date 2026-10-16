@@ -56,11 +56,7 @@ const rangeOf = (header: string | null, size: number): { start: number; end: num
 };
 
 /** 流れてくる中身から、start から end まで（含む）を切り出す */
-const slice = (
-  stream: ReadableStream<Uint8Array>,
-  start: number,
-  end: number,
-): ReadableStream<Uint8Array> => {
+const slice = (stream: ReadableStream<Uint8Array>, start: number, end: number): ReadableStream<Uint8Array> => {
   let offset = 0;
   return stream.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
@@ -70,7 +66,7 @@ const slice = (
         if (from < to) controller.enqueue(chunk.subarray(from, to));
         offset += chunk.byteLength;
       },
-    }),
+    })
   );
 };
 
@@ -80,7 +76,7 @@ export const vercelAssets = (
   bucket: AssetBucket,
   limit: (request: Request, kind: LimitKind) => Promise<boolean>,
   /** 新しく置いたあとのついでの仕事（消しそこねの掃除） */
-  afterStore: () => void,
+  afterStore: () => void
 ): AssetBackend & { deleteRoom(roomKey: string): Promise<void> } => {
   const indexed = async (roomKey: string, id: string): Promise<Indexed | null> => {
     const value = await redis.hGet(assetIndexOf(key, roomKey), id);
@@ -138,8 +134,7 @@ export const vercelAssets = (
       const ifUnmodifiedSince = ask.get('If-Unmodified-Since');
       if (
         (ifMatch !== null && !matches(ifMatch, etag)) ||
-        (ifUnmodifiedSince !== null &&
-          secondsOf(Date.parse(ifUnmodifiedSince)) < secondsOf(asset.uploadedAt))
+        (ifUnmodifiedSince !== null && secondsOf(Date.parse(ifUnmodifiedSince)) < secondsOf(asset.uploadedAt))
       ) {
         return failure(412, 'precondition-failed');
       }
@@ -148,8 +143,7 @@ export const vercelAssets = (
       const unchanged =
         ifNoneMatch !== null
           ? matches(ifNoneMatch, etag)
-          : ifModifiedSince !== null &&
-            secondsOf(asset.uploadedAt) <= secondsOf(Date.parse(ifModifiedSince));
+          : ifModifiedSince !== null && secondsOf(asset.uploadedAt) <= secondsOf(Date.parse(ifModifiedSince));
       if (unchanged) {
         headers.delete('Content-Length');
         return privately(new Response(null, { status: 304, headers }));

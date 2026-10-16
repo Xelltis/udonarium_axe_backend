@@ -26,7 +26,7 @@ const setUp = async (options: { socketSeconds?: number; parkMs?: number } = {}) 
   });
   const runtime = new RoomRuntime(
     (deps.runtime as unknown as { deps: ConstructorParameters<typeof RoomRuntime>[0] }).deps,
-    { socketSeconds: options.socketSeconds ?? 60, parkMs: options.parkMs },
+    { socketSeconds: options.socketSeconds ?? 60, parkMs: options.parkMs }
   );
   return { deps, runtime };
 };
@@ -44,9 +44,7 @@ describe('the room runtime', () => {
     ws.hello('alice');
     ws.emit('message', Buffer.from('ping'), false);
 
-    await vi.waitFor(() =>
-      expect(ws.messages().map((message) => message.type)).toContain('welcome'),
-    );
+    await vi.waitFor(() => expect(ws.messages().map((message) => message.type)).toContain('welcome'));
     expect(ws.sent).toContain('pong');
 
     ws.emit('message', Buffer.from('hello?'), false);

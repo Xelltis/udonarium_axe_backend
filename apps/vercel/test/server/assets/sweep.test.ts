@@ -39,12 +39,7 @@ describe('the sweep of assets left behind', () => {
     expect(await orphanSweeper(connection.redis, key, bucket)()).toBe(4);
 
     expect(bucket.paths().sort()).toEqual(
-      [
-        roomAssetKey('here', ID),
-        roomAssetKey('gone', OTHER),
-        'blocked/x',
-        `uploads/here/${ID}/new`,
-      ].sort(),
+      [roomAssetKey('here', ID), roomAssetKey('gone', OTHER), 'blocked/x', `uploads/here/${ID}/new`].sort()
     );
   });
 

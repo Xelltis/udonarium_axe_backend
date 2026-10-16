@@ -47,9 +47,7 @@ export const roomSweeper = (deps: SweepDeps): RoomSweeper => {
     await redis.hSet(roomKeysOf(key, roomKey).meta, 'deleting', '1');
     await deps.lobby.remove(roomKey);
     // アセットが消せなくても部屋は消す。Blob に残ったものは、Blob の掃除が消す
-    await deps
-      .deleteAssets(roomKey)
-      .catch((err: unknown) => console.error('Room asset deletion failed:', err));
+    await deps.deleteAssets(roomKey).catch((err: unknown) => console.error('Room asset deletion failed:', err));
     await wipeRoom(redis, key, roomKey);
   };
 
@@ -79,7 +77,7 @@ export const roomSweeper = (deps: SweepDeps): RoomSweeper => {
             expiration: { type: 'PX', value: SWEEP_EVERY_MS },
           })
           .then((taken) => (taken ? now(SWEEP_ROOMS) : 0))
-          .catch((err: unknown) => console.error('Room sweep failed:', err)),
+          .catch((err: unknown) => console.error('Room sweep failed:', err))
       );
     },
     now,

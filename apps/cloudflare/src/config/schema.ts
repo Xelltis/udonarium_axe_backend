@@ -9,5 +9,5 @@ export const envSchema = pipe(
     ...loginEntries,
   }),
   loginComplete(),
-  sessionSecretLongEnough(),
+  sessionSecretLongEnough()
 );

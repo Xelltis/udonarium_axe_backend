@@ -25,11 +25,7 @@ describe('signed tokens', () => {
 
   it('takes an invite only for a role there is', () => {
     const invite = signToken<'invite'>({ aud: 'invite', room: 'r', role: 'gm' }, 60, SECRET);
-    const odd = signToken<'invite'>(
-      { aud: 'invite', room: 'r', role: 'owner' as 'gm' },
-      60,
-      SECRET,
-    );
+    const odd = signToken<'invite'>({ aud: 'invite', room: 'r', role: 'owner' as 'gm' }, 60, SECRET);
     expect(readToken(invite, 'invite', SECRET)?.role).toBe('gm');
     expect(readToken(odd, 'invite', SECRET)).toBeNull();
   });
@@ -37,10 +33,7 @@ describe('signed tokens', () => {
   it.each([
     ['signed with another secret', () => access(60, 'another-secret-another-secret-123')],
     ['past its expiry', () => access(-1)],
-    [
-      'of another kind',
-      () => signToken<'invite'>({ aud: 'invite', room: 'r', role: 'pl' }, 60, SECRET),
-    ],
+    ['of another kind', () => signToken<'invite'>({ aud: 'invite', room: 'r', role: 'pl' }, 60, SECRET)],
     [
       'with a header that asks for no signature',
       () => {
@@ -57,10 +50,7 @@ describe('signed tokens', () => {
     ],
     ['cut short', () => access().split('.').slice(0, 2).join('.')],
     ['with an extra part', () => `${access()}.extra`],
-    [
-      'with a signature that is not base64',
-      () => `${access().split('.').slice(0, 2).join('.')}.%%%`,
-    ],
+    ['with a signature that is not base64', () => `${access().split('.').slice(0, 2).join('.')}.%%%`],
     [
       'with a body that is not JSON',
       () => {

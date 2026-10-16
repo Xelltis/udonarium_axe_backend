@@ -23,15 +23,12 @@ const streamOf = (chunks: Uint8Array[]) =>
   });
 
 const hexOf = async (bytes: Uint8Array) =>
-  Array.from(
-    new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>)),
-    (byte) => byte.toString(16).padStart(2, '0'),
+  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>)), (byte) =>
+    byte.toString(16).padStart(2, '0')
   ).join('');
 
 /** 置いたアセットと、それを読む部屋のサーバー */
-const stored = async (
-  options: { bucket?: AssetBucket; allowed?: boolean; afterStore?: () => void } = {},
-) => {
+const stored = async (options: { bucket?: AssetBucket; allowed?: boolean; afterStore?: () => void } = {}) => {
   const bucket = options.bucket ?? memoryBucket();
   const key = freshKey();
   const assets = vercelAssets(
@@ -39,39 +36,25 @@ const stored = async (
     key,
     bucket,
     async () => options.allowed ?? true,
-    options.afterStore ?? (() => undefined),
+    options.afterStore ?? (() => undefined)
   );
   const bytes = new Uint8Array(Array.from({ length: 10 }, (_, i) => i));
   const id = await hexOf(bytes);
   expect(
-    await assets.store(
-      ROOM,
-      id,
-      streamOf([bytes.subarray(0, 4), bytes.subarray(4)]),
-      10,
-      'image/png',
-      'a.png',
-    ),
+    await assets.store(ROOM, id, streamOf([bytes.subarray(0, 4), bytes.subarray(4)]), 10, 'image/png', 'a.png')
   ).toBe('stored');
   return { assets, bucket, key, bytes, id };
 };
 
-const get = (headers: Record<string, string> = {}) =>
-  new Request('https://backend.example/asset', { headers });
+const get = (headers: Record<string, string> = {}) => new Request('https://backend.example/asset', { headers });
 
 describe('room assets on Vercel', () => {
   it('turns away bytes whose hash or length is not what was named', async () => {
     const { assets, bytes, id } = await stored();
 
-    expect(await assets.store(ROOM, id, streamOf([bytes.subarray(1)]), 10, 'image/png', '')).toBe(
-      'hash-mismatch',
-    );
-    expect(await assets.store(ROOM, id, streamOf([bytes]), 9, 'image/png', '')).toBe(
-      'hash-mismatch',
-    );
-    expect(await assets.store(ROOM, 'f'.repeat(64), streamOf([bytes]), 10, 'image/png', '')).toBe(
-      'hash-mismatch',
-    );
+    expect(await assets.store(ROOM, id, streamOf([bytes.subarray(1)]), 10, 'image/png', '')).toBe('hash-mismatch');
+    expect(await assets.store(ROOM, id, streamOf([bytes]), 9, 'image/png', '')).toBe('hash-mismatch');
+    expect(await assets.store(ROOM, 'f'.repeat(64), streamOf([bytes]), 10, 'image/png', '')).toBe('hash-mismatch');
   });
 
   it('knows what is kept, what is blocked, and lists the room', async () => {
@@ -104,8 +87,7 @@ describe('room assets on Vercel', () => {
     const later = new Date(Date.now() + 60_000).toUTCString();
     const earlier = new Date(Date.now() - 60_000).toUTCString();
 
-    const status = async (headers: Record<string, string>) =>
-      (await assets.read(get(headers), ROOM, id)).status;
+    const status = async (headers: Record<string, string>) => (await assets.read(get(headers), ROOM, id)).status;
 
     expect(await status({ 'If-Match': etag })).toBe(200);
     expect(await status({ 'If-Match': '"other"' })).toBe(412);
@@ -175,7 +157,7 @@ describe('room assets on Vercel', () => {
       freshKey(),
       localBucket(dir),
       async () => true,
-      () => undefined,
+      () => undefined
     );
     const direct = assets.direct as NonNullable<typeof assets.direct>;
     await bucket.put('uploads/r/a/n', new Uint8Array([7]), '');
@@ -228,9 +210,7 @@ describe('the buckets', () => {
     expect(listed.items[0]?.uploadedAt).toBeGreaterThan(Date.now() - 60_000);
     expect(listed.cursor).toBeNull();
     expect(await bucket.list('none/', null)).toEqual({ items: [], cursor: null });
-    expect([
-      ...new Uint8Array(await new Response(await bucket.get('rooms/r/a')).arrayBuffer()),
-    ]).toEqual([1, 2, 3]);
+    expect([...new Uint8Array(await new Response(await bucket.get('rooms/r/a')).arrayBuffer())]).toEqual([1, 2, 3]);
     await bucket.delete(['rooms/r/a', 'rooms/r/none']);
     expect(await bucket.exists('rooms/r/a')).toBe(false);
     expect(await bucket.get('rooms/r/a')).toBeNull();

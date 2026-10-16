@@ -16,12 +16,7 @@ export default defineConfig([
     rules: {
       'no-restricted-syntax': [
         'error',
-        ...[
-          'ImportDeclaration',
-          'ImportExpression',
-          'ExportNamedDeclaration',
-          'ExportAllDeclaration',
-        ].map((node) => ({
+        ...['ImportDeclaration', 'ImportExpression', 'ExportNamedDeclaration', 'ExportAllDeclaration'].map((node) => ({
           selector: `${node}[source.value=/^\\.{1,2}\\/(?!.*\\.(js|json)$)/]`,
           message: 'Shared code also runs on Node: end relative imports with .js',
         })),

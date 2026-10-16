@@ -87,7 +87,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     private readonly rows: Map<string, Row>,
     private readonly deletedAt: Map<string, number>,
     private readonly persist: (ops: Op[]) => Promise<void>,
-    tombstoneLimits?: TombstoneLimits,
+    tombstoneLimits?: TombstoneLimits
   ) {
     super(tombstoneLimits);
   }
@@ -99,7 +99,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     redis: BinaryRedis,
     keys: StoreKeys,
     persist: (ops: Op[]) => Promise<void>,
-    tombstoneLimits?: TombstoneLimits,
+    tombstoneLimits?: TombstoneLimits
   ): Promise<RedisRoomStore> {
     const [objects, tombstones] = await Promise.all([
       redis.hGetAll(keys.objects),
@@ -111,16 +111,12 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
       let data = stored.data as Uint8Array;
       if (stored.chunks > 0) {
         const parts = await redis.hGetAll(keys.chunks(identifier));
-        data = joinParts(
-          Array.from({ length: stored.chunks }, (_, seq) => parts[String(seq)] as Uint8Array),
-        );
+        data = joinParts(Array.from({ length: stored.chunks }, (_, seq) => parts[String(seq)] as Uint8Array));
       }
       const { alias, major, minor, owner, parent, view } = stored;
       rows.set(identifier, { alias, major, minor, owner, parent, view, data });
     }
-    const deletedAt = new Map(
-      tombstones.map(({ value, score }) => [value.toString(), score] as [string, number]),
-    );
+    const deletedAt = new Map(tombstones.map(({ value, score }) => [value.toString(), score] as [string, number]));
     return new RedisRoomStore(keys, rows, deletedAt, persist, tombstoneLimits);
   }
 
@@ -148,7 +144,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
         ops.push(
           { command: 'HDEL', key: this.keys.objects, args: [identifier] },
           { command: 'DEL', key: this.keys.chunks(identifier), args: [] },
-          { command: 'SREM', key: this.keys.chunked, args: [identifier] },
+          { command: 'SREM', key: this.keys.chunked, args: [identifier] }
         );
       } else if (write.context !== undefined) {
         ops.push(...this.writeOps(write.context, write.owner ?? null));

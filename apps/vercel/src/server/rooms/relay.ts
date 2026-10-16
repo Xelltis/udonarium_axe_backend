@@ -27,8 +27,7 @@ export type Inbound =
 
 /** インスタンスへ */
 export type Outbound =
-  | { t: 'frame'; c: string; d: Uint8Array | string }
-  | { t: 'close'; c: string; code: number; reason: string };
+  { t: 'frame'; c: string; d: Uint8Array | string } | { t: 'close'; c: string; code: number; reason: string };
 
 /** 部屋の WebSocket を持つインスタンスへ */
 export type Control = { t: 'moved' } | { t: 'delete' };
@@ -55,7 +54,7 @@ export class Relay {
     private readonly redis: Redis,
     private readonly key: KeyOf,
     readonly instance: string,
-    private readonly timing = { ttlMs: INSTANCE_TTL_MS, heartbeatMs: HEARTBEAT_MS },
+    private readonly timing = { ttlMs: INSTANCE_TTL_MS, heartbeatMs: HEARTBEAT_MS }
   ) {}
 
   inboundOf = (roomKey: string) => this.key('r', roomKey, 'in');
@@ -110,10 +109,7 @@ export class Relay {
         of,
         d: bytes.subarray(n * PART_BYTES, (n + 1) * PART_BYTES),
       };
-      received = await this.redis.publish(
-        channel,
-        Buffer.from(encode({ ...part, i: this.instance })),
-      );
+      received = await this.redis.publish(channel, Buffer.from(encode({ ...part, i: this.instance })));
     }
     return received;
   }
@@ -136,7 +132,7 @@ export class Relay {
         this.parts.delete(id);
         listener(decode(Buffer.concat(pieces)) as T);
       },
-      true,
+      true
     );
   }
 

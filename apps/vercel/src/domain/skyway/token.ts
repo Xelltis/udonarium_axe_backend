@@ -2,10 +2,7 @@ import { buildJwtHeader, buildJwtPayload, signJwt } from './jwt.js';
 import { buildLobbyChannelScope, buildRoomChannelScope } from './scopes.js';
 import type { IssueTokenDeps, IssueTokenInput } from './types.js';
 
-export const issueSkywayToken = async (
-  input: IssueTokenInput,
-  deps: IssueTokenDeps,
-): Promise<string> => {
+export const issueSkywayToken = async (input: IssueTokenInput, deps: IssueTokenDeps): Promise<string> => {
   const jti = input.jti ?? deps.uuid();
   const iat = input.iat ?? deps.now();
   const scopes = [

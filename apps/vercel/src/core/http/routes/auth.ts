@@ -29,8 +29,7 @@ const tokenRequestSchema = variant('grant_type', [
 
 const logoutSchema = object({ refresh_token: string() });
 
-const callbackUrl = (c: Context<ServerEnv>): string =>
-  `${new URL(c.req.url).origin}/v1/login/discord/callback`;
+const callbackUrl = (c: Context<ServerEnv>): string => `${new URL(c.req.url).origin}/v1/login/discord/callback`;
 
 /**
  * ログインのあとに戻ってよい場所。許可した Origin のページだけで、`*` は数えない。
@@ -42,7 +41,7 @@ const isLoginRedirect = (redirect: string, allowedOrigins: string[]): boolean =>
     url !== null &&
     isAllowedOrigin(
       url.origin,
-      allowedOrigins.filter((origin) => origin !== '*'),
+      allowedOrigins.filter((origin) => origin !== '*')
     )
   );
 };
@@ -72,13 +71,9 @@ loginRoutes.get(
     if (!isLoginRedirect(redirect, c.var.config.allowedOrigins) || !CHALLENGE.test(challenge)) {
       return fail(c, 400, 'invalid-request');
     }
-    const state = signToken<'login'>(
-      { aud: 'login', redirect, challenge },
-      LOGIN_STATE_SECONDS,
-      login.sessionSecret,
-    );
+    const state = signToken<'login'>({ aud: 'login', redirect, challenge }, LOGIN_STATE_SECONDS, login.sessionSecret);
     return c.redirect(authorizeUrl(login, callbackUrl(c), state), 302);
-  }),
+  })
 );
 
 /** Discord から戻ってくる。Axe の戻り先へ、フラグメントにコードか失敗の理由を付けて返す */
@@ -95,21 +90,18 @@ loginRoutes.get(
 
     const code = c.req.query('code');
     if (!code) return back({ login_error: 'denied' });
-    if (!(await c.var.backend.limit(c.req.raw, 'auth')))
-      return back({ login_error: 'rate-limited' });
+    if (!(await c.var.backend.limit(c.req.raw, 'auth'))) return back({ login_error: 'rate-limited' });
     const profile = await fetchProfile(login, code, callbackUrl(c));
     if (!profile) return back({ login_error: 'provider-failed' });
     const secret = await c.var.backend.account(profile.accountKey).signIn(profile, state.challenge);
     return back({ login_code: packSecret(profile.accountKey, secret) });
-  }),
+  })
 );
 
 /** Axe から呼ぶもの。許可した Origin からだけ受ける */
 export const authRoutes = new Hono<ServerEnv>();
 
-authRoutes.get('/config', (c) =>
-  c.json<AuthConfigResponse>({ providers: c.var.config.login ? ['discord'] : [] }),
-);
+authRoutes.get('/config', (c) => c.json<AuthConfigResponse>({ providers: c.var.config.login ? ['discord'] : [] }));
 
 authRoutes.post(
   '/token',
@@ -118,9 +110,7 @@ authRoutes.post(
     const parsed = safeParse(tokenRequestSchema, await c.req.json().catch(() => null));
     if (!parsed.success) return fail(c, 400, 'invalid-request');
     const request = parsed.output;
-    const handle = unpackSecret(
-      request.grant_type === 'login_code' ? request.code : request.refresh_token,
-    );
+    const handle = unpackSecret(request.grant_type === 'login_code' ? request.code : request.refresh_token);
     if (!handle) return fail(c, 400, 'invalid-grant');
     const account = c.var.backend.account(handle.accountKey);
     const session =
@@ -129,7 +119,7 @@ authRoutes.post(
         : await account.refresh(handle.secret);
     if (!session) return fail(c, 400, 'invalid-grant');
     return c.json<TokenResponse>(tokensOf(session, login));
-  }),
+  })
 );
 
 authRoutes.post(
@@ -143,7 +133,7 @@ authRoutes.post(
     const handle = unpackSecret(parsed.output.refresh_token);
     if (handle) await c.var.backend.account(handle.accountKey).signOut(handle.secret);
     return c.body(null, 204);
-  }),
+  })
 );
 
 /** ログインしている人のアカウント。Authorization: Bearer のアクセストークンで尋ねる */
@@ -157,7 +147,7 @@ accountRoutes.get(
     // 消したあと同じ人が作り直したアカウントは、前のアカウントのトークンでは見せない
     const account = await c.var.backend.account(claims.sub).account();
     return account?.userId === claims.uid ? c.json(account) : fail(c, 404, 'not-found');
-  }),
+  })
 );
 
 /** アカウントを消す。人の情報とトークンが消え、そのアクセストークンが切れたあとはもうログインしていない */
@@ -167,8 +157,7 @@ accountRoutes.delete(
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
     // 前のアカウントのトークンで、作り直したアカウントを消させない
-    if (!(await c.var.backend.account(claims.sub).erase(claims.uid)))
-      return fail(c, 404, 'not-found');
+    if (!(await c.var.backend.account(claims.sub).erase(claims.uid))) return fail(c, 404, 'not-found');
     return c.body(null, 204);
-  }),
+  })
 );

@@ -12,7 +12,6 @@ import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
  */
 export const PARK_MS = 15_000;
 
-
 /** 持ち主が見つからないとき、もう一度試すまでの間（ミリ秒） */
 const RETRY_MS = 100;
 
@@ -89,7 +88,7 @@ export class RoomRuntime {
   constructor(
     private readonly deps: RoomDeps,
     private readonly options: RuntimeOptions,
-    private readonly relay?: Relay,
+    private readonly relay?: Relay
   ) {
     this.parkMs = options.parkMs ?? PARK_MS;
   }
@@ -100,11 +99,7 @@ export class RoomRuntime {
     if (!relay) return Promise.resolve();
     this.started ??= relay
       .start()
-      .then(() =>
-        relay.subscribe<Outbound>(relay.outboundOf(relay.instance), (message) =>
-          this.fromOwner(message),
-        ),
-      );
+      .then(() => relay.subscribe<Outbound>(relay.outboundOf(relay.instance), (message) => this.fromOwner(message)));
     return this.started;
   }
 
@@ -128,16 +123,14 @@ export class RoomRuntime {
             this.unserving.add(unserving);
           };
           this.serve(room).catch((err: unknown) =>
-            console.error('Could not hear the room’s sockets on other instances:', err),
+            console.error('Could not hear the room’s sockets on other instances:', err)
           );
         },
-        () => this.rooms.delete(roomKey),
+        () => this.rooms.delete(roomKey)
       );
     }
     // 待つあいだに放されたら（だれもいなくなった）、もう一度
-    return pending.then((claim) =>
-      'room' in claim && claim.room.isReleased ? this.claim(roomKey) : claim,
-    );
+    return pending.then((claim) => ('room' in claim && claim.room.isReleased ? this.claim(roomKey) : claim));
   }
 
   /** このインスタンスで部屋を開く。ほかのインスタンスが持ち主なら、放すまで待つ */
@@ -179,10 +172,7 @@ export class RoomRuntime {
    * 部屋を削除する。持ち主がこのインスタンスか、だれもいなければここで消す。ほかのインスタンスが持ち主
    * なら、ここで GM かを確かめてから、持ち主に消させる（一覧からはすぐ外す）
    */
-  async deleteRoom(
-    roomKey: string,
-    userId: string,
-  ): Promise<'deleted' | 'not-found' | 'not-game-master'> {
+  async deleteRoom(roomKey: string, userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const claim = await this.claim(roomKey);
     if ('room' in claim) {
       const { room } = claim;
@@ -344,8 +334,7 @@ export class RoomRuntime {
       if (message.t === 'open') {
         const out = relay.outboundOf(message.i);
         // 届かなくても（そのインスタンスが落ちた）、見回りがその席を外す
-        const tell = (outbound: Outbound) =>
-          void relay.publish(out, outbound).catch(() => undefined);
+        const tell = (outbound: Outbound) => void relay.publish(out, outbound).catch(() => undefined);
         const conn: Conn = {
           id: message.c,
           instance: message.i,

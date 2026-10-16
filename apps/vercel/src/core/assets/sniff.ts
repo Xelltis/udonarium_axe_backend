@@ -53,8 +53,7 @@ const BMP_INFO_HEADER_SIZES: ReadonlySet<number> = new Set([12, 40, 52, 56, 64, 
 export const sniff = (head: Uint8Array): SniffedType | null => {
   if (head.length < 4) return null;
   const starts = (...bytes: number[]) => bytes.every((byte, index) => head[index] === byte);
-  const ascii = (from: number, length: number) =>
-    String.fromCharCode(...head.subarray(from, from + length));
+  const ascii = (from: number, length: number) => String.fromCharCode(...head.subarray(from, from + length));
   const uint32le = (from: number) =>
     (head[from] | (head[from + 1] << 8) | (head[from + 2] << 16) | (head[from + 3] << 24)) >>> 0;
 

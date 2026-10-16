@@ -39,16 +39,12 @@ const twoInstances = async ({
   leaseMsOfB = TIMING.leaseMs,
 }: { parkMs?: number; socketSecondsOfB?: number; leaseMsOfB?: number } = {}) => {
   const config = configOf();
-  const make = async (
-    instance: string,
-    roomSocketSeconds = config.roomSocketSeconds,
-    leaseMs = TIMING.leaseMs,
-  ) => {
+  const make = async (instance: string, roomSocketSeconds = config.roomSocketSeconds, leaseMs = TIMING.leaseMs) => {
     const redis = await connectRedis(REDIS_URL);
     const deps = await createServerDeps(
       { ...config, roomSocketSeconds },
       { bucketOf: () => memoryBucket(), instance, timing: { ...TIMING, leaseMs }, parkMs },
-      redis,
+      redis
     );
     opened.push(deps);
     return deps;
@@ -86,11 +82,7 @@ const enter = async (deps: Parameters<typeof attach>[0], peerId: string) => {
 const left = (ws: FakeWs, peerId: string) =>
   ws.messages().some((message) => message.type === 'leave' && message.peerId === peerId);
 
-const update = (
-  identifier: string,
-  majorVersion: number,
-  syncData: Record<string, unknown> = {},
-) => ({
+const update = (identifier: string, majorVersion: number, syncData: Record<string, unknown> = {}) => ({
   eventName: SyncEvent.UPDATE,
   data: { aliasName: 'character', identifier, majorVersion, minorVersion: 0.5, syncData },
 });
@@ -109,9 +101,7 @@ describe('a room whose sockets reach different instances', () => {
       bob.emitMessage({ type: 'send', events: [update('piece', version)] });
     }
 
-    await vi.waitFor(() =>
-      expect(alice.messages().some((message) => message.type === 'join')).toBe(true),
-    );
+    await vi.waitFor(() => expect(alice.messages().some((message) => message.type === 'join')).toBe(true));
     const pieces = () =>
       alice
         .events()
@@ -136,15 +126,9 @@ describe('a room whose sockets reach different instances', () => {
     bob.emitMessage({ type: 'send', events: [update('scene', 1, { scene })] });
 
     await vi.waitFor(() =>
-      expect(
-        alice
-          .events()
-          .some((event) => (event.data as { identifier?: string }).identifier === 'scene'),
-      ).toBe(true),
+      expect(alice.events().some((event) => (event.data as { identifier?: string }).identifier === 'scene')).toBe(true)
     );
-    const event = alice
-      .events()
-      .find((item) => (item.data as { identifier?: string }).identifier === 'scene');
+    const event = alice.events().find((item) => (item.data as { identifier?: string }).identifier === 'scene');
     expect((event?.data as { syncData: { scene: string } }).syncData.scene).toBe(scene);
   });
 
@@ -178,9 +162,7 @@ describe('a room whose sockets reach different instances', () => {
 
     await b.relay.stop();
 
-    await vi.waitFor(() =>
-      expect(alice.messages().some((message) => message.type === 'leave')).toBe(true),
-    );
+    await vi.waitFor(() => expect(alice.messages().some((message) => message.type === 'leave')).toBe(true));
     alice.close(1000, 'bye');
   });
 
@@ -198,16 +180,10 @@ describe('a room whose sockets reach different instances', () => {
 
     for (const ws of [alice, bob]) {
       await vi.waitFor(() =>
-        expect(
-          ws
-            .messages()
-            .some((message) => message.type === 'error' && message.code === 'room-deleted'),
-        ).toBe(true),
+        expect(ws.messages().some((message) => message.type === 'error' && message.code === 'room-deleted')).toBe(true)
       );
     }
-    await vi.waitFor(async () =>
-      expect(await a.redis.exists(roomKeysOf(a.key, 'room').meta)).toBe(0),
-    );
+    await vi.waitFor(async () => expect(await a.redis.exists(roomKeysOf(a.key, 'room').meta)).toBe(0));
     expect(await b.runtime.deleteRoom('room', 'user-gm')).toBe('not-found');
   });
 
@@ -291,10 +267,7 @@ describe('a room whose sockets reach different instances', () => {
     const { a } = await twoInstances();
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const subscribe = a.relay.subscribe.bind(a.relay);
-    vi.spyOn(a.relay, 'subscribe').mockImplementation(((
-      channel: string,
-      listener: (message: unknown) => void,
-    ) =>
+    vi.spyOn(a.relay, 'subscribe').mockImplementation(((channel: string, listener: (message: unknown) => void) =>
       channel === a.relay.inboundOf('room')
         ? Promise.reject(new Error('down'))
         : subscribe(channel, listener)) as never);
@@ -302,10 +275,7 @@ describe('a room whose sockets reach different instances', () => {
     await enter(a, 'alice');
 
     await vi.waitFor(() =>
-      expect(error).toHaveBeenCalledWith(
-        'Could not hear the room’s sockets on other instances:',
-        expect.any(Error),
-      ),
+      expect(error).toHaveBeenCalledWith('Could not hear the room’s sockets on other instances:', expect.any(Error))
     );
   });
 
@@ -333,9 +303,7 @@ describe('a room whose sockets reach different instances', () => {
     await vi.waitFor(() => expect(room.isReleased).toBe(true));
     const released = vi.spyOn(room, 'isReleased', 'get');
 
-    expect(await b.relay.publish(a.relay.inboundOf('room'), { t: 'open', c: 'late', i: 'b' })).toBe(
-      1,
-    );
+    expect(await b.relay.publish(a.relay.inboundOf('room'), { t: 'open', c: 'late', i: 'b' })).toBe(1);
 
     await vi.waitFor(() => expect(released).toHaveBeenCalled());
     expect(accept).not.toHaveBeenCalled();
@@ -348,16 +316,12 @@ describe('a room whose sockets reach different instances', () => {
     const publish = vi.spyOn(a.relay, 'publish').mockRejectedValue(new Error('down'));
 
     alice.emitMessage({ type: 'send', events: [update('piece', 1)] });
-    await vi.waitFor(() =>
-      expect(publish).toHaveBeenCalledWith(a.relay.outboundOf('b'), expect.anything()),
-    );
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledWith(a.relay.outboundOf('b'), expect.anything()));
     vi.restoreAllMocks();
     alice.emitMessage({ type: 'send', events: [update('piece', 2)] });
 
     await vi.waitFor(() =>
-      expect(
-        bob.events().some((event) => (event.data as { majorVersion?: number }).majorVersion === 2),
-      ).toBe(true),
+      expect(bob.events().some((event) => (event.data as { majorVersion?: number }).majorVersion === 2)).toBe(true)
     );
   });
 

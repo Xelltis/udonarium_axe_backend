@@ -9,9 +9,7 @@ export default async () => {
     await redis.connect();
     await redis.ping();
   } catch {
-    throw new Error(
-      `The tests need Redis at ${url}. Start one with \`docker compose up -d redis\` in apps/vercel.`,
-    );
+    throw new Error(`The tests need Redis at ${url}. Start one with \`docker compose up -d redis\` in apps/vercel.`);
   } finally {
     if (redis.isOpen) redis.destroy();
   }

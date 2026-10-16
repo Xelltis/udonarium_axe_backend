@@ -27,13 +27,12 @@ export type ErrorCode =
   | 'internal-error';
 
 /** Hono の文脈の外で作る、エラーの応答 */
-export const failure = (status: number, error: ErrorCode): Response =>
-  Response.json({ error }, { status });
+export const failure = (status: number, error: ErrorCode): Response => Response.json({ error }, { status });
 
 export const fail = (
   c: Context,
   status: 400 | 401 | 403 | 404 | 411 | 412 | 413 | 415 | 426 | 429 | 451 | 500 | 503,
-  error: ErrorCode,
+  error: ErrorCode
 ) => c.json({ error }, status);
 
 export const onError: ErrorHandler = (err, c) => {

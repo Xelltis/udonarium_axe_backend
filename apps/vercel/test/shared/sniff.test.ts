@@ -4,14 +4,11 @@ import { sniff } from '../../src/core/assets/sniff.js';
 
 const bytes = (...values: (number | string)[]): Uint8Array =>
   new Uint8Array(
-    values.flatMap((value) =>
-      typeof value === 'string' ? [...value].map((char) => char.charCodeAt(0)) : [value],
-    ),
+    values.flatMap((value) => (typeof value === 'string' ? [...value].map((char) => char.charCodeAt(0)) : [value]))
   );
 
 /** BMP のファイルヘッダー（14バイト）と、長さ size の情報ヘッダーの書き出し */
-const bmp = (infoHeaderSize: number) =>
-  bytes('BM', 0x36, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, infoHeaderSize, 0, 0, 0);
+const bmp = (infoHeaderSize: number) => bytes('BM', 0x36, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, infoHeaderSize, 0, 0, 0);
 
 describe('sniff', () => {
   it.each([
@@ -48,10 +45,7 @@ describe('sniff', () => {
       '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"\n  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<svg>',
     ],
     ['after a DOCTYPE with entities', '<!DOCTYPE svg [\n  <!ENTITY ns "x">\n]>\n<svg>'],
-    [
-      'after every kind of prolog',
-      '\t<?xml version="1.0"?><!--a--><?xml-stylesheet href="a"?>\n<!DOCTYPE svg><svg>',
-    ],
+    ['after every kind of prolog', '\t<?xml version="1.0"?><!--a--><?xml-stylesheet href="a"?>\n<!DOCTYPE svg><svg>'],
   ])('reads an SVG %s', (_name, text) => {
     expect(sniff(new TextEncoder().encode(text))).toEqual({ kind: 'image', type: 'image/svg+xml' });
   });

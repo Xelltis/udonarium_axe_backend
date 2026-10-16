@@ -1,15 +1,12 @@
 import { encodeData } from './encoding.js';
 
-export const hmacSHA256 = async (
-  message: ArrayBuffer | string,
-  secret: ArrayBuffer | string,
-): Promise<ArrayBuffer> => {
+export const hmacSHA256 = async (message: ArrayBuffer | string, secret: ArrayBuffer | string): Promise<ArrayBuffer> => {
   const key = await crypto.subtle.importKey(
     'raw',
     encodeData(secret),
     { name: 'HMAC', hash: { name: 'SHA-256' } },
     false,
-    ['sign'],
+    ['sign']
   );
   return crypto.subtle.sign('HMAC', key, encodeData(message));
 };

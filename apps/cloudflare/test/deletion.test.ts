@@ -39,7 +39,7 @@ const deleteRoom = (roomKey: string, userId: string | null, ip = freshIp()) =>
         'CF-Connecting-IP': ip,
         ...(userId === null ? {} : { Authorization: `Bearer ${accessTokenFor(userId)}` }),
       },
-    }),
+    })
   );
 
 /** アクセストークンを付けて一覧を取る */
@@ -47,7 +47,7 @@ const listAs = async (authorization: string): Promise<RoomSummary[]> => {
   const res = await exports.default.fetch(
     new Request(ROOMS, {
       headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: authorization },
-    }),
+    })
   );
   return (await res.json<{ rooms: RoomSummary[] }>()).rooms;
 };
@@ -68,10 +68,10 @@ const tablesOf = (roomKey: string) =>
   runInDurableObject(stubOf(roomKey), (_instance, state) =>
     state.storage.sql
       .exec<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'seats', 'objects')",
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'seats', 'objects')"
       )
       .toArray()
-      .map((row) => row.name),
+      .map((row) => row.name)
   );
 
 describe('deleting a room', () => {
@@ -82,9 +82,7 @@ describe('deleting a room', () => {
     expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(204);
 
     expect(await tablesOf(roomKey)).toEqual([]);
-    expect(
-      await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm()),
-    ).toBeNull();
+    expect(await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm())).toBeNull();
   });
 
   it('takes nobody in and hands out nothing while it is being deleted', async () => {
@@ -128,20 +126,15 @@ describe('deleting a room', () => {
 
     expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(204);
 
-    expect(failure).toHaveBeenCalledWith(
-      'Room deletion failed, to be tried again:',
-      expect.any(Error),
-    );
+    expect(failure).toHaveBeenCalledWith('Room deletion failed, to be tried again:', expect.any(Error));
     expect(await refusalOf(roomKey)).toBe('room-not-found');
     expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(404);
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
     expect(rowOf(await listFor('user-gm'), roomKey)).toBeUndefined();
     expect(
       await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-        state.storage.sql
-          .exec("SELECT name FROM sqlite_master WHERE name IN ('room', 'deleting')")
-          .toArray(),
-      ),
+        state.storage.sql.exec("SELECT name FROM sqlite_master WHERE name IN ('room', 'deleting')").toArray()
+      )
     ).toEqual([]);
   });
 
@@ -168,17 +161,13 @@ describe('deleting a room', () => {
 
     const deleted = deleteRoom(roomKey, 'user-gm');
     await asked;
-    const alarm = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      state.storage.getAlarm(),
-    );
+    const alarm = await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm());
     expect(alarm).toBeGreaterThan(Date.now());
     expect(alarm).toBeLessThanOrEqual(Date.now() + WIPE_RETRY_MS);
 
     // その時計が先に鳴っても、消している最中なら重ねて消さず、また来る
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
-    expect(
-      await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm()),
-    ).not.toBeNull();
+    expect(await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm())).not.toBeNull();
 
     unlist();
     expect((await deleted).status).toBe(204);
@@ -210,16 +199,17 @@ describe('deleting a room', () => {
     const gm = await join(roomKey, 'gm');
     let release: () => void = () => undefined;
     await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
-      (instance as unknown as { engine: { rollQueue: Promise<void> } }).engine.rollQueue =
-        new Promise<void>((resolve) => {
+      (instance as unknown as { engine: { rollQueue: Promise<void> } }).engine.rollQueue = new Promise<void>(
+        (resolve) => {
           release = resolve;
-        });
+        }
+      );
     });
     const pending = () =>
       runInDurableObject(
         stubOf(roomKey),
         (instance: RoomDurableObject) =>
-          (instance as unknown as { engine: { pendingRolls: number } }).engine.pendingRolls,
+          (instance as unknown as { engine: { pendingRolls: number } }).engine.pendingRolls
       );
     gm.client.emit([
       { eventName: 'UPDATE_GAME_OBJECT', data: chatTabList() },
@@ -277,7 +267,7 @@ describe('the room list', () => {
           `INSERT INTO rooms (room_key, room_id, name, has_password, members, created_at)
            VALUES (?, 'abc', 'newer', 0, 0, ?)`,
           `newer-${i}`,
-          Date.now() + 1000 + i,
+          Date.now() + 1000 + i
         );
       }
     });
@@ -293,7 +283,7 @@ describe('the room list', () => {
       const found = await exports.default.fetch(
         new Request(`${ROOMS}/${roomKey}`, {
           headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() },
-        }),
+        })
       );
       expect(found.status).toBe(200);
       expect((await found.json<{ room: RoomSummary }>()).room).toMatchObject({

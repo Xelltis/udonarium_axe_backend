@@ -49,7 +49,7 @@ describe('the room store', () => {
       const write = (store as unknown as { writeObject: (context: unknown) => void }).writeObject;
       vi.spyOn(
         store as unknown as { writeObject: (context: { identifier: string }) => void },
-        'writeObject',
+        'writeObject'
       ).mockImplementation(function (this: unknown, context: { identifier: string }) {
         if (context.identifier === 'bad') throw new Error('row too big');
         return write.call(this, context);
@@ -75,7 +75,7 @@ describe('the room store', () => {
       const write = (store as unknown as { writeObject: (context: unknown) => number }).writeObject;
       vi.spyOn(
         store as unknown as { writeObject: (context: { identifier: string }) => number },
-        'writeObject',
+        'writeObject'
       ).mockImplementation(function (this: unknown, context: { identifier: string }) {
         if (context.identifier !== 'other') throw new Error('row too big');
         return write.call(this, context);
@@ -97,20 +97,17 @@ describe('the room store', () => {
   });
 
   it('forgets the oldest marks of what was deleted once there are too many', async () => {
-    const left = await runInDurableObject(
-      env.ROOMS.getByName('store-prune'),
-      (_instance, state) => {
-        migrate(state.storage.sql);
-        const store = new RoomStore(state.storage, { most: 3, prunedTo: 2 });
-        let now = 1000;
-        vi.spyOn(Date, 'now').mockImplementation(() => (now += 10));
-        for (const identifier of ['a', 'b', 'c', 'd']) {
-          store.delete(identifier, true);
-          store.flush();
-        }
-        return ['a', 'b', 'c', 'd'].filter((identifier) => store.isDeleted(identifier));
-      },
-    );
+    const left = await runInDurableObject(env.ROOMS.getByName('store-prune'), (_instance, state) => {
+      migrate(state.storage.sql);
+      const store = new RoomStore(state.storage, { most: 3, prunedTo: 2 });
+      let now = 1000;
+      vi.spyOn(Date, 'now').mockImplementation(() => (now += 10));
+      for (const identifier of ['a', 'b', 'c', 'd']) {
+        store.delete(identifier, true);
+        store.flush();
+      }
+      return ['a', 'b', 'c', 'd'].filter((identifier) => store.isDeleted(identifier));
+    });
     expect(left).toEqual(['c', 'd']);
   });
 });

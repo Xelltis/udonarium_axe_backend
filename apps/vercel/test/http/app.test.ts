@@ -28,7 +28,7 @@ describe('createApp', () => {
     const res = await createApp().fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://example.com' },
-      }),
+      })
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('OK');
@@ -46,7 +46,7 @@ describe('createApp', () => {
     const res = await createApp().fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://evil.example' },
-      }),
+      })
     );
     expect(res.status).toBe(403);
   });
@@ -56,7 +56,7 @@ describe('createApp', () => {
     const res = await createApp().fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://example.com' },
-      }),
+      })
     );
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({
@@ -70,7 +70,7 @@ describe('createApp', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
         body: JSON.stringify({ formatVersion: 1, channelName: 'room', peerId: 'peer-1' }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { token: string };
@@ -83,7 +83,7 @@ describe('createApp', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
         body: JSON.stringify({ formatVersion: 1, channelName: 'room', peerId: 'peer-1' }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('Deprecation')).toBe('true');

@@ -2,12 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { redisLobby } from '../../../src/server/lobby.js';
 import type { KeyOf } from '../../../src/server/redis.js';
-import {
-  createRoom,
-  expiryKeyOf,
-  readRoomMeta,
-  roomKeysOf,
-} from '../../../src/server/rooms/keys.js';
+import { createRoom, expiryKeyOf, readRoomMeta, roomKeysOf } from '../../../src/server/rooms/keys.js';
 import { SWEEP_ROOMS, roomSweeper } from '../../../src/server/rooms/sweep.js';
 import type { SweepDeps } from '../../../src/server/rooms/sweep.js';
 import { freshKey, useRedis } from '../redis-helpers.js';
@@ -19,10 +14,7 @@ afterEach(() => {
 });
 
 /** 部屋を作って一覧に載せ、past の部屋は消す時刻を過ぎたことにする */
-const setUp = async (
-  rooms: Record<string, 'past' | 'future'>,
-  overrides: Partial<SweepDeps> = {},
-) => {
+const setUp = async (rooms: Record<string, 'past' | 'future'>, overrides: Partial<SweepDeps> = {}) => {
   const key = freshKey();
   const lobby = redisLobby(connection.redis, key);
   for (const [roomKey, when] of Object.entries(rooms)) {
@@ -48,8 +40,7 @@ const setUp = async (
   return { key, lobby, sweeper, deferred, deleted };
 };
 
-const metaOf = (key: KeyOf, roomKey: string) =>
-  connection.redis.exists(roomKeysOf(key, roomKey).meta);
+const metaOf = (key: KeyOf, roomKey: string) => connection.redis.exists(roomKeysOf(key, roomKey).meta);
 
 describe('the room sweeper', () => {
   it('wipes the rooms past their time, with their assets, and leaves the rest', async () => {
@@ -66,9 +57,7 @@ describe('the room sweeper', () => {
   });
 
   it('sweeps on the side a few rooms at a time, once a while across instances', async () => {
-    const rooms = Object.fromEntries(
-      Array.from({ length: SWEEP_ROOMS + 2 }, (_, i) => [`room-${i}`, 'past' as const]),
-    );
+    const rooms = Object.fromEntries(Array.from({ length: SWEEP_ROOMS + 2 }, (_, i) => [`room-${i}`, 'past' as const]));
     const { key, sweeper, deferred } = await setUp(rooms);
 
     sweeper.soon();
@@ -82,7 +71,7 @@ describe('the room sweeper', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { key, sweeper } = await setUp(
       { old: 'past' },
-      { deleteAssets: () => Promise.reject(new Error('blob down')) },
+      { deleteAssets: () => Promise.reject(new Error('blob down')) }
     );
 
     expect(await sweeper.now()).toBe(1);
@@ -96,7 +85,7 @@ describe('the room sweeper', () => {
     const { key, lobby, sweeper } = await setUp({ bad: 'past', good: 'past' });
     const remove = lobby.remove.bind(lobby);
     vi.spyOn(lobby, 'remove').mockImplementation((roomKey) =>
-      roomKey === 'bad' ? Promise.reject(new Error('lobby down')) : remove(roomKey),
+      roomKey === 'bad' ? Promise.reject(new Error('lobby down')) : remove(roomKey)
     );
 
     expect(await sweeper.now()).toBe(1);

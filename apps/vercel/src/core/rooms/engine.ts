@@ -80,15 +80,7 @@ import {
   neutralRollAttributes,
   notLongAgo,
 } from './rules.js';
-import {
-  delivered,
-  describe,
-  looser,
-  maskedMinor,
-  unmasked,
-  viewFor,
-  viewKind,
-} from './visibility.js';
+import { delivered, describe, looser, maskedMinor, unmasked, viewFor, viewKind } from './visibility.js';
 import type { Lookup, ViewKind, Viewer } from './visibility.js';
 
 type Reply = (eventName: string, data: unknown) => void;
@@ -115,10 +107,7 @@ export class RoomEngine<C extends object> {
   /** 頼まれた順に振る。システムを初めて読み込むときだけ待つ */
   private rollQueue: Promise<void> = Promise.resolve();
   /** 送ってきたフレーム・イベント・ダイスの数。窓の始まりと、そこからの数 */
-  private readonly rates = new WeakMap<
-    C,
-    { start: number; count: number; events: number; rolls: number }
-  >();
+  private readonly rates = new WeakMap<C, { start: number; count: number; events: number; rolls: number }>();
   /** 切れたと知らされたもの */
   private readonly gone = new WeakSet<C>();
   /** 断って閉じたもの。hello の前に断ったものは席が無いので、ここで覚える */
@@ -150,9 +139,7 @@ export class RoomEngine<C extends object> {
     if (!missing) this.closeSilentSockets(conn);
     const full =
       !missing &&
-      this.host
-        .connections()
-        .filter((other) => other !== conn && !this.gone.has(other) && !this.refused.has(other))
+      this.host.connections().filter((other) => other !== conn && !this.gone.has(other) && !this.refused.has(other))
         .length >= MAX_SOCKETS;
     if (missing) this.refuse(conn, 'room-not-found');
     else if (full) this.refuse(conn, 'room-full');
@@ -193,8 +180,7 @@ export class RoomEngine<C extends object> {
     if (this.host.wiping() || !this.host.room()) return 'room-not-found';
     // 席に着いているあいだだけ。抜けた人は、トークンが残っていても置けない
     const seated = this.seats().some(
-      ({ seat }) =>
-        seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl'),
+      ({ seat }) => seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl')
     );
     return seated ? 'ok' : 'not-a-player';
   }
@@ -206,13 +192,7 @@ export class RoomEngine<C extends object> {
   private closeSilentSockets(except: C): void {
     const now = Date.now();
     for (const conn of this.host.connections()) {
-      if (
-        conn === except ||
-        this.host.seatOf(conn) ||
-        this.gone.has(conn) ||
-        this.refused.has(conn)
-      )
-        continue;
+      if (conn === except || this.host.seatOf(conn) || this.gone.has(conn) || this.refused.has(conn)) continue;
       const at = this.connectedAt.get(conn);
       if (at === undefined || now - at > HELLO_TIMEOUT_MS) this.refuse(conn, 'hello-required');
     }
@@ -255,8 +235,7 @@ export class RoomEngine<C extends object> {
     if (!parsed.success) return this.refuse(conn, 'bad-message');
     const received = parsed.output;
     if (received.type === 'send') {
-      if (!this.withinEvents(conn, received.events.length))
-        return this.refuse(conn, 'too-many-messages');
+      if (!this.withinEvents(conn, received.events.length)) return this.refuse(conn, 'too-many-messages');
       this.relay(conn, seat, received.to ?? undefined, received.events);
     } else if (received.type === 'time') {
       this.post(conn, { type: 'time', serverTime: Date.now() });
@@ -300,8 +279,7 @@ export class RoomEngine<C extends object> {
     };
     if (
       !hello.accessToken &&
-      (hello.userId.startsWith(ACCOUNT_USER_ID_PREFIX) ||
-        this.host.roles.roleOf(hello.userId) !== null)
+      (hello.userId.startsWith(ACCOUNT_USER_ID_PREFIX) || this.host.roles.roleOf(hello.userId) !== null)
     ) {
       // ログインした人のユーザー ID は、トークン無しには名乗らせない（その人に見えるものが見えてしまう）。
       // 頭の付かない前の形のアカウントもあるので、この部屋に入ったことのあるアカウントも見る
@@ -315,8 +293,7 @@ export class RoomEngine<C extends object> {
     if (hello.accessToken) {
       const secret = this.host.sessionSecret();
       const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
-      if (!secret || !claims || claims.uid !== hello.userId)
-        return this.refuse(conn, 'unauthorized');
+      if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(conn, 'unauthorized');
       const { role, known } = this.roleOf(hello.userId, hello.invite ?? null, room.roomKey, secret);
       seat.role = role;
       seat.account = true;
@@ -340,17 +317,13 @@ export class RoomEngine<C extends object> {
     userId: string,
     invite: string | null,
     roomKey: string,
-    secret: string,
+    secret: string
   ): { role: PeerRole; known: boolean } {
     const known = this.host.roles.roleOf(userId);
     if (known) return { role: known, known: true };
     const invited = invite ? readToken(invite, 'invite', secret) : null;
     if (invited?.room !== roomKey) return { role: 'pl', known: false };
-    if (
-      invited.role === 'gm' &&
-      invited.by !== undefined &&
-      this.host.roles.roleOf(invited.by) !== 'gm'
-    ) {
+    if (invited.role === 'gm' && invited.by !== undefined && this.host.roles.roleOf(invited.by) !== 'gm') {
       return { role: 'pl', known: false };
     }
     return { role: invited.role, known: false };
@@ -366,18 +339,14 @@ export class RoomEngine<C extends object> {
     return policy ? { assetUpload: policy } : {};
   }
 
-  private assetTokenFor<K extends string>(
-    seat: Seat,
-    expiresAt: K,
-  ): { assetToken: string } & Record<K, number> {
+  private assetTokenFor<K extends string>(seat: Seat, expiresAt: K): { assetToken: string } & Record<K, number> {
     const secret = this.host.sessionSecret();
     // ログインを外した部屋のサーバーでは、アセットの経路もトークンを受けないので、空にしておく
-    if (!secret)
-      return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
+    if (!secret) return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
     const assetToken = signToken<'asset'>(
       { aud: 'asset', room: seat.roomKey, role: seat.role, uid: seat.userId },
       ASSET_TOKEN_SECONDS,
-      secret,
+      secret
     );
     return { assetToken, [expiresAt]: Date.now() + ASSET_TOKEN_SECONDS * 1000 } as {
       assetToken: string;
@@ -394,7 +363,7 @@ export class RoomEngine<C extends object> {
     const invite = signToken<'invite'>(
       { aud: 'invite', room: seat.roomKey, role, by: seat.userId },
       INVITE_SECONDS,
-      secret,
+      secret
     );
     this.post(conn, {
       type: 'invite',
@@ -483,7 +452,7 @@ export class RoomEngine<C extends object> {
    */
   nextCheckAt(): number {
     const expiries = this.seats().flatMap(({ seat }) =>
-      seat.expiresAt === undefined ? [] : [seat.expiresAt + TOKEN_GRACE_MS + 1000],
+      seat.expiresAt === undefined ? [] : [seat.expiresAt + TOKEN_GRACE_MS + 1000]
     );
     return Math.min(Date.now() + OCCUPIED_CHECK_MS, ...expiries);
   }
@@ -502,7 +471,7 @@ export class RoomEngine<C extends object> {
     if (identifiers.length === 0) return;
     this.scheduleFlush();
     const events = identifiers.map((identifier) =>
-      fromAuthority(SyncEvent.DELETE, { aliasName: PEER_CURSOR_ALIAS, identifier }),
+      fromAuthority(SyncEvent.DELETE, { aliasName: PEER_CURSOR_ALIAS, identifier })
     );
     this.broadcast(exclude, { type: 'data', from: AUTHORITY_PEER_ID, events });
   }
@@ -540,9 +509,7 @@ export class RoomEngine<C extends object> {
   seats(exclude?: C): { conn: C; seat: Seat }[] {
     return this.host.connections().flatMap((conn) => {
       const seat = this.host.seatOf(conn);
-      return conn !== exclude && seat && !seat.closed && !this.gone.has(conn)
-        ? [{ conn, seat }]
-        : [];
+      return conn !== exclude && seat && !seat.closed && !this.gone.has(conn) ? [{ conn, seat }] : [];
     });
   }
 
@@ -597,12 +564,7 @@ export class RoomEngine<C extends object> {
    * 見てよい形で配る。サーバーが差し込むもの（見え方が変わったものの出し入れ、古い版への送り返し、
    * カタログへの返事）は sendFrom を AUTHORITY_PEER_ID にして、同じ束に入れる。
    */
-  private relay(
-    sender: C,
-    seat: Seat,
-    to: string | undefined,
-    events: { eventName: string; data: unknown }[],
-  ): void {
+  private relay(sender: C, seat: Seat, to: string | undefined, events: { eventName: string; data: unknown }[]): void {
     const others = this.seats(sender);
     const target = to === undefined ? undefined : others.find((other) => other.seat.peerId === to);
     const forAuthority = to === undefined || to === AUTHORITY_PEER_ID;
@@ -749,7 +711,7 @@ export class RoomEngine<C extends object> {
     const verdict = judgeUpdate(
       this.store.entryOf(identifier),
       context,
-      owner === null && this.store.isDeleted(identifier),
+      owner === null && this.store.isDeleted(identifier)
     );
     if (verdict === 'stale') {
       const view = this.viewOf(identifier, seat);
@@ -775,9 +737,7 @@ export class RoomEngine<C extends object> {
   private uncovers(context: ObjectContext, existing: StoredEntry, seat: Seat): boolean {
     const next = describe(context);
     const renamed =
-      existing.view?.kind === 'data' &&
-      next.view?.kind === 'data' &&
-      existing.view.name !== next.view.name;
+      existing.view?.kind === 'data' && next.view?.kind === 'data' && existing.view.name !== next.view.name;
     if (next.parent === existing.parent && !renamed) return false;
     const identifier = context.identifier;
     // 比べるのは道筋の変化だけ。カードの向きや手札などの状態は mayChangeView が確かめているので、
@@ -786,12 +746,11 @@ export class RoomEngine<C extends object> {
       parent: next.parent,
       view: next.view?.kind === 'data' ? next.view : existing.view,
     };
-    const after: Lookup = (other) =>
-      other === identifier ? { ...existing, ...moved } : this.store.lookup(other);
+    const after: Lookup = (other) => (other === identifier ? { ...existing, ...moved } : this.store.lookup(other));
     // まだ無い親の下は、親が来たときにどう見えるかわからない。いちばん見える場合として比べる
     const eventual = (kind: ViewKind): ViewKind => (kind === 'pending' ? 'full' : kind);
     return [identifier, ...this.store.dependentsOf(identifier)].some((other) =>
-      looser(eventual(this.kindOf(other, seat, after)), eventual(this.kindOf(other, seat))),
+      looser(eventual(this.kindOf(other, seat, after)), eventual(this.kindOf(other, seat)))
     );
   }
 
@@ -806,7 +765,7 @@ export class RoomEngine<C extends object> {
     seat: Seat,
     sender: C,
     push: Push<C>,
-    corrected: boolean,
+    corrected: boolean
   ): void {
     const { identifier } = context;
     const was: Lookup = (other) => (other === identifier ? before : this.store.lookup(other));
@@ -833,11 +792,7 @@ export class RoomEngine<C extends object> {
     // 見え方の手がかりか親が変わったか、初めて届いたもの（その子が親を待っていたかもしれない）なら、
     // 子孫の見え方を比べ直す
     const after = this.store.lookup(identifier) as StoredEntry;
-    if (
-      !before ||
-      before.parent !== after.parent ||
-      JSON.stringify(before.view) !== JSON.stringify(after.view)
-    ) {
+    if (!before || before.parent !== after.parent || JSON.stringify(before.view) !== JSON.stringify(after.view)) {
       this.revisit(this.store.dependentsOf(identifier), this.seats(), was, push, sender);
     }
   }
@@ -855,19 +810,17 @@ export class RoomEngine<C extends object> {
     seats: { conn: C; seat: Viewer }[],
     was: Lookup,
     push: Push<C>,
-    writer?: C,
+    writer?: C
   ): void {
     for (const { conn, seat } of seats) {
       for (const identifier of identifiers) {
         const then = viewKind(identifier, seat, was);
         const now = viewKind(identifier, seat, this.store.lookup);
-        const withdrawn =
-          then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
+        const withdrawn = then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
         if (conn === writer && then === 'pending' && !withdrawn) continue;
         this.resend(conn, identifier, then, now, push);
         // 親がもう1段届いていないうちは、まだ渡していないので覚えておく
-        if (withdrawn && now !== 'pending')
-          this.withdrawnPending.get(seat.userId)?.delete(identifier);
+        if (withdrawn && now !== 'pending') this.withdrawnPending.get(seat.userId)?.delete(identifier);
       }
     }
   }
@@ -912,24 +865,20 @@ export class RoomEngine<C extends object> {
         ...context,
         syncData: {
           ...context.syncData,
-          attributes: Object.fromEntries(
-            Object.entries(attributes).filter(([field]) => field !== SERVER_ROLL_FIELD),
-          ),
+          attributes: Object.fromEntries(Object.entries(attributes).filter(([field]) => field !== SERVER_ROLL_FIELD)),
         },
       };
     }
     const original = attributesOf(stored);
     const disclosed =
-      (original.originFrom === seat.userId || seat.role === 'gm') &&
-      isDisclosureOf(original.tag, attributes.tag);
+      (original.originFrom === seat.userId || seat.role === 'gm') && isDisclosureOf(original.tag, attributes.tag);
     // 公開した行は末尾へ移る（Axe の discloseMessage）。時刻は遠い過去へずらさせず、並びの位置は
     // 端数だけ受ける
     const kept = disclosed
       ? {
           ...original,
           tag: attributes.tag,
-          disclosedAt:
-            attributes.disclosedAt === undefined ? undefined : notLongAgo(attributes.disclosedAt),
+          disclosedAt: attributes.disclosedAt === undefined ? undefined : notLongAgo(attributes.disclosedAt),
         }
       : original;
     const place = disclosed
@@ -938,8 +887,7 @@ export class RoomEngine<C extends object> {
           minorIndex: indexFraction(context.syncData.minorIndex),
         }
       : stored.syncData;
-    const guarded =
-      seat.role === 'gm' ? ROLLED_ATTRIBUTES : [...ROLLED_ATTRIBUTES, ...ROLLED_GM_ATTRIBUTES];
+    const guarded = seat.role === 'gm' ? ROLLED_ATTRIBUTES : [...ROLLED_ATTRIBUTES, ...ROLLED_GM_ATTRIBUTES];
     const changed =
       context.syncData.value !== stored.syncData.value ||
       context.syncData.parentIdentifier !== stored.syncData.parentIdentifier ||
@@ -947,14 +895,12 @@ export class RoomEngine<C extends object> {
       guarded.some((field) => attributes[field] !== kept[field]);
     if (!changed) return context;
     // 元の発言に無かった項目は、undefined を置かずに外す（MessagePack では null になって届く）
-    const restored = Object.fromEntries(
-      Object.entries(attributes).filter(([field]) => !guarded.includes(field)),
-    );
+    const restored = Object.fromEntries(Object.entries(attributes).filter(([field]) => !guarded.includes(field)));
     for (const field of guarded) if (kept[field] !== undefined) restored[field] = kept[field];
     const syncData = Object.fromEntries(
       Object.entries(context.syncData).filter(
-        ([field]) => field !== 'parentIdentifier' && !ROLLED_PLACE.includes(field),
-      ),
+        ([field]) => field !== 'parentIdentifier' && !ROLLED_PLACE.includes(field)
+      )
     );
     // 振った結果には、並びの位置をいつも置いてある
     for (const field of ROLLED_PLACE) syncData[field] = place[field];
@@ -1016,13 +962,11 @@ export class RoomEngine<C extends object> {
         if (!this.host.room()) return;
         this.host.record('roll', request.gameSystem, Date.now() - started);
         // 振っているあいだに、同じ識別子のものが置かれていたら作らない
-        const taken =
-          this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
+        const taken = this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
         if (taken) return;
         if (!rolled) return reject(message.identifier, 'not-a-command');
         // 振っているあいだにタブが消されたり移されたりしていたら、置く先が無い
-        if (!this.isListedTab(String(message.syncData.parentIdentifier)))
-          return reject(message.identifier, 'invalid');
+        if (!this.isListedTab(String(message.syncData.parentIdentifier))) return reject(message.identifier, 'invalid');
         // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる。並びの位置は
         // 頼まれたタブの中の端数だけ受け、頼んだ人が足した飾りや印は外す
         const result = withAttributes(
@@ -1039,15 +983,13 @@ export class RoomEngine<C extends object> {
           {
             dicebot: rolled.dicebot,
             tag: rolled.secret ? 'system secret' : 'system',
-            name: rolled.secret
-              ? `<Secret-BCDice：${request.speaker}>`
-              : `<BCDice：${request.speaker}>`,
+            name: rolled.secret ? `<Secret-BCDice：${request.speaker}>` : `<BCDice：${request.speaker}>`,
             from: DICE_BOT_SENDER,
             originFrom: seat.userId,
             // 頼んだ人の時刻は、遠い過去にずらして並びの奥へ埋めさせない
             timestamp: notLongAgo(attributesOf(message).timestamp),
             [SERVER_ROLL_FIELD]: true,
-          },
+          }
         );
         this.store.put(result, null);
         this.scheduleFlush();
@@ -1079,8 +1021,7 @@ export class RoomEngine<C extends object> {
   private refuseWrite(identifier: string, seat: Seat, reply: Reply): void {
     const view = this.viewOf(identifier, seat);
     if (view) reply(AuthorityEvent.AUTHORITATIVE, view);
-    else if (this.store.isDeleted(identifier))
-      reply(SyncEvent.DELETE, { aliasName: '', identifier });
+    else if (this.store.isDeleted(identifier)) reply(SyncEvent.DELETE, { aliasName: '', identifier });
     else reply(AuthorityEvent.WITHDRAW, { identifier });
   }
 
@@ -1105,8 +1046,7 @@ export class RoomEngine<C extends object> {
       return this.refuseWrite(identifier, seat, reply);
     const kept = this.keptFromDeleting.get(seat.peerId);
     // 見えないものは上で外れ、残るものは親のそろった子孫なので、送り主に届いている
-    if (kept && kept.until > Date.now() && kept.ids.has(identifier))
-      return this.refuseWrite(identifier, seat, reply);
+    if (kept && kept.until > Date.now() && kept.ids.has(identifier)) return this.refuseWrite(identifier, seat, reply);
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
     // サーバーが振った結果は、GM のほかには消させない。タブごと消すのも同じ。送り主の手元からは消えて
     // いるので、見えるものを全部返す。続けて送られてくる中の行も、しばらく消させない
@@ -1120,9 +1060,7 @@ export class RoomEngine<C extends object> {
       return;
     }
     const others = this.seats(sender);
-    const seen = new Map(
-      others.map(({ conn, seat: other }) => [conn, doomed.map((id) => this.kindOf(id, other))]),
-    );
+    const seen = new Map(others.map(({ conn, seat: other }) => [conn, doomed.map((id) => this.kindOf(id, other))]));
     // 印を残すかは、置いてあるものの種類で決める。送られてきた種類を信じると、カーソルを名乗って
     // 何でも印を残さずに消せ、古い写しを持つ人から戻ってきてしまう
     const cursor = entry ? entry.alias === PEER_CURSOR_ALIAS : aliasName === PEER_CURSOR_ALIAS;
@@ -1130,12 +1068,7 @@ export class RoomEngine<C extends object> {
     for (const { conn } of others) {
       doomed.forEach((id, index) => {
         if (!delivered((seen.get(conn) as ViewKind[])[index])) return;
-        push(
-          conn,
-          id === identifier
-            ? event
-            : fromAuthority(SyncEvent.DELETE, { aliasName: '', identifier: id }),
-        );
+        push(conn, id === identifier ? event : fromAuthority(SyncEvent.DELETE, { aliasName: '', identifier: id }));
       });
     }
   }
@@ -1147,8 +1080,7 @@ export class RoomEngine<C extends object> {
   }
 
   private isServerRoll(identifier: string): boolean {
-    const stored =
-      this.store.entryOf(identifier)?.alias === CHAT_MESSAGE_ALIAS && this.store.get(identifier);
+    const stored = this.store.entryOf(identifier)?.alias === CHAT_MESSAGE_ALIAS && this.store.get(identifier);
     return stored ? attributesOf(stored)[SERVER_ROLL_FIELD] === true : false;
   }
 
@@ -1169,15 +1101,13 @@ export class RoomEngine<C extends object> {
     const parsed = safeParse(roleRequestSchema, data);
     if (!parsed.success) return;
     const { peerId, role } = parsed.output;
-    const reject = (reason: RoleRejectReason) =>
-      reply(AuthorityEvent.ROLE_REJECTED, { peerId, role, reason });
+    const reject = (reason: RoleRejectReason) => reply(AuthorityEvent.ROLE_REJECTED, { peerId, role, reason });
     if (seat.role !== 'gm') return reject('not-game-master');
     const target = this.seats().find((other) => other.seat.peerId === peerId)?.seat;
     if (!target) return reject('unknown-peer');
     if (!target.account) return reject('not-logged-in');
     const gameMasters = this.host.roles.gameMasterCount();
-    if (target.role === 'gm' && role !== 'gm' && gameMasters <= 1)
-      return reject('last-game-master');
+    if (target.role === 'gm' && role !== 'gm' && gameMasters <= 1) return reject('last-game-master');
 
     this.host.roles.set(target.userId, role);
     this.host.lobbyChanged(seat.roomKey);
@@ -1194,7 +1124,7 @@ export class RoomEngine<C extends object> {
           identifier,
           this.kindOf(identifier, other),
           this.kindOf(identifier, { ...other, role }),
-          push,
+          push
         );
       }
       for (const identifier of this.store.ownedBy(other.peerId)) {

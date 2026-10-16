@@ -136,10 +136,7 @@ const seesFace = (view: { front: boolean; owner: string; hand: string }, viewer:
   (view.hand !== '' && view.hand === viewer.userId);
 
 /** 公開の範囲（Axe の canViewDisclosable）。GM と持ち主はいつも見える */
-export const seesDisclosed = (
-  view: { mode: string; users: string[]; owner: string },
-  viewer: Viewer,
-) => {
+export const seesDisclosed = (view: { mode: string; users: string[]; owner: string }, viewer: Viewer) => {
   if (isGameMaster(viewer)) return true;
   if (view.owner !== '' && view.owner === viewer.userId) return true;
   if (view.mode === 'gm') return false;
@@ -158,9 +155,7 @@ const ownKind = (view: View | null, viewer: Viewer): ViewKind => {
     return view.secret && !sentBy(view, viewer) && !isGameMaster(viewer) ? 'masked' : 'full';
   }
   if (view?.kind === 'die') {
-    return view.owner !== '' && view.owner !== viewer.userId && !isGameMaster(viewer)
-      ? 'masked'
-      : 'full';
+    return view.owner !== '' && view.owner !== viewer.userId && !isGameMaster(viewer) ? 'masked' : 'full';
   }
   return 'full';
 };
@@ -194,12 +189,10 @@ const kindUnderNote = (path: string[]): ViewKind =>
 const STRICTNESS: readonly ViewKind[] = ['full', 'masked', 'pending', 'hidden'];
 
 /** now の方が then より多く見せるか */
-export const looser = (now: ViewKind, then: ViewKind): boolean =>
-  STRICTNESS.indexOf(now) < STRICTNESS.indexOf(then);
+export const looser = (now: ViewKind, then: ViewKind): boolean => STRICTNESS.indexOf(now) < STRICTNESS.indexOf(then);
 
 /** 2つの見え方のうち、より伏せる方 */
-const stricter = (a: ViewKind, b: ViewKind): ViewKind =>
-  STRICTNESS.indexOf(a) >= STRICTNESS.indexOf(b) ? a : b;
+const stricter = (a: ViewKind, b: ViewKind): ViewKind => (STRICTNESS.indexOf(a) >= STRICTNESS.indexOf(b) ? a : b);
 
 /**
  * その人に、そのオブジェクトをどう見せるか。親をたどり、カード・メモ・タブの決まりを当てる。
@@ -230,17 +223,12 @@ export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): Vi
     const view = parent.view;
     // 根のデータ要素（名前はオブジェクトの種類）を除いた、根からの道筋
     const path = names.slice(0, -1).reverse();
-    if (
-      view?.kind === 'tab' &&
-      !(isGameMaster(viewer) || (viewer.role === 'guest' ? view.guest : view.pl))
-    ) {
+    if (view?.kind === 'tab' && !(isGameMaster(viewer) || (viewer.role === 'guest' ? view.guest : view.pl))) {
       return 'hidden';
     }
     if (view?.kind === 'card' && !seesFace(view, viewer) && hiddenUnderCard(path)) return 'hidden';
-    if (view?.kind === 'die' && ownKind(view, viewer) === 'masked' && hiddenUnderDie(path))
-      return 'hidden';
-    if (view?.kind === 'note' && !seesDisclosed(view, viewer))
-      kind = stricter(kind, kindUnderNote(path));
+    if (view?.kind === 'die' && ownKind(view, viewer) === 'masked' && hiddenUnderDie(path)) return 'hidden';
+    if (view?.kind === 'note' && !seesDisclosed(view, viewer)) kind = stricter(kind, kindUnderNote(path));
     if (view?.kind === 'data') names.push(view.name);
     current = parent;
   }
@@ -248,8 +236,7 @@ export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): Vi
 };
 
 /** 伏せる文字。空白はそのまま残す（Axe のメモが伏せて描く形と同じ） */
-const blackOut = (value: unknown) =>
-  typeof value === 'string' ? value.replace(/\S/g, '█') : value;
+const blackOut = (value: unknown) => (typeof value === 'string' ? value.replace(/\S/g, '█') : value);
 
 /** シークレットの発言で伏せるもの */
 const SECRET_ATTRIBUTES = MASKED_CHAT_ATTRIBUTES;
@@ -260,14 +247,14 @@ export const masked = (context: ObjectContext): ObjectContext => {
     case 'chat':
       return withAttributes(
         { ...context, syncData: { ...context.syncData, value: '' } },
-        Object.fromEntries(SECRET_ATTRIBUTES.map((field) => [field, ''])),
+        Object.fromEntries(SECRET_ATTRIBUTES.map((field) => [field, '']))
       );
     case 'dice-symbol':
       return withAttributes(context, { face: '' });
     default:
       return withAttributes(
         { ...context, syncData: { ...context.syncData, value: blackOut(context.syncData.value) } },
-        { currentValue: blackOut(attributesOf(context).currentValue) },
+        { currentValue: blackOut(attributesOf(context).currentValue) }
       );
   }
 };
@@ -282,14 +269,14 @@ export const unmasked = (incoming: ObjectContext, stored: ObjectContext): Object
     case 'chat':
       return withAttributes(
         { ...incoming, syncData: { ...incoming.syncData, value: stored.syncData.value } },
-        Object.fromEntries(SECRET_ATTRIBUTES.map((field) => [field, kept[field]])),
+        Object.fromEntries(SECRET_ATTRIBUTES.map((field) => [field, kept[field]]))
       );
     case 'dice-symbol':
       return withAttributes(incoming, { face: kept.face });
     default:
       return withAttributes(
         { ...incoming, syncData: { ...incoming.syncData, value: stored.syncData.value } },
-        { currentValue: kept.currentValue },
+        { currentValue: kept.currentValue }
       );
   }
 };
@@ -298,8 +285,7 @@ export const unmasked = (incoming: ObjectContext, stored: ObjectContext): Object
  * 伏せた形の版の小数部。本物より小さくしておくと、見えるようになったとき、本物の版の方が新しいと
  * わかり、カタログの交換で取り直せる（同じ版だと、つなぎ直したあとも伏せたまま残る）
  */
-export const maskedMinor = (minorVersion: number): number =>
-  minorVersion > 0 ? minorVersion / 2 : -0.5;
+export const maskedMinor = (minorVersion: number): number => (minorVersion > 0 ? minorVersion / 2 : -0.5);
 
 /** その人に見せる形。見せないなら null。伏せた形には、本物より小さい版を付ける */
 export const viewFor = (context: ObjectContext, kind: ViewKind): ObjectContext | null =>

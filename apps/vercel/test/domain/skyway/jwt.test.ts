@@ -48,7 +48,7 @@ describe('signJwt', () => {
         scope: { app: { id: 'app', turn: true, actions: ['read'], channels: [] } },
       },
       'secret',
-      deps,
+      deps
     );
     const parts = token.split('.');
     expect(parts).toHaveLength(3);

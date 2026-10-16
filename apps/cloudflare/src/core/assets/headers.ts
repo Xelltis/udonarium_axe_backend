@@ -7,8 +7,7 @@ const MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
  * SVG を開いたときに効かせる CSP。中に書かれたスクリプトを動かさず、外へ読みに行かせない。
  * 描くのに要る、埋め込みの画像（data:）と style 属性だけを通す
  */
-const SVG_CONTENT_SECURITY_POLICY =
-  "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
 
 /** 置いてあるアセットについて、配信のヘッダーに要ること */
 export interface AssetMeta {

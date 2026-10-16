@@ -161,8 +161,7 @@ export interface AssetTokenRequest {
   type: 'asset-token';
 }
 
-export type ClientMessage =
-  HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest;
+export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest;
 
 // ---- サーバーからクライアントへ ----
 
@@ -604,12 +603,7 @@ export const SERVER_ROLL_FIELD = 'serverRoll';
  * - not-logged-in：ログインしていない人は見学のまま
  * - last-game-master：部屋の GM がいなくなる
  */
-export const ROLE_REJECT_REASONS = [
-  'not-game-master',
-  'unknown-peer',
-  'not-logged-in',
-  'last-game-master',
-] as const;
+export const ROLE_REJECT_REASONS = ['not-game-master', 'unknown-peer', 'not-logged-in', 'last-game-master'] as const;
 export type RoleRejectReason = (typeof ROLE_REJECT_REASONS)[number];
 
 /**
@@ -689,11 +683,7 @@ export interface ObjectVersion {
 export type UpdateVerdict = 'accept' | 'same' | 'stale' | 'deleted';
 
 /** 最後に書いたものを勝たせる（LWW）判定。クライアントの ObjectSynchronizer と同じく、和が厳密に大きいときだけ採る */
-export const judgeUpdate = (
-  stored: ObjectVersion | null,
-  incoming: ObjectVersion,
-  deleted: boolean,
-): UpdateVerdict => {
+export const judgeUpdate = (stored: ObjectVersion | null, incoming: ObjectVersion, deleted: boolean): UpdateVerdict => {
   if (deleted) return 'deleted';
   if (!stored) return 'accept';
   const storedVersion = stored.majorVersion + stored.minorVersion;

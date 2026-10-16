@@ -40,7 +40,7 @@ describe('api entry', () => {
     const res = await app.fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://example.com' },
-      }),
+      })
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('OK');
@@ -52,7 +52,7 @@ describe('api entry', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
         body: JSON.stringify({ formatVersion: 1, channelName: 'room', peerId: 'peer-1' }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveProperty('token');
@@ -64,7 +64,7 @@ describe('api entry', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
         body: JSON.stringify({ formatVersion: 1, channelName: 'room', peerId: 'peer-1' }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveProperty('token');

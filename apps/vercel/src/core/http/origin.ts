@@ -6,10 +6,7 @@ export const tryParseUrl = (value: string): URL | null => {
   }
 };
 
-export const isAllowedOrigin = (
-  requestOrigin: string | undefined,
-  allowedOrigins: string[],
-): boolean => {
+export const isAllowedOrigin = (requestOrigin: string | undefined, allowedOrigins: string[]): boolean => {
   if (allowedOrigins.includes('*')) return true;
   const requested = tryParseUrl(requestOrigin ?? '');
   if (!requested) return false;

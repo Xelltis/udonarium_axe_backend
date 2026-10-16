@@ -1,7 +1,7 @@
 /** ストリームの先頭を、size バイト以上（足りなければ最後まで）読む */
 export const readHead = async (
   reader: ReadableStreamDefaultReader<Uint8Array>,
-  size: number,
+  size: number
 ): Promise<Uint8Array[]> => {
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -28,7 +28,7 @@ export const joinChunks = (chunks: Uint8Array[]): Uint8Array => {
 /** 先に読んだ chunks と、reader の残りを1本のストリームに戻す */
 export const rejoin = (
   chunks: Uint8Array[],
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+  reader: ReadableStreamDefaultReader<Uint8Array>
 ): ReadableStream<Uint8Array> =>
   new ReadableStream({
     start(controller) {

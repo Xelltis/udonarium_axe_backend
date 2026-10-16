@@ -59,16 +59,13 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   CrashWorld: () => import('bcdice/lib/bcdice/game_system/CrashWorld.js'),
   Cthulhu: () => import('bcdice/lib/bcdice/game_system/Cthulhu.js'),
   Cthulhu7th: () => import('bcdice/lib/bcdice/game_system/Cthulhu7th.js'),
-  Cthulhu7th_ChineseTraditional: () =>
-    import('bcdice/lib/bcdice/game_system/Cthulhu7th_ChineseTraditional.js'),
+  Cthulhu7th_ChineseTraditional: () => import('bcdice/lib/bcdice/game_system/Cthulhu7th_ChineseTraditional.js'),
   Cthulhu7th_Korean: () => import('bcdice/lib/bcdice/game_system/Cthulhu7th_Korean.js'),
   CthulhuTech: () => import('bcdice/lib/bcdice/game_system/CthulhuTech.js'),
-  Cthulhu_ChineseTraditional: () =>
-    import('bcdice/lib/bcdice/game_system/Cthulhu_ChineseTraditional.js'),
+  Cthulhu_ChineseTraditional: () => import('bcdice/lib/bcdice/game_system/Cthulhu_ChineseTraditional.js'),
   Cthulhu_English: () => import('bcdice/lib/bcdice/game_system/Cthulhu_English.js'),
   Cthulhu_Korean: () => import('bcdice/lib/bcdice/game_system/Cthulhu_Korean.js'),
-  Cthulhu_SimplifiedChinese: () =>
-    import('bcdice/lib/bcdice/game_system/Cthulhu_SimplifiedChinese.js'),
+  Cthulhu_SimplifiedChinese: () => import('bcdice/lib/bcdice/game_system/Cthulhu_SimplifiedChinese.js'),
   CyberpunkRed: () => import('bcdice/lib/bcdice/game_system/CyberpunkRed.js'),
   CyberpunkRed_Korean: () => import('bcdice/lib/bcdice/game_system/CyberpunkRed_Korean.js'),
   DarkBlaze: () => import('bcdice/lib/bcdice/game_system/DarkBlaze.js'),
@@ -90,10 +87,8 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   Dracurouge_Korean: () => import('bcdice/lib/bcdice/game_system/Dracurouge_Korean.js'),
   DungeonsAndDragons: () => import('bcdice/lib/bcdice/game_system/DungeonsAndDragons.js'),
   DungeonsAndDragons5: () => import('bcdice/lib/bcdice/game_system/DungeonsAndDragons5.js'),
-  DungeonsAndDragons5_Korean: () =>
-    import('bcdice/lib/bcdice/game_system/DungeonsAndDragons5_Korean.js'),
-  DungeonsAndDragons_Korean: () =>
-    import('bcdice/lib/bcdice/game_system/DungeonsAndDragons_Korean.js'),
+  DungeonsAndDragons5_Korean: () => import('bcdice/lib/bcdice/game_system/DungeonsAndDragons5_Korean.js'),
+  DungeonsAndDragons_Korean: () => import('bcdice/lib/bcdice/game_system/DungeonsAndDragons_Korean.js'),
   EarthDawn: () => import('bcdice/lib/bcdice/game_system/EarthDawn.js'),
   EarthDawn3: () => import('bcdice/lib/bcdice/game_system/EarthDawn3.js'),
   EarthDawn4: () => import('bcdice/lib/bcdice/game_system/EarthDawn4.js'),
@@ -167,8 +162,7 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   KemonoNoMori: () => import('bcdice/lib/bcdice/game_system/KemonoNoMori.js'),
   KemonoNoMori_Korean: () => import('bcdice/lib/bcdice/game_system/KemonoNoMori_Korean.js'),
   KillDeathBusiness: () => import('bcdice/lib/bcdice/game_system/KillDeathBusiness.js'),
-  KillDeathBusiness_Korean: () =>
-    import('bcdice/lib/bcdice/game_system/KillDeathBusiness_Korean.js'),
+  KillDeathBusiness_Korean: () => import('bcdice/lib/bcdice/game_system/KillDeathBusiness_Korean.js'),
   KimitoYell: () => import('bcdice/lib/bcdice/game_system/KimitoYell.js'),
   KinAriel: () => import('bcdice/lib/bcdice/game_system/KinAriel.js'),
   KizunaBullet: () => import('bcdice/lib/bcdice/game_system/KizunaBullet.js'),
@@ -189,8 +183,7 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   MagicPunk_Korean: () => import('bcdice/lib/bcdice/game_system/MagicPunk_Korean.js'),
   MagicaLogia: () => import('bcdice/lib/bcdice/game_system/MagicaLogia.js'),
   MagicaLogia_Korean: () => import('bcdice/lib/bcdice/game_system/MagicaLogia_Korean.js'),
-  MagicaLogia_SimplifiedChinese: () =>
-    import('bcdice/lib/bcdice/game_system/MagicaLogia_SimplifiedChinese.js'),
+  MagicaLogia_SimplifiedChinese: () => import('bcdice/lib/bcdice/game_system/MagicaLogia_SimplifiedChinese.js'),
   Magius: () => import('bcdice/lib/bcdice/game_system/Magius.js'),
   Magius_3rdNewTokyoCity: () => import('bcdice/lib/bcdice/game_system/Magius_3rdNewTokyoCity.js'),
   MamonoScramble: () => import('bcdice/lib/bcdice/game_system/MamonoScramble.js'),
@@ -253,8 +246,7 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   RoleMaster: () => import('bcdice/lib/bcdice/game_system/RoleMaster.js'),
   RuinBreakers: () => import('bcdice/lib/bcdice/game_system/RuinBreakers.js'),
   RuneQuest: () => import('bcdice/lib/bcdice/game_system/RuneQuest.js'),
-  RuneQuestRoleplayingInGlorantha: () =>
-    import('bcdice/lib/bcdice/game_system/RuneQuestRoleplayingInGlorantha.js'),
+  RuneQuestRoleplayingInGlorantha: () => import('bcdice/lib/bcdice/game_system/RuneQuestRoleplayingInGlorantha.js'),
   RyuTuber: () => import('bcdice/lib/bcdice/game_system/RyuTuber.js'),
   Ryutama: () => import('bcdice/lib/bcdice/game_system/Ryutama.js'),
   SRS: () => import('bcdice/lib/bcdice/game_system/SRS.js'),
@@ -270,8 +262,7 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   ShadowRun4: () => import('bcdice/lib/bcdice/game_system/ShadowRun4.js'),
   ShadowRun5: () => import('bcdice/lib/bcdice/game_system/ShadowRun5.js'),
   SharedFantasia: () => import('bcdice/lib/bcdice/game_system/SharedFantasia.js'),
-  ShinMegamiTenseiKakuseihen: () =>
-    import('bcdice/lib/bcdice/game_system/ShinMegamiTenseiKakuseihen.js'),
+  ShinMegamiTenseiKakuseihen: () => import('bcdice/lib/bcdice/game_system/ShinMegamiTenseiKakuseihen.js'),
   ShinkuuGakuen: () => import('bcdice/lib/bcdice/game_system/ShinkuuGakuen.js'),
   ShinobiGami: () => import('bcdice/lib/bcdice/game_system/ShinobiGami.js'),
   ShinobiGami_Korean: () => import('bcdice/lib/bcdice/game_system/ShinobiGami_Korean.js'),
@@ -295,13 +286,10 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   Strave: () => import('bcdice/lib/bcdice/game_system/Strave.js'),
   SwordWorld: () => import('bcdice/lib/bcdice/game_system/SwordWorld.js'),
   SwordWorld2_0: () => import('bcdice/lib/bcdice/game_system/SwordWorld2_0.js'),
-  SwordWorld2_0_SimplifiedChinese: () =>
-    import('bcdice/lib/bcdice/game_system/SwordWorld2_0_SimplifiedChinese.js'),
+  SwordWorld2_0_SimplifiedChinese: () => import('bcdice/lib/bcdice/game_system/SwordWorld2_0_SimplifiedChinese.js'),
   SwordWorld2_5: () => import('bcdice/lib/bcdice/game_system/SwordWorld2_5.js'),
-  SwordWorld2_5_SimplifiedChinese: () =>
-    import('bcdice/lib/bcdice/game_system/SwordWorld2_5_SimplifiedChinese.js'),
-  SwordWorld_SimplifiedChinese: () =>
-    import('bcdice/lib/bcdice/game_system/SwordWorld_SimplifiedChinese.js'),
+  SwordWorld2_5_SimplifiedChinese: () => import('bcdice/lib/bcdice/game_system/SwordWorld2_5_SimplifiedChinese.js'),
+  SwordWorld_SimplifiedChinese: () => import('bcdice/lib/bcdice/game_system/SwordWorld_SimplifiedChinese.js'),
   TacticalExorcist: () => import('bcdice/lib/bcdice/game_system/TacticalExorcist.js'),
   TalesFromTheLoop: () => import('bcdice/lib/bcdice/game_system/TalesFromTheLoop.js'),
   TenkaRyouran: () => import('bcdice/lib/bcdice/game_system/TenkaRyouran.js'),
@@ -309,8 +297,7 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   TensaiGunshiNiNaro: () => import('bcdice/lib/bcdice/game_system/TensaiGunshiNiNaro.js'),
   TheIndieHack: () => import('bcdice/lib/bcdice/game_system/TheIndieHack.js'),
   TheOneRing2nd: () => import('bcdice/lib/bcdice/game_system/TheOneRing2nd.js'),
-  TheUnofficialHollowKnightRPG: () =>
-    import('bcdice/lib/bcdice/game_system/TheUnofficialHollowKnightRPG.js'),
+  TheUnofficialHollowKnightRPG: () => import('bcdice/lib/bcdice/game_system/TheUnofficialHollowKnightRPG.js'),
   TherapieSein: () => import('bcdice/lib/bcdice/game_system/TherapieSein.js'),
   TokumeiTenkousei: () => import('bcdice/lib/bcdice/game_system/TokumeiTenkousei.js'),
   TokyoGhostResearch: () => import('bcdice/lib/bcdice/game_system/TokyoGhostResearch.js'),
@@ -335,15 +322,13 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   WaresBlade: () => import('bcdice/lib/bcdice/game_system/WaresBlade.js'),
   Warhammer: () => import('bcdice/lib/bcdice/game_system/Warhammer.js'),
   Warhammer4: () => import('bcdice/lib/bcdice/game_system/Warhammer4.js'),
-  WerewolfTheApocalypse5th: () =>
-    import('bcdice/lib/bcdice/game_system/WerewolfTheApocalypse5th.js'),
+  WerewolfTheApocalypse5th: () => import('bcdice/lib/bcdice/game_system/WerewolfTheApocalypse5th.js'),
   WitchQuest: () => import('bcdice/lib/bcdice/game_system/WitchQuest.js'),
   WoW: () => import('bcdice/lib/bcdice/game_system/WoW.js'),
   WorldEndScrapyard: () => import('bcdice/lib/bcdice/game_system/WorldEndScrapyard.js'),
   WorldOfDarkness: () => import('bcdice/lib/bcdice/game_system/WorldOfDarkness.js'),
   WorldsEndFrontline: () => import('bcdice/lib/bcdice/game_system/WorldsEndFrontline.js'),
-  WorldsEndFrontline_Korean: () =>
-    import('bcdice/lib/bcdice/game_system/WorldsEndFrontline_Korean.js'),
+  WorldsEndFrontline_Korean: () => import('bcdice/lib/bcdice/game_system/WorldsEndFrontline_Korean.js'),
   YankeeMustDie: () => import('bcdice/lib/bcdice/game_system/YankeeMustDie.js'),
   YankeeYogSothoth: () => import('bcdice/lib/bcdice/game_system/YankeeYogSothoth.js'),
   YearZeroEngine: () => import('bcdice/lib/bcdice/game_system/YearZeroEngine.js'),
@@ -358,202 +343,113 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
 
 /** 「元のクラス名.ロケール」から、その翻訳を読み込む */
 export const I18N_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {
-  'Airgetlamh.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Airgetlamh.ja_jp.json', { with: { type: 'json' } }),
-  'Airgetlamh.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Airgetlamh.ko_kr.json', { with: { type: 'json' } }),
-  'Alsetto.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Alsetto.ja_jp.json', { with: { type: 'json' } }),
-  'Alsetto.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Alsetto.ko_kr.json', { with: { type: 'json' } }),
-  'Amadeus.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Amadeus.ja_jp.json', { with: { type: 'json' } }),
-  'Amadeus.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Amadeus.ko_kr.json', { with: { type: 'json' } }),
-  'AnimaAnimus.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/AnimaAnimus.ja_jp.json', { with: { type: 'json' } }),
-  'AnimaAnimus.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/AnimaAnimus.ko_kr.json', { with: { type: 'json' } }),
-  'Arianrhod.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Arianrhod.ja_jp.json', { with: { type: 'json' } }),
-  'Arianrhod.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Arianrhod.ko_kr.json', { with: { type: 'json' } }),
-  'BeginningIdol.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/BeginningIdol.ja_jp.json', { with: { type: 'json' } }),
-  'BeginningIdol.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/BeginningIdol.ko_kr.json', { with: { type: 'json' } }),
-  'BlackJacket.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/BlackJacket.ja_jp.json', { with: { type: 'json' } }),
-  'BlackJacket.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/BlackJacket.ko_kr.json', { with: { type: 'json' } }),
-  'Bloodorium.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Bloodorium.ja_jp.json', { with: { type: 'json' } }),
-  'Bloodorium.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Bloodorium.ko_kr.json', { with: { type: 'json' } }),
-  'Cthulhu.en_us': () =>
-    import('bcdice/lib/bcdice/i18n/Cthulhu.en_us.json', { with: { type: 'json' } }),
-  'Cthulhu.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Cthulhu.ja_jp.json', { with: { type: 'json' } }),
-  'Cthulhu.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Cthulhu.ko_kr.json', { with: { type: 'json' } }),
-  'Cthulhu.zh_hans': () =>
-    import('bcdice/lib/bcdice/i18n/Cthulhu.zh_hans.json', { with: { type: 'json' } }),
-  'Cthulhu.zh_hant': () =>
-    import('bcdice/lib/bcdice/i18n/Cthulhu.zh_hant.json', { with: { type: 'json' } }),
-  'CyberpunkRed.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/CyberpunkRed.ja_jp.json', { with: { type: 'json' } }),
-  'CyberpunkRed.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/CyberpunkRed.ko_kr.json', { with: { type: 'json' } }),
-  'DetatokoSaga.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/DetatokoSaga.ja_jp.json', { with: { type: 'json' } }),
-  'DetatokoSaga.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/DetatokoSaga.ko_kr.json', { with: { type: 'json' } }),
-  'DoubleCross.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/DoubleCross.ja_jp.json', { with: { type: 'json' } }),
-  'DoubleCross.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/DoubleCross.ko_kr.json', { with: { type: 'json' } }),
-  'Dracurouge.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Dracurouge.ja_jp.json', { with: { type: 'json' } }),
-  'Dracurouge.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Dracurouge.ko_kr.json', { with: { type: 'json' } }),
-  'Emoklore.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Emoklore.ja_jp.json', { with: { type: 'json' } }),
-  'Emoklore.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Emoklore.ko_kr.json', { with: { type: 'json' } }),
-  'Fiasco.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Fiasco.ja_jp.json', { with: { type: 'json' } }),
-  'Fiasco.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Fiasco.ko_kr.json', { with: { type: 'json' } }),
+  'Airgetlamh.ja_jp': () => import('bcdice/lib/bcdice/i18n/Airgetlamh.ja_jp.json', { with: { type: 'json' } }),
+  'Airgetlamh.ko_kr': () => import('bcdice/lib/bcdice/i18n/Airgetlamh.ko_kr.json', { with: { type: 'json' } }),
+  'Alsetto.ja_jp': () => import('bcdice/lib/bcdice/i18n/Alsetto.ja_jp.json', { with: { type: 'json' } }),
+  'Alsetto.ko_kr': () => import('bcdice/lib/bcdice/i18n/Alsetto.ko_kr.json', { with: { type: 'json' } }),
+  'Amadeus.ja_jp': () => import('bcdice/lib/bcdice/i18n/Amadeus.ja_jp.json', { with: { type: 'json' } }),
+  'Amadeus.ko_kr': () => import('bcdice/lib/bcdice/i18n/Amadeus.ko_kr.json', { with: { type: 'json' } }),
+  'AnimaAnimus.ja_jp': () => import('bcdice/lib/bcdice/i18n/AnimaAnimus.ja_jp.json', { with: { type: 'json' } }),
+  'AnimaAnimus.ko_kr': () => import('bcdice/lib/bcdice/i18n/AnimaAnimus.ko_kr.json', { with: { type: 'json' } }),
+  'Arianrhod.ja_jp': () => import('bcdice/lib/bcdice/i18n/Arianrhod.ja_jp.json', { with: { type: 'json' } }),
+  'Arianrhod.ko_kr': () => import('bcdice/lib/bcdice/i18n/Arianrhod.ko_kr.json', { with: { type: 'json' } }),
+  'BeginningIdol.ja_jp': () => import('bcdice/lib/bcdice/i18n/BeginningIdol.ja_jp.json', { with: { type: 'json' } }),
+  'BeginningIdol.ko_kr': () => import('bcdice/lib/bcdice/i18n/BeginningIdol.ko_kr.json', { with: { type: 'json' } }),
+  'BlackJacket.ja_jp': () => import('bcdice/lib/bcdice/i18n/BlackJacket.ja_jp.json', { with: { type: 'json' } }),
+  'BlackJacket.ko_kr': () => import('bcdice/lib/bcdice/i18n/BlackJacket.ko_kr.json', { with: { type: 'json' } }),
+  'Bloodorium.ja_jp': () => import('bcdice/lib/bcdice/i18n/Bloodorium.ja_jp.json', { with: { type: 'json' } }),
+  'Bloodorium.ko_kr': () => import('bcdice/lib/bcdice/i18n/Bloodorium.ko_kr.json', { with: { type: 'json' } }),
+  'Cthulhu.en_us': () => import('bcdice/lib/bcdice/i18n/Cthulhu.en_us.json', { with: { type: 'json' } }),
+  'Cthulhu.ja_jp': () => import('bcdice/lib/bcdice/i18n/Cthulhu.ja_jp.json', { with: { type: 'json' } }),
+  'Cthulhu.ko_kr': () => import('bcdice/lib/bcdice/i18n/Cthulhu.ko_kr.json', { with: { type: 'json' } }),
+  'Cthulhu.zh_hans': () => import('bcdice/lib/bcdice/i18n/Cthulhu.zh_hans.json', { with: { type: 'json' } }),
+  'Cthulhu.zh_hant': () => import('bcdice/lib/bcdice/i18n/Cthulhu.zh_hant.json', { with: { type: 'json' } }),
+  'CyberpunkRed.ja_jp': () => import('bcdice/lib/bcdice/i18n/CyberpunkRed.ja_jp.json', { with: { type: 'json' } }),
+  'CyberpunkRed.ko_kr': () => import('bcdice/lib/bcdice/i18n/CyberpunkRed.ko_kr.json', { with: { type: 'json' } }),
+  'DetatokoSaga.ja_jp': () => import('bcdice/lib/bcdice/i18n/DetatokoSaga.ja_jp.json', { with: { type: 'json' } }),
+  'DetatokoSaga.ko_kr': () => import('bcdice/lib/bcdice/i18n/DetatokoSaga.ko_kr.json', { with: { type: 'json' } }),
+  'DoubleCross.ja_jp': () => import('bcdice/lib/bcdice/i18n/DoubleCross.ja_jp.json', { with: { type: 'json' } }),
+  'DoubleCross.ko_kr': () => import('bcdice/lib/bcdice/i18n/DoubleCross.ko_kr.json', { with: { type: 'json' } }),
+  'Dracurouge.ja_jp': () => import('bcdice/lib/bcdice/i18n/Dracurouge.ja_jp.json', { with: { type: 'json' } }),
+  'Dracurouge.ko_kr': () => import('bcdice/lib/bcdice/i18n/Dracurouge.ko_kr.json', { with: { type: 'json' } }),
+  'Emoklore.ja_jp': () => import('bcdice/lib/bcdice/i18n/Emoklore.ja_jp.json', { with: { type: 'json' } }),
+  'Emoklore.ko_kr': () => import('bcdice/lib/bcdice/i18n/Emoklore.ko_kr.json', { with: { type: 'json' } }),
+  'Fiasco.ja_jp': () => import('bcdice/lib/bcdice/i18n/Fiasco.ja_jp.json', { with: { type: 'json' } }),
+  'Fiasco.ko_kr': () => import('bcdice/lib/bcdice/i18n/Fiasco.ko_kr.json', { with: { type: 'json' } }),
   'FinalFantasyXIV.en_us': () =>
     import('bcdice/lib/bcdice/i18n/FinalFantasyXIV.en_us.json', { with: { type: 'json' } }),
   'FinalFantasyXIV.ja_jp': () =>
     import('bcdice/lib/bcdice/i18n/FinalFantasyXIV.ja_jp.json', { with: { type: 'json' } }),
-  'FutariSousa.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/FutariSousa.ja_jp.json', { with: { type: 'json' } }),
-  'FutariSousa.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/FutariSousa.ko_kr.json', { with: { type: 'json' } }),
-  'HatsuneMiku.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/HatsuneMiku.ja_jp.json', { with: { type: 'json' } }),
-  'HatsuneMiku.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/HatsuneMiku.ko_kr.json', { with: { type: 'json' } }),
-  'Insane.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Insane.ja_jp.json', { with: { type: 'json' } }),
-  'Insane.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Insane.ko_kr.json', { with: { type: 'json' } }),
-  'Irisbane.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Irisbane.ja_jp.json', { with: { type: 'json' } }),
-  'Irisbane.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Irisbane.ko_kr.json', { with: { type: 'json' } }),
-  'JuinKansen.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/JuinKansen.ja_jp.json', { with: { type: 'json' } }),
-  'JuinKansen.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/JuinKansen.ko_kr.json', { with: { type: 'json' } }),
-  'Kamigakari.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Kamigakari.ja_jp.json', { with: { type: 'json' } }),
-  'Kamigakari.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Kamigakari.ko_kr.json', { with: { type: 'json' } }),
-  'KemonoNoMori.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/KemonoNoMori.ja_jp.json', { with: { type: 'json' } }),
-  'KemonoNoMori.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/KemonoNoMori.ko_kr.json', { with: { type: 'json' } }),
+  'FutariSousa.ja_jp': () => import('bcdice/lib/bcdice/i18n/FutariSousa.ja_jp.json', { with: { type: 'json' } }),
+  'FutariSousa.ko_kr': () => import('bcdice/lib/bcdice/i18n/FutariSousa.ko_kr.json', { with: { type: 'json' } }),
+  'HatsuneMiku.ja_jp': () => import('bcdice/lib/bcdice/i18n/HatsuneMiku.ja_jp.json', { with: { type: 'json' } }),
+  'HatsuneMiku.ko_kr': () => import('bcdice/lib/bcdice/i18n/HatsuneMiku.ko_kr.json', { with: { type: 'json' } }),
+  'Insane.ja_jp': () => import('bcdice/lib/bcdice/i18n/Insane.ja_jp.json', { with: { type: 'json' } }),
+  'Insane.ko_kr': () => import('bcdice/lib/bcdice/i18n/Insane.ko_kr.json', { with: { type: 'json' } }),
+  'Irisbane.ja_jp': () => import('bcdice/lib/bcdice/i18n/Irisbane.ja_jp.json', { with: { type: 'json' } }),
+  'Irisbane.ko_kr': () => import('bcdice/lib/bcdice/i18n/Irisbane.ko_kr.json', { with: { type: 'json' } }),
+  'JuinKansen.ja_jp': () => import('bcdice/lib/bcdice/i18n/JuinKansen.ja_jp.json', { with: { type: 'json' } }),
+  'JuinKansen.ko_kr': () => import('bcdice/lib/bcdice/i18n/JuinKansen.ko_kr.json', { with: { type: 'json' } }),
+  'Kamigakari.ja_jp': () => import('bcdice/lib/bcdice/i18n/Kamigakari.ja_jp.json', { with: { type: 'json' } }),
+  'Kamigakari.ko_kr': () => import('bcdice/lib/bcdice/i18n/Kamigakari.ko_kr.json', { with: { type: 'json' } }),
+  'KemonoNoMori.ja_jp': () => import('bcdice/lib/bcdice/i18n/KemonoNoMori.ja_jp.json', { with: { type: 'json' } }),
+  'KemonoNoMori.ko_kr': () => import('bcdice/lib/bcdice/i18n/KemonoNoMori.ko_kr.json', { with: { type: 'json' } }),
   'KillDeathBusiness.ja_jp': () =>
     import('bcdice/lib/bcdice/i18n/KillDeathBusiness.ja_jp.json', { with: { type: 'json' } }),
   'KillDeathBusiness.ko_kr': () =>
     import('bcdice/lib/bcdice/i18n/KillDeathBusiness.ko_kr.json', { with: { type: 'json' } }),
-  'KizunaBullet.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/KizunaBullet.ja_jp.json', { with: { type: 'json' } }),
-  'KizunaBullet.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/KizunaBullet.ko_kr.json', { with: { type: 'json' } }),
-  'LogHorizon.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/LogHorizon.ja_jp.json', { with: { type: 'json' } }),
-  'LogHorizon.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/LogHorizon.ko_kr.json', { with: { type: 'json' } }),
-  'MagicPunk.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/MagicPunk.ja_jp.json', { with: { type: 'json' } }),
-  'MagicPunk.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/MagicPunk.ko_kr.json', { with: { type: 'json' } }),
-  'MagicaLogia.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/MagicaLogia.ja_jp.json', { with: { type: 'json' } }),
-  'MagicaLogia.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/MagicaLogia.ko_kr.json', { with: { type: 'json' } }),
-  'MagicaLogia.zh_hans': () =>
-    import('bcdice/lib/bcdice/i18n/MagicaLogia.zh_hans.json', { with: { type: 'json' } }),
-  'MonotoneMuseum.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/MonotoneMuseum.ja_jp.json', { with: { type: 'json' } }),
-  'MonotoneMuseum.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/MonotoneMuseum.ko_kr.json', { with: { type: 'json' } }),
-  'MorkBorg.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/MorkBorg.ja_jp.json', { with: { type: 'json' } }),
-  'MorkBorg.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/MorkBorg.ko_kr.json', { with: { type: 'json' } }),
-  'Nechronica.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Nechronica.ja_jp.json', { with: { type: 'json' } }),
-  'Nechronica.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Nechronica.ko_kr.json', { with: { type: 'json' } }),
+  'KizunaBullet.ja_jp': () => import('bcdice/lib/bcdice/i18n/KizunaBullet.ja_jp.json', { with: { type: 'json' } }),
+  'KizunaBullet.ko_kr': () => import('bcdice/lib/bcdice/i18n/KizunaBullet.ko_kr.json', { with: { type: 'json' } }),
+  'LogHorizon.ja_jp': () => import('bcdice/lib/bcdice/i18n/LogHorizon.ja_jp.json', { with: { type: 'json' } }),
+  'LogHorizon.ko_kr': () => import('bcdice/lib/bcdice/i18n/LogHorizon.ko_kr.json', { with: { type: 'json' } }),
+  'MagicPunk.ja_jp': () => import('bcdice/lib/bcdice/i18n/MagicPunk.ja_jp.json', { with: { type: 'json' } }),
+  'MagicPunk.ko_kr': () => import('bcdice/lib/bcdice/i18n/MagicPunk.ko_kr.json', { with: { type: 'json' } }),
+  'MagicaLogia.ja_jp': () => import('bcdice/lib/bcdice/i18n/MagicaLogia.ja_jp.json', { with: { type: 'json' } }),
+  'MagicaLogia.ko_kr': () => import('bcdice/lib/bcdice/i18n/MagicaLogia.ko_kr.json', { with: { type: 'json' } }),
+  'MagicaLogia.zh_hans': () => import('bcdice/lib/bcdice/i18n/MagicaLogia.zh_hans.json', { with: { type: 'json' } }),
+  'MonotoneMuseum.ja_jp': () => import('bcdice/lib/bcdice/i18n/MonotoneMuseum.ja_jp.json', { with: { type: 'json' } }),
+  'MonotoneMuseum.ko_kr': () => import('bcdice/lib/bcdice/i18n/MonotoneMuseum.ko_kr.json', { with: { type: 'json' } }),
+  'MorkBorg.ja_jp': () => import('bcdice/lib/bcdice/i18n/MorkBorg.ja_jp.json', { with: { type: 'json' } }),
+  'MorkBorg.ko_kr': () => import('bcdice/lib/bcdice/i18n/MorkBorg.ko_kr.json', { with: { type: 'json' } }),
+  'Nechronica.ja_jp': () => import('bcdice/lib/bcdice/i18n/Nechronica.ja_jp.json', { with: { type: 'json' } }),
+  'Nechronica.ko_kr': () => import('bcdice/lib/bcdice/i18n/Nechronica.ko_kr.json', { with: { type: 'json' } }),
   'NegikureNegimaki.ja_jp': () =>
     import('bcdice/lib/bcdice/i18n/NegikureNegimaki.ja_jp.json', { with: { type: 'json' } }),
   'NegikureNegimaki.ko_kr': () =>
     import('bcdice/lib/bcdice/i18n/NegikureNegimaki.ko_kr.json', { with: { type: 'json' } }),
-  'NinjaSlayer2.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/NinjaSlayer2.ja_jp.json', { with: { type: 'json' } }),
-  'Nuekagami.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Nuekagami.ja_jp.json', { with: { type: 'json' } }),
-  'Nuekagami.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Nuekagami.ko_kr.json', { with: { type: 'json' } }),
-  'Revulture.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Revulture.ja_jp.json', { with: { type: 'json' } }),
-  'Revulture.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Revulture.ko_kr.json', { with: { type: 'json' } }),
+  'NinjaSlayer2.ja_jp': () => import('bcdice/lib/bcdice/i18n/NinjaSlayer2.ja_jp.json', { with: { type: 'json' } }),
+  'Nuekagami.ja_jp': () => import('bcdice/lib/bcdice/i18n/Nuekagami.ja_jp.json', { with: { type: 'json' } }),
+  'Nuekagami.ko_kr': () => import('bcdice/lib/bcdice/i18n/Nuekagami.ko_kr.json', { with: { type: 'json' } }),
+  'Revulture.ja_jp': () => import('bcdice/lib/bcdice/i18n/Revulture.ja_jp.json', { with: { type: 'json' } }),
+  'Revulture.ko_kr': () => import('bcdice/lib/bcdice/i18n/Revulture.ko_kr.json', { with: { type: 'json' } }),
   'SRS.ja_jp': () => import('bcdice/lib/bcdice/i18n/SRS.ja_jp.json', { with: { type: 'json' } }),
   'SRS.ko_kr': () => import('bcdice/lib/bcdice/i18n/SRS.ko_kr.json', { with: { type: 'json' } }),
-  'ShinobiGami.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/ShinobiGami.ja_jp.json', { with: { type: 'json' } }),
-  'ShinobiGami.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/ShinobiGami.ko_kr.json', { with: { type: 'json' } }),
-  'SkynautsBouken.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/SkynautsBouken.ja_jp.json', { with: { type: 'json' } }),
-  'SkynautsBouken.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/SkynautsBouken.ko_kr.json', { with: { type: 'json' } }),
-  'StarryDolls.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/StarryDolls.ja_jp.json', { with: { type: 'json' } }),
-  'StarryDolls.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/StarryDolls.ko_kr.json', { with: { type: 'json' } }),
-  'StellarKnights.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/StellarKnights.ja_jp.json', { with: { type: 'json' } }),
-  'StellarKnights.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/StellarKnights.ko_kr.json', { with: { type: 'json' } }),
-  'StratoShout.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/StratoShout.ja_jp.json', { with: { type: 'json' } }),
-  'StratoShout.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/StratoShout.ko_kr.json', { with: { type: 'json' } }),
-  'SwordWorld.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/SwordWorld.ja_jp.json', { with: { type: 'json' } }),
-  'SwordWorld.zh_hans': () =>
-    import('bcdice/lib/bcdice/i18n/SwordWorld.zh_hans.json', { with: { type: 'json' } }),
-  'SwordWorld2_0.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/SwordWorld2_0.ja_jp.json', { with: { type: 'json' } }),
+  'ShinobiGami.ja_jp': () => import('bcdice/lib/bcdice/i18n/ShinobiGami.ja_jp.json', { with: { type: 'json' } }),
+  'ShinobiGami.ko_kr': () => import('bcdice/lib/bcdice/i18n/ShinobiGami.ko_kr.json', { with: { type: 'json' } }),
+  'SkynautsBouken.ja_jp': () => import('bcdice/lib/bcdice/i18n/SkynautsBouken.ja_jp.json', { with: { type: 'json' } }),
+  'SkynautsBouken.ko_kr': () => import('bcdice/lib/bcdice/i18n/SkynautsBouken.ko_kr.json', { with: { type: 'json' } }),
+  'StarryDolls.ja_jp': () => import('bcdice/lib/bcdice/i18n/StarryDolls.ja_jp.json', { with: { type: 'json' } }),
+  'StarryDolls.ko_kr': () => import('bcdice/lib/bcdice/i18n/StarryDolls.ko_kr.json', { with: { type: 'json' } }),
+  'StellarKnights.ja_jp': () => import('bcdice/lib/bcdice/i18n/StellarKnights.ja_jp.json', { with: { type: 'json' } }),
+  'StellarKnights.ko_kr': () => import('bcdice/lib/bcdice/i18n/StellarKnights.ko_kr.json', { with: { type: 'json' } }),
+  'StratoShout.ja_jp': () => import('bcdice/lib/bcdice/i18n/StratoShout.ja_jp.json', { with: { type: 'json' } }),
+  'StratoShout.ko_kr': () => import('bcdice/lib/bcdice/i18n/StratoShout.ko_kr.json', { with: { type: 'json' } }),
+  'SwordWorld.ja_jp': () => import('bcdice/lib/bcdice/i18n/SwordWorld.ja_jp.json', { with: { type: 'json' } }),
+  'SwordWorld.zh_hans': () => import('bcdice/lib/bcdice/i18n/SwordWorld.zh_hans.json', { with: { type: 'json' } }),
+  'SwordWorld2_0.ja_jp': () => import('bcdice/lib/bcdice/i18n/SwordWorld2_0.ja_jp.json', { with: { type: 'json' } }),
   'SwordWorld2_0.zh_hans': () =>
     import('bcdice/lib/bcdice/i18n/SwordWorld2_0.zh_hans.json', { with: { type: 'json' } }),
-  'SwordWorld2_5.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/SwordWorld2_5.ja_jp.json', { with: { type: 'json' } }),
+  'SwordWorld2_5.ja_jp': () => import('bcdice/lib/bcdice/i18n/SwordWorld2_5.ja_jp.json', { with: { type: 'json' } }),
   'SwordWorld2_5.zh_hans': () =>
     import('bcdice/lib/bcdice/i18n/SwordWorld2_5.zh_hans.json', { with: { type: 'json' } }),
   'TensaiGunshiNiNaro.ja_jp': () =>
     import('bcdice/lib/bcdice/i18n/TensaiGunshiNiNaro.ja_jp.json', { with: { type: 'json' } }),
-  'UnsungDuet.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/UnsungDuet.ja_jp.json', { with: { type: 'json' } }),
-  'UnsungDuet.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/UnsungDuet.ko_kr.json', { with: { type: 'json' } }),
-  'Ventangle.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/Ventangle.ja_jp.json', { with: { type: 'json' } }),
-  'Ventangle.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/Ventangle.ko_kr.json', { with: { type: 'json' } }),
-  'YearZeroEngine.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/YearZeroEngine.ja_jp.json', { with: { type: 'json' } }),
-  'YearZeroEngine.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/YearZeroEngine.ko_kr.json', { with: { type: 'json' } }),
-  'ZombiLine.ja_jp': () =>
-    import('bcdice/lib/bcdice/i18n/ZombiLine.ja_jp.json', { with: { type: 'json' } }),
-  'ZombiLine.ko_kr': () =>
-    import('bcdice/lib/bcdice/i18n/ZombiLine.ko_kr.json', { with: { type: 'json' } }),
+  'UnsungDuet.ja_jp': () => import('bcdice/lib/bcdice/i18n/UnsungDuet.ja_jp.json', { with: { type: 'json' } }),
+  'UnsungDuet.ko_kr': () => import('bcdice/lib/bcdice/i18n/UnsungDuet.ko_kr.json', { with: { type: 'json' } }),
+  'Ventangle.ja_jp': () => import('bcdice/lib/bcdice/i18n/Ventangle.ja_jp.json', { with: { type: 'json' } }),
+  'Ventangle.ko_kr': () => import('bcdice/lib/bcdice/i18n/Ventangle.ko_kr.json', { with: { type: 'json' } }),
+  'YearZeroEngine.ja_jp': () => import('bcdice/lib/bcdice/i18n/YearZeroEngine.ja_jp.json', { with: { type: 'json' } }),
+  'YearZeroEngine.ko_kr': () => import('bcdice/lib/bcdice/i18n/YearZeroEngine.ko_kr.json', { with: { type: 'json' } }),
+  'ZombiLine.ja_jp': () => import('bcdice/lib/bcdice/i18n/ZombiLine.ja_jp.json', { with: { type: 'json' } }),
+  'ZombiLine.ko_kr': () => import('bcdice/lib/bcdice/i18n/ZombiLine.ko_kr.json', { with: { type: 'json' } }),
 };

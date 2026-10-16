@@ -94,7 +94,7 @@ export const redisAccount = (redis: Redis, key: KeyOf, accountKey: string): Acco
   /** 期限のうちで、秘密の合うトークンの系統と中身。無ければ null */
   const findRefreshToken = async (
     token: Secret,
-    hash: string,
+    hash: string
   ): Promise<{ family: string; entry: TokenEntry } | null> => {
     const family = await redis.get(of('rt', token.id));
     if (!family) return null;
@@ -179,10 +179,7 @@ export const redisAccount = (redis: Redis, key: KeyOf, accountKey: string): Acco
 
     async erase(userId: string): Promise<boolean> {
       if ((await account())?.userId !== userId) return false;
-      const [codes, families] = await Promise.all([
-        redis.sMembers(of('codes')),
-        redis.sMembers(of('families')),
-      ]);
+      const [codes, families] = await Promise.all([redis.sMembers(of('codes')), redis.sMembers(of('families'))]);
       await redis.del([
         of('profile'),
         of('codes'),

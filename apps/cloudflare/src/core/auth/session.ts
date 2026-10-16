@@ -17,9 +17,7 @@ export const unpackSecret = (text: string): { accountKey: string; secret: Secret
   if (!match) return null;
   const [, key, id, secret] = match;
   try {
-    const bytes = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (char) =>
-      char.charCodeAt(0),
-    );
+    const bytes = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0));
     return { accountKey: decoder.decode(bytes), secret: { id, secret } };
   } catch {
     // base64 として読めない
@@ -37,7 +35,7 @@ export const tokensOf = (session: Session, login: LoginConfig): TokenResponse =>
       name: session.account.name,
     },
     ACCESS_TOKEN_SECONDS,
-    login.sessionSecret,
+    login.sessionSecret
   ),
   expiresIn: ACCESS_TOKEN_SECONDS,
   refreshToken: packSecret(session.accountKey, session.refreshToken),

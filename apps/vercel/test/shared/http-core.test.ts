@@ -6,15 +6,7 @@ import { readHead, rejoin } from '../../src/core/assets/upload.js';
 import type { ServerBackend, ServerEnv } from '../../src/core/http/backend.js';
 import { onError } from '../../src/core/http/errors.js';
 import { serverRoutes } from '../../src/core/http/routes/index.js';
-import {
-  ORIGIN,
-  PNG_HEAD,
-  ROOM_KEY,
-  SESSION_SECRET,
-  assetTokenFor,
-  fileOf,
-  sha256Hex,
-} from './helpers.js';
+import { ORIGIN, PNG_HEAD, ROOM_KEY, SESSION_SECRET, assetTokenFor, fileOf, sha256Hex } from './helpers.js';
 
 // 経路と、それが使う小さなもの。部屋のサーバーから起こしにくいところを、作り物の部屋のサーバーで確かめる
 
@@ -30,8 +22,7 @@ const streamOf = (chunks: Uint8Array[]) =>
     },
   });
 
-const bytesOf = async (stream: ReadableStream<Uint8Array>) =>
-  new Uint8Array(await new Response(stream).arrayBuffer());
+const bytesOf = async (stream: ReadableStream<Uint8Array>) => new Uint8Array(await new Response(stream).arrayBuffer());
 
 describe('assetHeaders', () => {
   it('serves bytes kept without a type as plain octets', () => {
@@ -115,7 +106,7 @@ describe('putting up an asset', () => {
           'Content-Length': String(file.byteLength),
           Authorization: `Bearer ${assetTokenFor('pl')}`,
         },
-      }),
+      })
     );
 
     expect(res.status).toBe(404);

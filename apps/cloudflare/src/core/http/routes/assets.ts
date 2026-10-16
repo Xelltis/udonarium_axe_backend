@@ -36,7 +36,7 @@ const admit = async (
   c: AssetContext,
   roomKey: string,
   id: string,
-  count: boolean,
+  count: boolean
 ): Promise<Response | Claims<'asset'>> => {
   const { backend, config } = c.var;
   const claims = assetClaimsOf(c, config.login, roomKey);
@@ -71,9 +71,7 @@ export const getRoomAsset = async (c: AssetContext) => {
     return fail(c, 401, 'asset-token-required');
   }
   const { assets } = c.var.backend;
-  return c.req.method === 'HEAD'
-    ? assets.head(c.req.raw, roomKey, id)
-    : assets.read(c.req.raw, roomKey, id);
+  return c.req.method === 'HEAD' ? assets.head(c.req.raw, roomKey, id) : assets.read(c.req.raw, roomKey, id);
 };
 
 /** PUT /v1/rooms/:roomKey/assets/:id。この部屋の GM と PL だけが置ける */
@@ -103,14 +101,7 @@ export const putRoomAsset = async (c: AssetContext) => {
 
   // 名前と中身が合わないものは置かない
   const name = assetNameOf(c.req.header(ASSET_NAME_HEADER) ?? '');
-  const stored = await backend.assets.store(
-    roomKey,
-    id,
-    rejoin(head, reader),
-    length,
-    sniffed.type,
-    name,
-  );
+  const stored = await backend.assets.store(roomKey, id, rejoin(head, reader), length, sniffed.type, name);
   if (stored === 'hash-mismatch') return fail(c, 400, 'hash-mismatch');
   // 中身を流しているあいだに部屋が削除されていたら、削除が見落とした分を消す
   if ((await backend.rooms.canUpload(roomKey, claims.uid)) === 'room-not-found') {
@@ -154,7 +145,7 @@ export const requestUpload = async (c: AssetContext) => {
       path,
     },
     UPLOAD_TICKET_SECONDS,
-    (config.login as LoginConfig).sessionSecret,
+    (config.login as LoginConfig).sessionSecret
   );
   return c.json<UploadTicketResponse>({ ticket, upload }, 201);
 };
@@ -193,7 +184,7 @@ const keepUpload = async (
   c: AssetContext,
   direct: DirectUploads,
   roomKey: string,
-  ticket: Claims<'upload'>,
+  ticket: Claims<'upload'>
 ): Promise<Response> => {
   const { backend } = c.var;
   const { id } = ticket;
@@ -214,14 +205,7 @@ const keepUpload = async (
     return fail(c, 413, 'too-large');
   }
 
-  const stored = await backend.assets.store(
-    roomKey,
-    id,
-    rejoin(head, reader),
-    ticket.size,
-    sniffed.type,
-    ticket.name,
-  );
+  const stored = await backend.assets.store(roomKey, id, rejoin(head, reader), ticket.size, sniffed.type, ticket.name);
   if (stored === 'hash-mismatch') return fail(c, 400, 'hash-mismatch');
   // 確かめているあいだに部屋が削除されていたら、削除が見落とした分を消す
   if ((await backend.rooms.canUpload(roomKey, admitted.uid)) === 'room-not-found') {

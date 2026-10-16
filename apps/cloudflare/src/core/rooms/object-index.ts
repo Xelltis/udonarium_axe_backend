@@ -45,7 +45,7 @@ export abstract class ObjectIndex {
     protected readonly tombstoneLimits: TombstoneLimits = {
       most: MAX_TOMBSTONES,
       prunedTo: PRUNED_TOMBSTONES,
-    },
+    }
   ) {}
 
   /** 置いてあるものすべての索引 */
@@ -97,8 +97,7 @@ export abstract class ObjectIndex {
   private forgetRelations(identifier: string): void {
     const entry = this.entries?.get(identifier);
     if (entry?.parent) this.children.get(entry.parent)?.delete(identifier);
-    if (entry?.view?.kind === 'reaction')
-      this.followers.get(entry.view.message)?.delete(identifier);
+    if (entry?.view?.kind === 'reaction') this.followers.get(entry.view.message)?.delete(identifier);
   }
 
   /** 見え方を決めるために、識別子から索引の1行を引く */

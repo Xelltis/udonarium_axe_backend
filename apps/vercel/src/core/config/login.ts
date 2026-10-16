@@ -31,13 +31,13 @@ export const loginEntries = {
 export const loginComplete = <T extends LoginEnv>() =>
   check<T, string>(
     (env) => new Set(LOGIN_KEYS.map((key) => Boolean(env[key]))).size === 1,
-    'DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET must be set together',
+    'DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET must be set together'
   );
 
 export const sessionSecretLongEnough = <T extends LoginEnv>() =>
   check<T, string>(
     (env) => !env.SESSION_SECRET || env.SESSION_SECRET.length >= MIN_SESSION_SECRET_LENGTH,
-    `SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters`,
+    `SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters`
   );
 
 /** loginComplete と sessionSecretLongEnough を通ったものから、ログインの設定を作る */

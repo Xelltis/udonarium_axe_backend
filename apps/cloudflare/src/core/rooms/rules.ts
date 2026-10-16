@@ -42,8 +42,7 @@ export const memberOf = (seat: Seat) => ({
  * 同じ人の席か。ピア ID が同じでも、ユーザー ID とログインの有無まで同じでなければ別人とみなす。
  * ログインした人のユーザー ID はトークンで確かめてあるので、ほかの人には名乗れない
  */
-export const isSamePerson = (a: Seat, b: Seat): boolean =>
-  a.userId === b.userId && a.account === b.account;
+export const isSamePerson = (a: Seat, b: Seat): boolean => a.userId === b.userId && a.account === b.account;
 
 /**
  * そのユーザー ID で、そのピア ID を名乗ってよいか。Axe の部屋のピア ID は、頭にユーザー ID の
@@ -98,15 +97,9 @@ export const mayChangeView = (before: View | null, after: View | null, seat: Sea
   switch (before.kind) {
     case 'note': {
       const next = after as typeof before;
-      const disclosureSame =
-        before.mode === next.mode && JSON.stringify(before.users) === JSON.stringify(next.users);
-      const claimsUnseen =
-        before.owner === '' && next.owner === seat.userId && !seesDisclosed(before, seat);
-      return (
-        (disclosureSame || before.owner === seat.userId) &&
-        ownerMove(before.owner, next.owner) &&
-        !claimsUnseen
-      );
+      const disclosureSame = before.mode === next.mode && JSON.stringify(before.users) === JSON.stringify(next.users);
+      const claimsUnseen = before.owner === '' && next.owner === seat.userId && !seesDisclosed(before, seat);
+      return (disclosureSame || before.owner === seat.userId) && ownerMove(before.owner, next.owner) && !claimsUnseen;
     }
     case 'die':
       return ownerMove(before.owner, (after as typeof before).owner);
@@ -192,16 +185,14 @@ export const ROLL_NEUTRAL_ATTRIBUTES: Readonly<Record<string, unknown>> = {
 };
 
 /** 頼まれた結果の attributes から、持ち込ませないものを既定の値にする。もとから無いものは足さない */
-export const neutralRollAttributes = (
-  attributes: Record<string, unknown>,
-): Record<string, unknown> =>
+export const neutralRollAttributes = (attributes: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(attributes).flatMap(([field, value]): [string, unknown][] => {
       // 継承した名前（constructor など）は、持ち込ませない項目に数えない
       if (!Object.hasOwn(ROLL_NEUTRAL_ATTRIBUTES, field)) return [[field, value]];
       const neutral = ROLL_NEUTRAL_ATTRIBUTES[field];
       return neutral === undefined ? [] : [[field, neutral]];
-    }),
+    })
   );
 
 /** 発言の並びの位置。ObjectNode そのものの SyncVar なので、attributes ではなく syncData の直下にある */

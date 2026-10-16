@@ -1,9 +1,4 @@
-import type {
-  Account,
-  DirectUploadTarget,
-  RoomAsset,
-  RoomSummary,
-} from '../../../contracts/protocol.js';
+import type { Account, DirectUploadTarget, RoomAsset, RoomSummary } from '../../../contracts/protocol.js';
 import type { Profile, Secret, Session } from '../auth/secrets.js';
 import type { LoginConfig } from '../config/login.js';
 
@@ -56,7 +51,7 @@ export interface AssetBackend {
     body: ReadableStream<Uint8Array>,
     length: number,
     type: string,
-    name: string,
+    name: string
   ): Promise<'stored' | 'hash-mismatch'>;
   /** 置いたものを取り除く（置いているあいだに部屋が消えたとき） */
   discard(roomKey: string, id: string): Promise<void>;
