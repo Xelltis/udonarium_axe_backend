@@ -2,7 +2,7 @@ import type { Context, ErrorHandler } from 'hono';
 
 import { ConfigError } from '../config/login.js';
 
-/** An error sent back with the body `{"error": "<code>"}`. Kept the same as the table in the README. */
+/** An error sent back with the body `{"error": "<code>"}`. Kept the same as the table under エラー in docs/cloudflare/api.md. */
 export type ErrorCode =
   | 'invalid-id'
   | 'invalid-request'
