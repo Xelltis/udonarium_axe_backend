@@ -28,7 +28,7 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 ## 規範ハイライト
 
 - **カバレッジ100%**: Vercel版とCloudflare版は、行・分岐・関数・文のすべてで100%を求める。下回ると`npm test`が落ちる
-- **相対`import`は拡張子まで書く**（`./foo.js`）。JSONの`import`には`with { type: 'json' }`を付ける。
+- **共有のコードとVercel版の相対`import`は拡張子まで書く**（`./foo.js`）。JSONの`import`には`with { type: 'json' }`を付ける。
   Vercel版はNodeがバンドルせずに読むので、抜けると本番で`ERR_MODULE_NOT_FOUND`になる
 - **`wrangler`は固定**: `@cloudflare/vitest-pool-workers`が使う版に合わせる（CIがworkerdが1つかを確かめる）
 - **PHP版**: PHP 8.3で動く書きかた、`declare(strict_types=1);`、`@PER-CS`、PHPStanレベル9、PHPUnit 12と13の両対応
