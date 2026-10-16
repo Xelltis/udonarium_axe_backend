@@ -1,0 +1,236 @@
+import { encode } from '@msgpack/msgpack';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { PROTOCOL_VERSION } from '../../../contracts/protocol.js';
+import { ACCESS_TOKEN_SECONDS, signToken } from '../../../src/core/auth/tokens.js';
+import { redisLobby } from '../../../src/server/lobby.js';
+import { createRoom, roomKeysOf } from '../../../src/server/rooms/keys.js';
+import { VercelRoom } from '../../../src/server/rooms/room.js';
+import type { Conn, RoomDeps } from '../../../src/server/rooms/room.js';
+import type { Redis } from '../../../src/server/redis.js';
+import { freshKey, useRedis } from '../redis-helpers.js';
+
+const connection = useRedis();
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+const SECRET = 'room-test-secret-0123456789abcdefghij';
+
+/** 部屋を作り、その部屋を開くためのものを返す */
+const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
+  const key = freshKey();
+  const lobby = redisLobby(redis, key);
+  await createRoom(
+    redis,
+    key,
+    {
+      roomKey: 'room',
+      roomId: 'abc',
+      name: 'room',
+      password: '',
+      creatorUserId: 'user-gm',
+      host: 'h',
+    },
+    3600,
+  );
+  await lobby.register({
+    roomKey: 'room',
+    roomId: 'abc',
+    name: 'room',
+    hasPassword: false,
+    members: 0,
+  });
+  const deps: RoomDeps = {
+    redis,
+    key,
+    lobby,
+    instance: 'here',
+    retentionSeconds: 3600,
+    sessionSecret: () => SECRET,
+    deleteAssets: async () => undefined,
+    defer: () => undefined,
+    timing: { leaseMs: 300, renewMs: 40, tickMs: 40 },
+    ...overrides,
+  };
+  return { deps, key, lobby };
+};
+
+/** 部屋につないだ人。送られたものと閉じられたものを覚える */
+const connOf = (id: string): Conn & { closedWith: { code: number; reason: string } | null } => {
+  const conn = {
+    id,
+    seat: null,
+    closedWith: null as { code: number; reason: string } | null,
+    socket: {
+      send: () => undefined,
+      close: (code: number, reason: string) => {
+        conn.closedWith = { code, reason };
+      },
+    },
+  };
+  return conn;
+};
+
+/** 部屋に入る */
+const seat = (room: VercelRoom, peerId: string) => {
+  const conn = connOf(peerId);
+  room.accept(conn);
+  room.receive(
+    conn,
+    encode({
+      type: 'hello',
+      protocolVersion: PROTOCOL_VERSION,
+      peerId,
+      userId: `user-${peerId}`,
+      accessToken: signToken<'access'>(
+        { aud: 'access', sub: `discord:${peerId}`, uid: `user-${peerId}`, name: peerId },
+        ACCESS_TOKEN_SECONDS,
+        SECRET,
+      ),
+    }),
+  );
+  return conn;
+};
+
+describe('a room held on Vercel', () => {
+  it('waits for the lease another instance holds, and takes the room once it is free', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis);
+    await connection.redis.set(roomKeysOf(key, 'room').lease, 'there:1', { PX: 150 });
+    const started = Date.now();
+
+    const room = await VercelRoom.open(deps, 'room');
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(100);
+    expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toMatch(/^here:/);
+    await room.release();
+    expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toBeNull();
+  });
+
+  it('keeps its lease for as long as it holds the room', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'room');
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(room.isReleased).toBe(false);
+    expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toMatch(/^here:/);
+    await room.release();
+  });
+
+  it('gives the room up once its lease is gone, even with nobody writing', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'room');
+
+    await connection.redis.set(roomKeysOf(key, 'room').lease, 'there:3');
+
+    await vi.waitFor(() => expect(room.isReleased).toBe(true));
+  });
+
+  it('gives the room up when a write of its objects finds the lease gone', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis, {
+      timing: { leaseMs: 60_000, renewMs: 60_000, tickMs: 60_000 },
+    });
+    const room = await VercelRoom.open(deps, 'room');
+    await connection.redis.set(roomKeysOf(key, 'room').lease, 'there:4');
+
+    room.store().put(
+      {
+        aliasName: 'character',
+        identifier: 'piece',
+        majorVersion: 1,
+        minorVersion: 0.5,
+        syncData: {},
+      },
+      null,
+    );
+    room.store().flush();
+
+    await vi.waitFor(() => expect(room.isReleased).toBe(true));
+  });
+
+  it('gives the room up when another takes its lease, asking its sockets to come back', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'room');
+    const alice = seat(room, 'alice');
+
+    await connection.redis.set(roomKeysOf(key, 'room').lease, 'there:2');
+    await vi.waitFor(() => expect(room.isReleased).toBe(true));
+
+    expect(alice.closedWith).toEqual({ code: 1012, reason: 'moved' });
+    room.stepDown();
+  });
+
+  it('says so when it could not renew its lease', async () => {
+    const { deps } = await roomDepsOf(connection.redis);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const room = await VercelRoom.open(deps, 'room');
+    const evaluate = connection.redis.eval.bind(connection.redis);
+    vi.spyOn(connection.redis, 'eval').mockImplementation(((script: string, options: never) =>
+      script.includes('PEXPIRE')
+        ? Promise.reject(new Error('down'))
+        : evaluate(script, options)) as never);
+
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Could not keep the room’s lease:', expect.any(Error)),
+    );
+    vi.restoreAllMocks();
+    await room.release();
+  });
+
+  it('looks around while people are in, and no longer once it has let go', async () => {
+    const { deps, lobby } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'room');
+    seat(room, 'alice');
+
+    await vi.waitFor(async () => expect((await lobby.find('room'))?.members).toBe(1));
+    await room.release();
+    room.tick();
+  });
+
+  it('still deletes the room when its assets cannot be, and says so', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { deps, key } = await roomDepsOf(connection.redis, {
+      deleteAssets: () => Promise.reject(new Error('blob down')),
+    });
+    const room = await VercelRoom.open(deps, 'room');
+
+    expect(await room.deleteRoom('user-gm')).toBe('deleted');
+
+    expect(error).toHaveBeenCalledWith('Room asset deletion failed:', expect.any(Error));
+    expect(await connection.redis.exists(roomKeysOf(key, 'room').meta)).toBe(0);
+  });
+
+  it('leaves a room it could not finish deleting to be tried again', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { deps, lobby, key } = await roomDepsOf(connection.redis);
+    vi.spyOn(lobby, 'remove').mockRejectedValue(new Error('lobby down'));
+    const room = await VercelRoom.open(deps, 'room');
+
+    await room.deleteRoom('user-gm');
+
+    expect(error).toHaveBeenCalledWith(
+      'Room deletion failed, to be tried again:',
+      expect.any(Error),
+    );
+    expect(await connection.redis.hGet(roomKeysOf(key, 'room').meta, 'deleting')).toBe('1');
+  });
+
+  it('only turns people away for a room that is not there', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const { deps } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'missing');
+    const conn = connOf('late');
+
+    room.accept(conn);
+    room.record('join', 'pl', 1);
+    room.tick();
+
+    expect(conn.closedWith).toEqual({ code: 4000, reason: 'room-not-found' });
+    expect(await room.deleteRoom('user-gm')).toBe('not-found');
+    expect(info).not.toHaveBeenCalled();
+    room.onRelease();
+    await room.release();
+  });
+});

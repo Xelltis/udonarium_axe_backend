@@ -11,12 +11,13 @@ export interface Op {
 export const MAX_BATCH_BYTES = 4 * 1024 * 1024;
 
 /**
- * lease がまだ自分のものなら、操作を順に流す。違えば何もせずに 0。
- * KEYS[1] は lease、KEYS[2..] は操作の鍵。ARGV[1] は自分の lease、ARGV[2..] は操作ごとに
- * 「コマンド・鍵の番号・引数の数・引数…」
+ * lease がまだ自分のもので、部屋が消されていなければ、操作を順に流す。そうでなければ何もせずに 0。
+ * KEYS[1] は lease、KEYS[2] は部屋の meta、KEYS[3..] は操作の鍵。ARGV[1] は自分の lease、ARGV[2..] は
+ * 操作ごとに「コマンド・鍵の番号・引数の数・引数…」
  */
 const FENCED = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if redis.call('EXISTS', KEYS[2]) == 0 or redis.call('HGET', KEYS[2], 'deleting') == '1' then return 0 end
 local i = 2
 while i <= #ARGV do
   local count = tonumber(ARGV[i + 2])
@@ -47,18 +48,26 @@ export const batchesOf = (ops: Op[]): Op[][] => {
   return batches;
 };
 
+/** 持ち主として書くときに確かめるもの */
+export interface Fence {
+  /** lease の鍵 */
+  lease: string;
+  /** 部屋の meta の鍵。無いか、消している印があれば書かない */
+  meta: string;
+}
+
 /**
  * 持ち主として書く。lease が自分のものでなくなっていたら（ほかのインスタンスが部屋を取った）、
- * そこで止めて false。分けて送るので、途中で取られたら前半だけが書かれる
+ * または部屋が消されていたら、そこで止めて false。分けて送るので、途中で止まれば前半だけが書かれる
  */
 export const fencedWrite = async (
   redis: Redis,
-  leaseKey: string,
+  fence: Fence,
   lease: string,
   ops: Op[],
 ): Promise<boolean> => {
   for (const batch of batchesOf(ops)) {
-    const keys = [leaseKey, ...new Set(batch.map((op) => op.key))];
+    const keys = [fence.lease, fence.meta, ...new Set(batch.map((op) => op.key))];
     const args: (string | Buffer)[] = [lease];
     for (const op of batch) {
       args.push(op.command, String(keys.indexOf(op.key) + 1), String(op.args.length), ...op.args);

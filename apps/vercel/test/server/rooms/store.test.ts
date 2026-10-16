@@ -26,9 +26,11 @@ const room = async (limits?: { most: number; prunedTo: number }) => {
   const key = freshKey();
   const keys = storeKeysOf(key, 'room');
   const leaseKey = key('r', 'room', 'lease');
+  const fence = { lease: leaseKey, meta: key('r', 'room', 'meta') };
   await connection.redis.set(leaseKey, LEASE);
+  await connection.redis.hSet(fence.meta, 'roomKey', 'room');
   const persist = async (ops: Op[]) => {
-    if (!(await fencedWrite(connection.redis, leaseKey, LEASE, ops))) throw new Error('fenced');
+    if (!(await fencedWrite(connection.redis, fence, LEASE, ops))) throw new Error('fenced');
   };
   const open = () => RedisRoomStore.load(binaryOf(connection.redis), keys, persist, limits);
   return { open, store: await open(), leaseKey, keys };
@@ -68,12 +70,14 @@ describe('a room store in Redis', () => {
     store.flush();
     await store.settle();
     expect(await connection.redis.hLen(keys.chunks('scene'))).toBe(3);
+    expect(await connection.redis.sMembers(keys.chunked)).toEqual(['scene']);
 
     store.put(contextOf('scene', 2, { scene: 'small' }), null);
     store.flush();
     await store.settle();
 
     expect(await connection.redis.exists(keys.chunks('scene'))).toBe(0);
+    expect(await connection.redis.sMembers(keys.chunked)).toEqual([]);
     expect((await open()).get('scene')?.syncData).toEqual({ scene: 'small' });
 
     store.put(contextOf('scene', 3, big), null);
@@ -141,16 +145,25 @@ describe('a room store in Redis', () => {
 });
 
 describe('fenced writes', () => {
-  it('writes nothing for an owner whose lease has passed to another', async () => {
+  it('writes nothing for an owner whose lease has passed to another, or into a room going away', async () => {
     const key = freshKey();
-    await connection.redis.set(key('lease'), 'other');
+    const fence = { lease: key('lease'), meta: key('meta') };
+    const write = () =>
+      fencedWrite(connection.redis, fence, LEASE, [
+        { command: 'SET', key: key('value'), args: ['1'] },
+      ]);
+    await connection.redis.set(fence.lease, 'other');
+    const someoneElse = await write();
+    await connection.redis.set(fence.lease, LEASE);
+    const noRoom = await write();
+    await connection.redis.hSet(fence.meta, 'deleting', '1');
+    const deleting = await write();
+    await connection.redis.hDel(fence.meta, 'deleting');
+    await connection.redis.hSet(fence.meta, 'roomKey', 'room');
+    const written = await write();
 
-    const written = await fencedWrite(connection.redis, key('lease'), LEASE, [
-      { command: 'SET', key: key('value'), args: ['1'] },
-    ]);
-
-    expect(written).toBe(false);
-    expect(await connection.redis.exists(key('value'))).toBe(0);
+    expect([someoneElse, noRoom, deleting, written]).toEqual([false, false, false, true]);
+    expect(await connection.redis.get(key('value'))).toBe('1');
   });
 
   it('sends a large batch in parts small enough for one request', () => {

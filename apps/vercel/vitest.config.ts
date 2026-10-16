@@ -8,13 +8,11 @@ export default defineConfig({
     environment: 'node',
     globalSetup: ['test/global-setup.ts'],
     include: ['test/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
-    // 共有のテストと、それが確かめる src/core は、部屋のサーバーがこのアプリで動くまで外しておく
-    exclude: ['test/shared/**', 'node_modules/**'],
     coverage: {
-      provider: 'v8',
+      provider: 'istanbul',
       reporter: ['text', 'json', 'lcovonly', 'html'],
       include: ['src/**/*.{ts,js}', 'api/**/*.{ts,js}'],
-      exclude: ['src/**/types.ts', 'src/http/context.ts', 'src/core/**'],
+      exclude: ['src/**/types.ts', 'src/http/context.ts', 'src/core/**/*.generated.ts'],
       thresholds: {
         lines: 100,
         functions: 100,

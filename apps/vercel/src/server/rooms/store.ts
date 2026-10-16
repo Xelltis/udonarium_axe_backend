@@ -14,6 +14,7 @@ import type { Op } from './fence.js';
 //
 //   r:<鍵>:obj          HASH  識別子 → {alias, major, minor, owner, parent, view, chunks, data} の MessagePack
 //   r:<鍵>:chunk:<ID>   HASH  1MiB を超える中身を分けたもの（番号 → バイト列）
+//   r:<鍵>:chunked      SET   分けて置いたものの識別子（部屋を消すときのため）
 //   r:<鍵>:tomb         ZSET  消した印（識別子 → 消した時刻）
 //
 // 部屋の持ち主のインスタンスは、部屋を取ったときに全部を読んでメモリに置き、答えるのはメモリから行う
@@ -48,12 +49,14 @@ interface Stored {
 export interface StoreKeys {
   objects: string;
   chunks: (identifier: string) => string;
+  chunked: string;
   tombstones: string;
 }
 
 export const storeKeysOf = (key: KeyOf, roomKey: string): StoreKeys => ({
   objects: key('r', roomKey, 'obj'),
   chunks: (identifier) => key('r', roomKey, 'chunk', identifier),
+  chunked: key('r', roomKey, 'chunked'),
   tombstones: key('r', roomKey, 'tomb'),
 });
 
@@ -145,6 +148,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
         ops.push(
           { command: 'HDEL', key: this.keys.objects, args: [identifier] },
           { command: 'DEL', key: this.keys.chunks(identifier), args: [] },
+          { command: 'SREM', key: this.keys.chunked, args: [identifier] },
         );
       } else if (write.context !== undefined) {
         ops.push(...this.writeOps(write.context, write.owner ?? null));
@@ -191,6 +195,11 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     const chunkKey = this.keys.chunks(context.identifier);
     const ops: Op[] = [
       { command: 'DEL', key: chunkKey, args: [] },
+      {
+        command: chunks > 0 ? 'SADD' : 'SREM',
+        key: this.keys.chunked,
+        args: [context.identifier],
+      },
       ...Array.from({ length: chunks }, (_, seq): Op => ({
         command: 'HSET',
         key: chunkKey,
