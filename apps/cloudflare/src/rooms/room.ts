@@ -58,7 +58,7 @@ import {
 import { attributesOf, withAttributes } from '../core/rooms/objects';
 import { hashPassword, verifyPassword } from '../core/rooms/password';
 import { RoomStore, migrate } from './store';
-import type { StoredEntry } from './store';
+import type { StoredEntry } from '../core/rooms/object-index';
 import {
   delivered,
   describe,
