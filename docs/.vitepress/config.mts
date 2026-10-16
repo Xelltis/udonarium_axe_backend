@@ -93,11 +93,42 @@ export default defineConfig({
       ['link', { rel: 'canonical', href: url }],
     );
   },
-  head: [['meta', { name: 'theme-color', content: '#8b7cf6' }]],
+  head: [
+    ['meta', { name: 'theme-color', content: '#8b7cf6' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+    [
+      'link',
+      {
+        rel: 'stylesheet',
+        href: 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap',
+      },
+    ],
+  ],
   markdown: {
     // The same slugify scripts/check-doc-anchors.mjs checks links against (see slugify.mjs).
     anchor: { slugify },
     config: (md) => {
+      // A heading that starts with a step number ("1. …") is drawn as a numbered step. The number
+      // stays in the heading's text, so its id and the outline keep it; only the dot is hidden.
+      // This runs after the anchor plugin, so the ids are made from the heading as written.
+      md.core.ruler.push('axe-step-headings', (state) => {
+        const tokens = state.tokens;
+        for (let i = 0; i < tokens.length - 1; i += 1) {
+          const open = tokens[i];
+          if (open.type !== 'heading_open' || (open.tag !== 'h2' && open.tag !== 'h3')) continue;
+          const first = tokens[i + 1].children?.[0];
+          const step = first?.type === 'text' ? first.content.match(/^(\d+)\.\s+/) : null;
+          if (!first || !step) continue;
+          open.attrJoin('class', 'axe-step');
+          const badge = new state.Token('html_inline', '', 0);
+          badge.content = `<span class="axe-step-number">${step[1]}<span class="axe-step-dot">.</span></span> `;
+          first.content = first.content.slice(step[0].length);
+          tokens[i + 1].children?.unshift(badge);
+        }
+      });
+
       // Default VitePress tables are `display: block`, so they shrink to their
       // content and hug the left edge. Wrapping them lets the table fill the
       // column while wide ones scroll sideways inside the wrapper.
@@ -105,8 +136,8 @@ export default defineConfig({
       md.renderer.rules.table_close = () => '</table>\n</div>\n';
 
       // Sources here are written one sentence per line. A soft line break
-      // renders as a space, which Japanese does not want mid-sentence.
-      // Drop it when both sides are Japanese.
+      // renders as a space, which Japanese does not want, not even before a
+      // Latin word ("…です。Axeは"). Drop it when either side is Japanese.
       const cjk = /[　-〿぀-ゟ゠-ヿ㐀-䶿一-鿿！-｠]/;
       const edgeChar = (
         tokens: { type: string; content: string }[],
@@ -127,7 +158,7 @@ export default defineConfig({
           const kids = token.children;
           for (let i = 1; i < kids.length - 1; i += 1) {
             if (kids[i].type !== 'softbreak') continue;
-            if (cjk.test(edgeChar(kids, i - 1, -1)) && cjk.test(edgeChar(kids, i + 1, 1))) {
+            if (cjk.test(edgeChar(kids, i - 1, -1)) || cjk.test(edgeChar(kids, i + 1, 1))) {
               kids[i].type = 'text';
               kids[i].content = '';
             }
@@ -137,6 +168,7 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    logo: '/logo.svg',
     nav: [
       { text: 'はじめに', link: '/guide/' },
       { text: 'SkyWay版を置く', link: '/skyway/' },
@@ -203,7 +235,29 @@ export default defineConfig({
         ],
       },
     ],
-    search: { provider: 'local' },
+    search: {
+      provider: 'local',
+      options: {
+        translations: {
+          button: { buttonText: '検索', buttonAriaLabel: '検索' },
+          modal: {
+            displayDetails: '本文も表示',
+            resetButtonTitle: '入力を消す',
+            backButtonTitle: '検索を閉じる',
+            noResultsText: '見つかりませんでした',
+            footer: {
+              selectText: '開く',
+              selectKeyAriaLabel: 'Enter',
+              navigateText: '選ぶ',
+              navigateUpKeyAriaLabel: '上へ',
+              navigateDownKeyAriaLabel: '下へ',
+              closeText: '閉じる',
+              closeKeyAriaLabel: 'Esc',
+            },
+          },
+        },
+      },
+    },
     socialLinks: [{ icon: 'github', link: repo }],
     editLink: {
       pattern: `${repo}/edit/main/docs/:path`,
@@ -214,7 +268,16 @@ export default defineConfig({
     lastUpdatedText: '最終更新',
     returnToTopLabel: 'トップへ戻る',
     darkModeSwitchLabel: 'テーマ',
+    lightModeSwitchTitle: 'ライトモードにする',
+    darkModeSwitchTitle: 'ダークモードにする',
+    skipToContentLabel: '本文へ移動',
     sidebarMenuLabel: 'メニュー',
+    notFound: {
+      title: 'ページが見つかりません',
+      quote: 'URLが変わったか、ページが移ったのかもしれません。トップから探してください。',
+      linkLabel: 'トップへ',
+      linkText: 'トップへ',
+    },
     footer: {
       message: 'MITライセンスで公開しています',
       copyright: 'Udonarium Axe Backend',
