@@ -52,7 +52,8 @@ const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
     assetUpload: null,
     deleteAssets: async () => undefined,
     defer: () => undefined,
-    timing: { leaseMs: 300, renewMs: 40, tickMs: 40 },
+    // 混んだマシンでも延ばしそこねない長さ。lease が切れるのを待つテストは、ほかから lease を奪う
+    timing: { leaseMs: 1000, renewMs: 40, tickMs: 40 },
     ...overrides,
   };
   return { deps, key, lobby };
@@ -125,7 +126,7 @@ describe('a room held on Vercel', () => {
     const { deps, key } = await roomDepsOf(connection.redis);
     const room = await VercelRoom.open(deps, 'room');
 
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, 1200));
 
     expect(room.isReleased).toBe(false);
     expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toMatch(/^here:/);
