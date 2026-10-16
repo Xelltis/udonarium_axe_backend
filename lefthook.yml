@@ -28,10 +28,13 @@ pre-commit:
 
 pre-push:
   jobs:
+    # Each runs only when the push changes something in its app.
     - name: test (cloudflare)
       root: 'apps/cloudflare/'
+      glob: '*'
       run: npm run typecheck && npm test
 
     - name: test (vercel)
       root: 'apps/vercel/'
+      glob: '*'
       run: npm run typecheck && npm run check:esm && npm test
