@@ -32,7 +32,12 @@ node scripts/sync-shared.mjs
 
 CIは、写しが正本と同じかと、共有のコードが使うパッケージ（hono・valibot・@msgpack/msgpack・bcdice）の版が両方のアプリでそろっているかを確かめます。
 共有のコードは、Vercel版ではNodeがバンドルせずにそのまま読むので、相対`import`は`.js`まで書き、JSONの`import`には`with { type: 'json' }`を付けます。
-Cloudflare版のlintがこれを確かめます。
+抜けたときに見つけるものは、それぞれ違います。
+
+| 抜けたもの                              | 見つけるもの                                       |
+| --------------------------------------- | -------------------------------------------------- |
+| 共有のコードの相対`import`の拡張子      | Cloudflare版の`npm run lint`                       |
+| JSONの`import`の`with { type: 'json' }` | Vercel版の`npm run typecheck`と`npm run check:esm` |
 
 Cloudflare版の部屋のサーバーとAxeのあいだのやりとりは、`apps/cloudflare/contracts/`に型とフィクスチャ（JSONの例）を置いています。
 このディレクトリはサーバー側が持ち主で、Axeは同じ内容を写して使い、両側のテストが同じJSONを読みます。
@@ -52,13 +57,25 @@ npm install
 npx lefthook install
 ```
 
+Cloudflare版かVercel版を直すときは、そのアプリの依存も入れます。
+pushのときのフックが、pushにそのアプリの変更が入っていれば、そのアプリの型検査とテストを流すためです。
+Vercel版を直すときは、テストが使うRedisも立てておきます（Dockerが要ります）。
+
+```sh
+(cd apps/cloudflare && npm ci)   # Cloudflare版を直すとき
+(cd apps/vercel && npm ci)       # Vercel版を直すとき
+(cd apps/vercel && docker compose up -d redis)   # Vercel版のテストが使うRedis（127.0.0.1:6379）
+```
+
+`docs/`やPHP版だけを直したpushでは、両アプリの型検査とテストは流れません。
+
 lefthookは、コミットとpushのときに次のことを確かめます。
 
-| フック       | 確かめること                                                                                            |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| `commit-msg` | コミットメッセージが[Conventional Commits](https://www.conventionalcommits.org/ja/)の形か（commitlint） |
-| `pre-commit` | stagedのTypeScriptにESLint（アプリごと）、PHPにPHP-CS-FixerとPHPStan（Dockerで動かす）                  |
-| `pre-push`   | Cloudflare版とVercel版の型検査とテスト（Vercel版は`check:esm`も。Redisが要る）                          |
+| フック       | 確かめること                                                                                             |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| `commit-msg` | コミットメッセージが[Conventional Commits](https://www.conventionalcommits.org/ja/)の形か（commitlint）  |
+| `pre-commit` | stagedのTypeScriptにESLint（アプリごと。整形の崩れも見る）、PHPにPHP-CS-FixerとPHPStan（Dockerで動かす） |
+| `pre-push`   | pushに変更が入っているアプリの型検査とテスト（Vercel版は`check:esm`も。Redisが要る）                     |
 
 フックは、手段を問わず迂回しないでください（`--no-verify`、`LEFTHOOK=0`、`core.hooksPath`の変更、設定の一時的な無効化）。
 落ちたら原因を直してから、もう一度コミットします。
@@ -150,6 +167,7 @@ npm test                 # Workersのランタイム（workerd）の中で。カ
 TypeScriptのアプリは、Prettierで整形します。
 設定はフロントエンドと同じです（シングルクォート、`printWidth: 120`、`trailingComma: 'es5'`）。
 各アプリで`npm run format`を流すと整い、CIは`npm run format:check`で確かめます。
+ESLintにPrettierを組み込んである（`eslint-plugin-prettier`、フロントエンドと同じ）ので、`npm run lint`とコミットのときのESLintも、整形の崩れを見つけます。
 Markdownは表を手でそろえるので、Prettierの対象から外しています。
 PHPは`bin/php-cs-fixer fix`で整えます。
 
