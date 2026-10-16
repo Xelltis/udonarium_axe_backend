@@ -1,16 +1,37 @@
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx --no -- commitlint --edit {1}
+
 pre-commit:
   parallel: true
-  commands:
-    php-cs-fixer:
-      root: "apps/php/"
-      glob: "*.php"
+  jobs:
+    - name: php-cs-fixer
+      root: 'apps/php/'
+      glob: '*.php'
       run: docker run --rm -v "$PWD:/var/www/html" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer check --diff --config=.php-cs-fixer.php {staged_files}
-    phpstan:
-      root: "apps/php/"
-      glob: "*.php"
+
+    - name: phpstan
+      root: 'apps/php/'
+      glob: '*.php'
       run: docker run --rm -v "$PWD:/var/www/html" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpstan analyse --memory-limit=256M
 
-commit-msg:
-  commands:
-    commitlint:
-      run: npx --no -- commitlint --edit {1}
+    - name: lint (cloudflare)
+      root: 'apps/cloudflare/'
+      glob: '*.{ts,mts,js,mjs}'
+      run: npx eslint {staged_files}
+
+    - name: lint (vercel)
+      root: 'apps/vercel/'
+      glob: '*.{ts,mts,js,mjs}'
+      run: npx eslint {staged_files}
+
+pre-push:
+  jobs:
+    - name: test (cloudflare)
+      root: 'apps/cloudflare/'
+      run: npm run typecheck && npm test
+
+    - name: test (vercel)
+      root: 'apps/vercel/'
+      run: npm run typecheck && npm run check:esm && npm test
