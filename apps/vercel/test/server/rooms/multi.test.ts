@@ -25,27 +25,36 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-// lease は短くするが、混んだマシンでも延ばしそこねない長さにする（持ち主が替わるとテストが崩れる）
-const TIMING = { leaseMs: 1000, renewMs: 100, tickMs: 100 };
+// lease が切れるのを待つテストは無いので、混んだマシンでも延ばしそこねない長さにする（持ち主が替わると
+// テストが崩れる）。見回りは短くする
+const TIMING = { leaseMs: 5000, renewMs: 100, tickMs: 100 };
 
-/** 同じ Redis を使う2つのインスタンス。部屋は a が作る。b の WebSocket は socketSecondsOfB で閉じる */
+/**
+ * 同じ Redis を使う2つのインスタンス。部屋は a が作る。b の WebSocket は socketSecondsOfB で閉じ、b は
+ * 持ち主を leaseMsOfB の2倍まで探す
+ */
 const twoInstances = async ({
   parkMs = 50,
   socketSecondsOfB,
-}: { parkMs?: number; socketSecondsOfB?: number } = {}) => {
+  leaseMsOfB = TIMING.leaseMs,
+}: { parkMs?: number; socketSecondsOfB?: number; leaseMsOfB?: number } = {}) => {
   const config = configOf();
-  const make = async (instance: string, roomSocketSeconds = config.roomSocketSeconds) => {
+  const make = async (
+    instance: string,
+    roomSocketSeconds = config.roomSocketSeconds,
+    leaseMs = TIMING.leaseMs,
+  ) => {
     const redis = await connectRedis(REDIS_URL);
     const deps = await createServerDeps(
       { ...config, roomSocketSeconds },
-      { bucketOf: () => memoryBucket(), instance, timing: TIMING, parkMs },
+      { bucketOf: () => memoryBucket(), instance, timing: { ...TIMING, leaseMs }, parkMs },
       redis,
     );
     opened.push(deps);
     return deps;
   };
   const a = await make('a');
-  const b = await make('b', socketSecondsOfB);
+  const b = await make('b', socketSecondsOfB, leaseMsOfB);
   await vercelBackend(a).rooms.create({
     roomKey: 'room',
     roomId: 'abc',
@@ -251,7 +260,7 @@ describe('a room whose sockets reach different instances', () => {
   });
 
   it('asks a socket to come back when the instance holding the room does not hear it', async () => {
-    const { a, b } = await twoInstances();
+    const { a, b } = await twoInstances({ leaseMsOfB: 400 });
     await enter(a, 'alice');
     await a.relay.unsubscribe(a.relay.inboundOf('room'));
 
