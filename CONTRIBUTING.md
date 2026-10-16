@@ -2,8 +2,8 @@
 
 udonarium-axe-backendへのコントリビューションを歓迎します。
 
-開発の準備、アプリごとのコマンドと決まり、コミットとPull Requestの決まりは、[開発に参加する](docs/development/index.md)にまとめています。
-テストとCIとリリースは[テスト・CI・リリース](docs/development/ci.md)を、文書の書きかたは[ドキュメントを書く](docs/development/docs.md)を見てください。
+開発の準備、アプリごとのコマンドと決まり、コミットとPull Requestの決まりは、[開発に参加する](development/README.md)にまとめています。
+テストとCIとリリースは[テスト・CI・リリース](development/ci.md)を、文書の書きかたは[ドキュメントを書く](development/docs.md)を見てください。
 決まりはフロントエンド（[Udonarium Axe](https://github.com/Xelltis/udonarium_axe)）とそろえています。
 
 ## 要点

@@ -139,11 +139,10 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'はじめに', link: '/guide/' },
-      { text: 'SkyWay版', link: '/skyway/' },
-      { text: 'サーバー版', link: '/server/' },
+      { text: 'SkyWay版を置く', link: '/skyway/' },
+      { text: 'サーバー版を置く', link: '/server/' },
       { text: '運営する', link: '/operate/' },
       { text: 'リファレンス', link: '/reference/' },
-      { text: '開発', link: '/development/' },
       { text: 'Axeの利用ガイド', link: axeGuide },
     ],
     sidebar: [
@@ -158,7 +157,7 @@ export default defineConfig({
         ],
       },
       {
-        text: 'SkyWay版で遊ぶ',
+        text: 'SkyWay版を置く',
         collapsed: false,
         items: [
           { text: 'SkyWay版のしくみ', link: '/skyway/' },
@@ -170,7 +169,7 @@ export default defineConfig({
         ],
       },
       {
-        text: 'サーバー版で遊ぶ',
+        text: 'サーバー版を置く',
         collapsed: false,
         items: [
           { text: 'サーバー版のしくみ', link: '/server/' },
@@ -201,19 +200,6 @@ export default defineConfig({
           { text: 'リファレンスについて', link: '/reference/' },
           { text: 'トークン発行のAPI', link: '/reference/token-api' },
           { text: '部屋のサーバーのAPI', link: '/reference/server-api' },
-          { text: '部屋のプロトコル', link: '/reference/protocol' },
-          { text: '部屋のサーバーの中の動き', link: '/reference/room-server' },
-          { text: 'Axeの中の動き', link: '/reference/client' },
-        ],
-      },
-      {
-        text: '開発に参加する',
-        collapsed: true,
-        items: [
-          { text: '開発に参加する', link: '/development/' },
-          { text: 'テスト・CI・リリース', link: '/development/ci' },
-          { text: 'ドキュメントを書く', link: '/development/docs' },
-          { text: '設計と今後の計画', link: '/development/roadmap' },
         ],
       },
     ],

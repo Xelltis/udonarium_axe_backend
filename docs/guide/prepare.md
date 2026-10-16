@@ -6,14 +6,14 @@
 
 ## 何を設置するかを決める
 
-遊びかたによって、設置するものと、要るアカウントが変わります。
+どの方式で配信するかによって、設置するものと、要るアカウントが変わります。
 迷ったら、いちばん上のVercel版から始めてください。
 
 | やりたいこと                                 | 設置するもの               | 手順                                             | 要るアカウント                                        |
 | -------------------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| SkyWay版で遊ぶ（いちばん手軽）               | Vercel版（トークン発行）   | [Vercelに置く（SkyWay版）](/skyway/vercel)         | GitHub、Vercel、SkyWay                                |
-| SkyWay版で遊ぶ（借りているレンタルサーバー） | PHP版                      | [レンタルサーバーに置く（PHP版）](/skyway/php)                    | レンタルサーバー、SkyWay                              |
-| サーバー版で遊ぶ                             | Cloudflare版               | [Cloudflareに置く](/server/cloudflare) | GitHub、Cloudflare（支払い方法の登録が要る）、Discord |
+| SkyWay版で配信する（いちばん手軽）           | Vercel版（トークン発行）   | [Vercelに置く（SkyWay版）](/skyway/vercel)         | GitHub、Vercel、SkyWay                                |
+| SkyWay版で配信する（借りているレンタルサーバー） | PHP版                      | [レンタルサーバーに置く（PHP版）](/skyway/php)                    | レンタルサーバー、SkyWay                              |
+| サーバー版で配信する                         | Cloudflare版               | [Cloudflareに置く](/server/cloudflare) | GitHub、Cloudflare（支払い方法の登録が要る）、Discord |
 | サーバー版をVercelで動かす                   | Vercel版（部屋のサーバー） | [Vercelに置く（サーバー版）](/server/vercel)        | GitHub、Vercel、Discord                               |
 
 SkyWay版とサーバー版の違いは[はじめに](/guide/)に、選びかたは[どれを置くか](/guide/choose)にあります。

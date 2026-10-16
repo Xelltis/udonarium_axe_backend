@@ -1,13 +1,13 @@
 # 部屋のプロトコル
 
 部屋のサーバー（Cloudflare版とVercel版）とAxeのあいだで、WebSocketでやりとりするものの形です。
-部屋を作る、一覧を取る、部屋のアセットを読み書きする、ログインする、などのHTTPのAPIは、[部屋のサーバーのAPI](/reference/server-api)にあります。
+部屋を作る、一覧を取る、部屋のアセットを読み書きする、ログインする、などのHTTPのAPIは、[部屋のサーバーのAPI](https://xelltis.github.io/udonarium_axe_backend/reference/server-api)にあります。
 
 型と定数は`apps/cloudflare/contracts/protocol.ts`に、例は`apps/cloudflare/contracts/fixtures/`にあります。
 このページの内容と食い違うときは、そちらが正しいものです。
 いまの版は**2**です。
 
-部屋に入るには、`GET /v1/rooms/:roomKey/ws`でWebSocketにつなぎ替えます（→ [部屋のサーバーのAPI](/reference/server-api#get-v1-rooms-roomkey-ws)）。
+部屋に入るには、`GET /v1/rooms/:roomKey/ws`でWebSocketにつなぎ替えます（→ [部屋のサーバーのAPI](https://xelltis.github.io/udonarium_axe_backend/reference/server-api#get-v1-rooms-roomkey-ws)）。
 
 ## WebSocketのフレーム
 
@@ -72,7 +72,7 @@
 
 ### `invite`
 
-`{"type":"invite","role":"pl"}`を送ると、その役割で入れる招待を返します。GMだけが作れます（→ [招待](/server/#招待)）。
+`{"type":"invite","role":"pl"}`を送ると、その役割で入れる招待を返します。GMだけが作れます（→ [招待](https://xelltis.github.io/udonarium_axe_backend/server/#招待)）。
 
 ### `auth`
 
@@ -109,12 +109,12 @@ Axeは、トークンを替えたらすぐ送ります。
 - `welcome`の`members`には、つないだ本人とサーバーは入りません。
 - サーバー自身のピアIDは`welcome`の`authorityPeerId`（`@authority`）で知らせます。ピアIDの形から推し量らないでください。
 - `welcome`のすぐあとには、必ずサーバーのカタログ（`from`が`@authority`の`data`）が届きます。部屋が空でも、空のカタログが1件届きます。
-- `welcome`の`assetUpload`は、アセットの置き方です（→ [置き場所へ直接上げる](/reference/server-api#置き場所へ直接上げる)）。
+- `welcome`の`assetUpload`は、アセットの置き方です（→ [置き場所へ直接上げる](https://xelltis.github.io/udonarium_axe_backend/reference/server-api#置き場所へ直接上げる)）。
 - 省略できる欄は、これからも足すことがあります。知らない欄は無視してください。
 
 ### 部屋のアセットのトークン
 
-`welcome`の`assetToken`は、この部屋のアセット（→ [部屋のアセット](/reference/server-api#部屋のアセット)）を読み書きするトークンです。
+`welcome`の`assetToken`は、この部屋のアセット（→ [部屋のアセット](https://xelltis.github.io/udonarium_axe_backend/reference/server-api#部屋のアセット)）を読み書きするトークンです。
 `Authorization: Bearer`に付けて使います。
 中身は部屋の鍵、その席の役割とユーザーID（`uid`）で、`SESSION_SECRET`で署名し（HS256）、15分で切れます。
 切れる時刻は`assetTokenExpiresAt`（Unixミリ秒）です。
@@ -141,10 +141,10 @@ Axeは、トークンを替えたらすぐ送ります。
 
 | イベント                  | サーバーがすること                                                                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UPDATE_GAME_OBJECT`      | 版を比べ、新しければ置いて、宛先にかかわらずほかの全員に配る（→ [新しい方を勝たせる](/reference/room-server#新しい方を勝たせる)）                    |
+| `UPDATE_GAME_OBJECT`      | 版を比べ、新しければ置いて、宛先にかかわらずほかの全員に配る（→ [新しい方を勝たせる](./room-server.md#新しい方を勝たせる)）                    |
 | `DELETE_GAME_OBJECT`      | 消して印を残し、宛先にかかわらずほかの全員に配る。印を残すかは、送られてきた種類名ではなく、置いてあるものの種類で決める（`PeerCursor`には残さない） |
 | `FORGET_DELETED_OBJECTS`  | 消した印を外し、ほかの全員に配る。見学者からのものは受けない                                                                                         |
-| `ROLE_REQUEST`            | 宛先がサーバーか、宛先なしなら、役割を変える（→ [役割を変える](/reference/room-server#役割を変える)）                                                |
+| `ROLE_REQUEST`            | 宛先がサーバーか、宛先なしなら、役割を変える（→ [役割を変える](./room-server.md#役割を変える)）                                                |
 | `ROLL_REQUEST`            | 宛先がサーバーか、宛先なしなら、ダイスを振って結果の発言を全員に配る（→ [サーバーで振るダイス](#サーバーで振るダイス)）                              |
 | `SYNCHRONIZE_GAME_OBJECT` | 宛先がサーバーか、宛先なしなら、サーバーが答える。足りないものを取り寄せ、消したものは消させる                                                       |
 | `REQUEST_GAME_OBJECT`     | 宛先がサーバーか、宛先なしなら、サーバーが持っているものを返す                                                                                       |
@@ -169,7 +169,7 @@ Axeは、トークンを替えたらすぐ送ります。
 | ---------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `AUTHORITATIVE_OBJECT` | オブジェクトの中身（`ObjectContext`） | 版にかかわらず置き換え、消した印も外す。書く権限の無い変更を戻すときと、サーバーが直したものを渡すときに使う |
 | `WITHDRAW_GAME_OBJECT` | `{ identifier }`                      | 消した印を残さずに、手元から外す。書く権限の無い人が作ったものを取り下げさせるときに使う                     |
-| `ROLE_REJECTED`        | `{ peerId, role, reason }`            | `ROLE_REQUEST`を断った。理由は[役割を変える](/reference/room-server#役割を変える)にある                      |
+| `ROLE_REJECTED`        | `{ peerId, role, reason }`            | `ROLE_REQUEST`を断った。理由は[役割を変える](./room-server.md#役割を変える)にある                      |
 | `ROLL_REJECTED`        | `{ identifier, reason }`              | `ROLL_REQUEST`を振らなかった。理由は[サーバーで振るダイス](#サーバーで振るダイス)にある                      |
 
 この4つのイベントは、クライアントが送ってきても、サーバーはだれにも届けません。

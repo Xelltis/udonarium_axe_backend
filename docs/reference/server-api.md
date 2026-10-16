@@ -2,7 +2,7 @@
 
 部屋のサーバー（Cloudflare版とVercel版）が受けるHTTPのAPIです。
 どちらの部屋のサーバーも、同じ経路に同じ形で答えます。
-部屋に入ったあとのWebSocketでのやりとりは、[部屋のプロトコル](/reference/protocol)にあります。
+部屋に入ったあとのWebSocketでのやりとりは、開発者向けの[部屋のプロトコル](https://github.com/Xelltis/udonarium_axe_backend/blob/main/development/protocol.md)にあります。
 
 ## エンドポイントの一覧
 
@@ -90,7 +90,7 @@ Content-Type: application/json
 
 新しく作られた順に、1000件まで返します。
 `members`はいま入っている人数です。誰もいない部屋も、消えるまでは一覧に出ます。
-部屋のサーバーが落ちて、出ていく知らせが無いまま接続が切れたときは、見回りで数え直します（→ [見回り](/reference/room-server#見回り)）。
+部屋のサーバーが落ちて、出ていく知らせが無いまま接続が切れたときは、見回りで数え直します（Cloudflare版は1時間ごと、Vercel版は30秒ごと）。
 
 アクセストークンを付けて取ると、その人がGMの部屋に`"deletable": true`が付きます。
 その部屋は、1000件に入らない古いものでも必ず返します。
@@ -157,7 +157,7 @@ HTTPのまま断ると、ブラウザには理由が読めないためです。
 ログインのアクセストークンでは通りません。
 
 トークンは、部屋のサーバーが席に渡します。
-部屋に入ったときの`welcome`に、`assetToken`と`assetTokenExpiresAt`（Unixミリ秒）が付いてきます（→ [部屋のプロトコル](/reference/protocol#部屋のアセットのトークン)）。
+部屋に入ったときの`welcome`に、`assetToken`と`assetTokenExpiresAt`（Unixミリ秒）が付いてきます。
 トークンには、その部屋の鍵、席の役割、ユーザーID（`uid`）が入っています。
 署名はHS256で、鍵は`SESSION_SECRET`です。15分で切れます。
 
@@ -327,7 +327,7 @@ MP4やMOVの動画は受け付けません。
 
 ## ログインとアカウント
 
-ログインの流れと、トークンの扱いは[部屋のサーバーの中の動き](/reference/room-server#ログイン)にあります。
+ログインの流れと、トークンの扱いは、開発者向けの[部屋のサーバーの中の動き](https://github.com/Xelltis/udonarium_axe_backend/blob/main/development/room-server.md#ログイン)にあります。
 ここでは、Axeが呼ぶAPIの形を書きます。
 
 ### `POST /v1/auth/token`
@@ -423,4 +423,4 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 | 503  | `login-unavailable`    | ログインの3つが入っていない                                                                        |
 
 `config-invalid`のときは、足りない設定の名前がログに出ます。
-WebSocketでつないだあとに接続を閉じる理由は、[部屋のプロトコル](/reference/protocol#接続を閉じる理由)にあります。
+WebSocketでつないだあとに接続を閉じる理由は、[サーバー版で困ったとき](/server/troubleshooting#部屋に入れない・切れる)にあります。

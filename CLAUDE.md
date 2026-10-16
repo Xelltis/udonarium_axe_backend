@@ -6,12 +6,13 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 
 本ファイルは**日々の開発で守るべき最小限の規範**のみを記す。詳細は以下を参照。
 
-- リポジトリの構成・アプリごとのコマンドと決まり・コミットとフック → [docs/development/index.md](docs/development/index.md)
-- テスト・CI・リリース → [docs/development/ci.md](docs/development/ci.md)
-- ドキュメントの書きかた → [docs/development/docs.md](docs/development/docs.md)
+- リポジトリの構成・アプリごとのコマンドと決まり・コミットとフック → [development/README.md](development/README.md)
+- テスト・CI・リリース → [development/ci.md](development/ci.md)
+- ドキュメントの書きかた → [development/docs.md](development/docs.md)
 - 部屋のサーバーのHTTPのAPIとエラーのコード → [docs/reference/server-api.md](docs/reference/server-api.md)
-- 部屋のサーバーとAxeのWebSocketのやりとり → [docs/reference/protocol.md](docs/reference/protocol.md)
-- 部屋のサーバーの中の動き（同期・置き場所・ログイン・役割） → [docs/reference/room-server.md](docs/reference/room-server.md)
+- 部屋のサーバーとAxeのWebSocketのやりとり → [development/protocol.md](development/protocol.md)
+- 部屋のサーバーの中の動き（同期・置き場所・ログイン・役割） → [development/room-server.md](development/room-server.md)
+- サーバー版でのAxeの動き（ログイン・画像と音声・つなぎ直し） → [development/client.md](development/client.md)
 - 部屋のサーバーの設定項目 → [docs/server/configuration.md](docs/server/configuration.md)
 
 ## 構成の規範
@@ -62,7 +63,7 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 
 ## コミット・フック規約（要点）
 
-詳細は[docs/development/index.md](docs/development/index.md#コミットとpull-request)を参照。以下は要点のみ。
+詳細は[development/README.md](development/README.md#コミットとpull-request)を参照。以下は要点のみ。
 
 - **コミットメッセージは必ず英語**（件名も本文も）。形式は`type(scope): subject`（Conventional Commits）
   - scopeは`php`・`vercel`・`cloudflare`・`ci`・`docs`など。例: `fix(cloudflare): keep a seat's role across a reconnect`
@@ -77,16 +78,17 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 ## コメント・テスト名は英語
 
 `apps/`配下のコードのコメントと、`describe()` / `it()`のテスト名は英語で書く。
-`docs/`とREADMEの本文は対象外（詳細は[docs/development/index.md](docs/development/index.md#コメントとテスト名)）。
+`docs/`・`development/`とREADMEの本文は対象外（詳細は[development/README.md](development/README.md#コメントとテスト名)）。
 
 ## ドキュメントの日本語
 
-README・`docs/`のまとまった日本語は`yomiyasu`スキルを通して書く
+README・`docs/`・`development/`のまとまった日本語は`yomiyasu`スキルを通して書く
 （[.claude/settings.json](.claude/settings.json)の`enabledPlugins`で有効化済み。ほかの日本語校正スキルとは併用しない）。
-詳細は[docs/development/docs.md](docs/development/docs.md)にあり、ここには要点だけを書く。
+詳細は[development/docs.md](development/docs.md)にあり、ここには要点だけを書く。
 
 - 対象は新規執筆と書き直し。1〜2行の追記や表のセル修正はそのまま書いてよい
-- ページは読む人の目的で分ける（`guide`・`skyway`・`server`・`operate`・`reference`・`development`）。置く人のページには手順だけを書き、通信の形や中の動きは`reference`に書く
+- 公開サイト（`docs/`）を読むのは、サーバーを置く人だけ。置く人がしたいこと（`guide`・`skyway`・`server`・`operate`・`reference`）でページを分け、手順と置くのに要る決まりだけを書く。参加者のことは、置く人が知っておくこととして書く
+- 開発に参加する人に向けた文書（開発の決まり、CI、設計、プロトコル、中の動き）は、サイトに載せずに`development/`へ書く
 - 1つの事実は1ページにだけ書き、ほかからはリンクする。Cloudflare版とVercel版に共通することは「部屋のサーバー」と書き、違うところだけ版の名前を出す
 - 見出しを変えたら、そこへのリンクを直して`npm run docs:check`で確かめる（ビルドは見出しへのリンクを確かめない）
 - 和文と英数字の間に半角空白を入れない。空けてある既存の文書は書き直すときにそろえる

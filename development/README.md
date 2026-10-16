@@ -11,7 +11,8 @@ udonarium_axe_backend/
  │   ├─ php/         PHP版（composer）
  │   ├─ vercel/      Vercel版（npm、独立したlockfile）
  │   └─ cloudflare/  Cloudflare版（npm、独立したlockfile）
- ├─ docs/            このドキュメント（VitePress）
+ ├─ docs/            サーバーを置く人に向けたサイト（VitePress）
+ ├─ development/     開発に参加する人に向けた文書（このフォルダ）
  ├─ .github/         CI、Dependabot、Issue・PRのテンプレート
  ├─ package.json     ルートの道具（commitlint、lefthook、semantic-release、VitePress）
  └─ CHANGELOG.md     リリースごとの変更の記録（自動で更新される）
@@ -43,7 +44,7 @@ CIは、写しが正本と同じかと、共有のコードが使うパッケー
 Cloudflare版の部屋のサーバーとAxeのあいだのやりとりは、`apps/cloudflare/contracts/`に型とフィクスチャ（JSONの例）を置いています。
 このディレクトリはサーバー側が持ち主で、Axeは同じ内容を写して使い、両側のテストが同じJSONを読みます。
 Deployボタンが`apps/cloudflare`だけを複製するので、リポジトリの直下ではなく、その中に置いています。
-やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](/reference/protocol)）。
+やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](./protocol.md)）。
 
 ## 準備
 
@@ -194,7 +195,7 @@ ESLintにPrettierを組み込んである（`eslint-plugin-prettier`、フロン
 Markdownは表を手でそろえるので、Prettierの対象から外しています。
 PHPは`bin/php-cs-fixer fix`で整えます。
 
-詳しくは[テスト・CI・リリース](/development/ci)を見てください。
+詳しくは[テスト・CI・リリース](./ci.md)を見てください。
 
 ## セキュリティ
 
