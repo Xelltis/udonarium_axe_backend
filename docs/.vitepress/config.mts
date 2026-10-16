@@ -95,7 +95,9 @@ export default defineConfig({
   },
   head: [
     ['meta', { name: 'theme-color', content: '#8b7cf6' }],
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }],
+    // The same icon as Axe and its user guide (copied from the udonarium_axe repository).
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
+    ['link', { rel: 'apple-touch-icon', href: `${base}icon-180.png` }],
     ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
     [
@@ -168,7 +170,7 @@ export default defineConfig({
     },
   },
   themeConfig: {
-    logo: '/logo.svg',
+    logo: '/favicon.svg',
     nav: [
       { text: 'はじめに', link: '/guide/' },
       { text: 'SkyWay版を置く', link: '/skyway/' },
