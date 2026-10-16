@@ -24,6 +24,7 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
   `node scripts/sync-shared.mjs`で`apps/vercel`へ写す（写しが同じかをCIが`--check`で確かめる）
 - `apps/cloudflare/contracts/`はサーバー側が持ち主。Axeはこれを写して使い、両側のテストが同じJSONを読む。
   やりとりの形を変えたら`PROTOCOL_VERSION`を上げ、Axe側に知らせる
+- 説明はすべて`docs/`に書く。`apps/`の中にREADMEや説明書を置かない（Deployボタンの画面から読む手引きも`docs/`へリンクする）
 
 ## 規範ハイライト
 
