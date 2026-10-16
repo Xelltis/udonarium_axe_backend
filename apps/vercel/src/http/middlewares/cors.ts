@@ -1,7 +1,7 @@
 import { cors } from 'hono/cors';
 import type { MiddlewareHandler } from 'hono';
 
-import { isAllowedOrigin } from '../../infra/url/origin.js';
+import { isAllowedOrigin } from '../../core/http/origin.js';
 import { AppError } from '../errors/app-error.js';
 import type { AppEnv } from '../context.js';
 

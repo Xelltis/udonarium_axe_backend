@@ -21,13 +21,23 @@ udonarium_axe_backend/
 `apps/vercel`と`apps/cloudflare`は自分のlockfileを持つ独立したnpmのプロジェクトで、Deployボタンはそのディレクトリだけを複製します。
 ほかのアプリのファイルを読み込む（`import`する）ことはしないでください。
 
+Vercel版とCloudflare版は、部屋のサーバーの中身を同じコードで動かします。
+共有するのは`src/core/`（部屋の中継と同期、見え方、ダイス、トークン、HTTPの経路など）、`contracts/`、`test/shared/`（どちらの上でも流すテスト）の3つです。
+正本は`apps/cloudflare`にあり、`apps/vercel`には写しを置きます。
+共有のコードを直すときは`apps/cloudflare`の方を直し、次のコマンドで写してください。
+
+```sh
+node scripts/sync-shared.mjs
+```
+
+CIは、写しが正本と同じかと、共有のコードが使うパッケージ（hono・valibot・@msgpack/msgpack・bcdice）の版が両方のアプリでそろっているかを確かめます。
+共有のコードは、Vercel版ではNodeがバンドルせずにそのまま読むので、相対`import`は`.js`まで書き、JSONの`import`には`with { type: 'json' }`を付けます。
+Cloudflare版のlintがこれを確かめます。
+
 Cloudflare版の部屋のサーバーとAxeのあいだのやりとりは、`apps/cloudflare/contracts/`に型とフィクスチャ（JSONの例）を置いています。
 このディレクトリはサーバー側が持ち主で、Axeは同じ内容を写して使い、両側のテストが同じJSONを読みます。
 Deployボタンが`apps/cloudflare`だけを複製するので、リポジトリの直下ではなく、その中に置いています。
 やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](/cloudflare/protocol)）。
-
-Vercel版とCloudflare版では、Originの照合を同じ形で書いています（`apps/vercel/src/infra/url/origin.ts`と`apps/cloudflare/src/core/http/origin.ts`）。
-この2つはCIで中身が同じかを確かめているので、片方を直したら、もう片方も同じように直してください。
 
 ## 準備
 
