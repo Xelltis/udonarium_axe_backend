@@ -28,12 +28,12 @@ import {
   PEER_ROLES,
 } from '../../../contracts/protocol.js';
 
-// クライアントの MessagePack は undefined を nil にするので、省けるものは null も受ける
+// The client's MessagePack turns undefined into nil, so anything optional also accepts null.
 
-/** 1つの send に入れられるイベントの数 */
+/** How many events one send can hold. */
 export const MAX_EVENTS_PER_MESSAGE = 4096;
 
-/** 今と同じ形のピア ID。`@authority` のような、サーバーの ID と紛れる名前は通さない */
+/** A peer id of the current shape. Names like `@authority` that could be taken for the server's id do not pass. */
 const peerIdSchema = pipe(string(), regex(/^[\w-]{1,64}$/));
 
 const identifierSchema = pipe(string(), minLength(1), maxLength(256));
@@ -74,10 +74,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const objectContextSchema = object({
   aliasName: pipe(string(), maxLength(128)),
   identifier: identifierSchema,
-  // 大きすぎる版は、あとから +1 しても変わらず、だれも書き換えられなくなる。負の版も +1 で追い越せない
+  // A version too big stays the same after +1, so nobody can change it. A negative one cannot be passed by +1 either.
   majorVersion: pipe(number(), finite(), minValue(0), maxValue(MAX_OBJECT_VERSION)),
   minorVersion: pipe(number(), finite(), gtValue(-1), ltValue(1)),
-  // 中身は読まないので、写さずにそのまま持つ
+  // The contents are not read, so they are kept as they are, without being copied.
   syncData: custom<Record<string, unknown>>(isRecord),
 });
 
@@ -95,8 +95,9 @@ export const forgetSchema = object({ identifiers: nullish(array(identifierSchema
 const textSchema = pipe(string(), maxLength(MAX_ROLL_COMMAND_LENGTH));
 
 /**
- * 結果の後ろに付ける対象の名前。1行の ` [名前]` だけで、名前には角括弧と矢印を含めない。違う形を通すと、
- * 印の付いた結果に好きな文（` → 12 成功` など）を足せてしまう
+ * The target's name put after the result. Only ` [name]` on one line, with no square brackets or
+ * arrow in the name. Letting another form through would let anyone add any text they like (such as
+ * ` → 12 成功`) to a marked result.
  */
 const TARGET_SUFFIX = new RegExp(`^ \\[[^\\r\\n\\[\\]→]{1,${MAX_ROLL_TARGET_NAME_LENGTH}}\\]$`);
 

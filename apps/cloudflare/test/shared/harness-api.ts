@@ -3,67 +3,70 @@ import type { RoomInit } from '../../src/core/http/backend.js';
 import type { RoomEngine } from '../../src/core/rooms/engine.js';
 import type { RoomHost } from '../../src/core/rooms/host.js';
 
-// 共有のテストが部屋のサーバーに触るところ。部屋のサーバーごとの test/harness.ts が、これを実装した
-// harness を書き出す。共有のテストは、部屋のサーバーの中身にはこれを通してだけ触る
+// Where the shared tests touch the room server. Each room server's test/harness.ts exports a harness
+// that implements this. The shared tests touch the room server's insides only through it.
 
-/** つないだ WebSocket を、テストが使う形にしたもの */
+/** A connected WebSocket, in the shape the tests use. */
 export interface TestSocket {
   send(data: Uint8Array | string): void;
   close(code?: number, reason?: string): void;
-  /** 届いたフレーム。バイナリは ArrayBuffer で渡す */
+  /** The frames that arrive. Binary ones are passed as an ArrayBuffer. */
   onMessage(listener: (data: ArrayBuffer | string) => void): void;
   onClose(listener: (code: number, reason: string) => void): void;
 }
 
-/** WebSocket につなぎ替える要求の結果 */
+/** The result of a request to upgrade to a WebSocket. */
 export interface Upgraded {
   status: number;
-  /** つながったときだけ。断られたときは null で、本文は json で読む */
+  /** Only when connected. Null when refused, and then the body is read with json. */
   socket: TestSocket | null;
   json(): Promise<unknown>;
 }
 
-/** 置き場所にある部屋のアセット */
+/** A room asset in the store. */
 export interface StoredAsset {
-  /** 置いたときに先頭のバイトで決めた形式 */
+  /** The type decided from the first bytes when it was stored. */
   type: string | undefined;
   size: number;
-  /** 引用符付きの ETag。GET の ETag と同じもの */
+  /** The ETag, in quotes. The same as the ETag of a GET. */
   etag: string;
-  /** 置いた時刻（Unix ミリ秒） */
+  /** When it was stored (Unix milliseconds). */
   uploadedAt: number;
 }
 
-/** 部屋の中。部屋のサーバーが RoomEngine に渡しているもの */
+/** The inside of a room. What the room server gives RoomEngine. */
 export interface RoomInside {
   engine: RoomEngine<object>;
   host: RoomHost<object>;
 }
 
 export interface Harness {
-  /** welcome で知らせるアセットの置き方。種類ごとの上限まで1回の PUT で置ける部屋のサーバーなら null */
+  /**
+   * How assets are stored, as told in welcome. Null for a room server where one PUT can store up to
+   * the limit for each type.
+   */
   assetUpload: AssetUploadPolicy | null;
-  /** 部屋のサーバーへのリクエスト。送信元の IP は CF-Connecting-IP に書いておく */
+  /** A request to the room server. The sender's IP goes in CF-Connecting-IP. */
   fetch(request: Request): Promise<Response>;
   /**
-   * 環境変数を替えた部屋のサーバーへのリクエスト。undefined の変数は置かない。
-   * 終わるまで（あとの仕事も）待ってから返す
+   * A request to the room server with other environment variables. A variable that is undefined is
+   * left unset. Returns after waiting for everything to end (the work left for later too).
    */
   fetchWith(request: Request, env: Record<string, string | undefined>): Promise<Response>;
   upgrade(request: Request): Promise<Upgraded>;
-  /** 部屋の中で run を動かす。部屋の状態を作ったり確かめたりするのに使う */
+  /** Calls run inside the room. Used to set up or check the room's state. */
   inside<T>(roomKey: string, run: (room: RoomInside) => T | Promise<T>): Promise<T>;
-  /** 鍵を決めて部屋を作る。決まった鍵の部屋を使うアセットのテストのため */
+  /** Makes a room with a chosen key. For the asset tests, which use rooms with fixed keys. */
   createRoom(init: RoomInit): Promise<void>;
   canUpload(roomKey: string, userId: string): Promise<'ok' | 'room-not-found' | 'not-a-player'>;
-  /** 部屋のサーバーから、ログインの設定だけを外す（部屋は残る） */
+  /** Takes only the login settings away from the room server (the room stays). */
   dropLogin(roomKey: string): Promise<void>;
-  /** 部屋に置いてあるアセット。無ければ null */
+  /** An asset kept in the room. Null when there is none. */
   assetStored(roomKey: string, id: string): Promise<StoredAsset | null>;
-  /** 運営する人が、その名前のものを置かせないようにする */
+  /** The operator stops anything with that name from being stored. */
   block(id: string): Promise<void>;
-  /** アカウントの、ログインから戻ったときのコード（行の ID）を期限切れにする */
+  /** Makes an account's code for coming back from a login (the row's id) expire. */
   expireLoginCode(accountKey: string, id: string): Promise<void>;
-  /** アカウントのリフレッシュトークンを、すべて期限切れにする */
+  /** Makes all of an account's refresh tokens expire. */
   expireRefreshTokens(accountKey: string): Promise<void>;
 }

@@ -4,21 +4,23 @@ import type { GenericSchema, InferOutput } from 'valibot';
 
 import { PEER_ROLES } from '../../../contracts/protocol.js';
 
-// 署名したトークン（JWT、HS256）。部屋の Durable Object が hello を受けたその場で確かめられるよう、
-// 署名も検証も同期で行う（非同期にすると、確かめているあいだに同じ接続のメッセージが割り込む）。
+// Signed tokens (JWT, HS256). Signing and checking are both done synchronously, so that the room's
+// Durable Object can check a token the moment it receives the hello (done asynchronously, messages
+// on the same connection would cut in while it is checking).
 
-/** アクセストークンが使える秒数 */
+/** How many seconds an access token can be used for. */
 export const ACCESS_TOKEN_SECONDS = 15 * 60;
-/** 招待が使える秒数 */
+/** How many seconds an invite can be used for. */
 export const INVITE_SECONDS = 30 * 24 * 60 * 60;
-/** ログインを始めてから、Discord から戻ってくるまでに許す秒数 */
+/** How many seconds are allowed from the start of a login until it comes back from Discord. */
 export const LOGIN_STATE_SECONDS = 10 * 60;
 /**
- * 部屋のアセットを読み書きするトークンが使える秒数。部屋を抜けた人が読めるのは、長くてもこのあいだだけ。
- * 部屋にいるあいだは、切れる前に部屋のサーバーが渡し直す
+ * How many seconds a token for reading and writing the room's assets can be used for. Someone who
+ * has left the room can read them for this long at most.
+ * While someone is in the room, the room server hands out a new one before it runs out.
  */
 export const ASSET_TOKEN_SECONDS = 15 * 60;
-/** 置き場所へ直接上げるときの、上げてから知らせるまでに許す秒数 */
+/** For an upload straight to the store, how many seconds are allowed from the upload until it is reported. */
 export const UPLOAD_TICKET_SECONDS = 15 * 60;
 
 const encoder = new TextEncoder();
@@ -32,14 +34,20 @@ export const base64url = (bytes: Uint8Array): string =>
 const fromBase64url = (text: string): Uint8Array =>
   Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0));
 
-/** 頭はいつも同じ。違うものは読まないので、alg を書き換えて通そうとするものも通らない */
+/**
+ * The header is always the same. No other is read, so a token that changes alg to get through does
+ * not get through.
+ */
 const HEADER = base64url(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 const hmac = (body: string, secret: string): Uint8Array => createHmac('sha256', secret).update(body).digest();
 
-/** 種類（aud）ごとの中身。種類の違うトークンを取り違えて受けないよう、aud まで確かめる */
+/**
+ * The contents for each kind (aud). The aud is checked too, so that a token of another kind is not
+ * taken by mistake.
+ */
 const claimSchemas = {
   access: object({
     aud: literal('access'),
@@ -52,7 +60,10 @@ const claimSchemas = {
     aud: literal('invite'),
     room: string(),
     role: picklist(PEER_ROLES),
-    /** 出した GM のユーザー ID。GM の招待は、その人がいまも GM のときだけ効く。前の形の招待には無い */
+    /**
+     * The user id of the GM who made it. An invite to be GM works only while that person is still
+     * GM. Invites in the older form do not have it.
+     */
     by: optional(string()),
     exp: number(),
   }),
@@ -66,24 +77,28 @@ const claimSchemas = {
     aud: literal('asset'),
     room: string(),
     role: picklist(PEER_ROLES),
-    /** 席のユーザー ID。置くときに、その人がいまも置ける役割かを部屋に尋ねる */
+    /**
+     * The seat's user id. On storing, the room is asked whether that person still has a role that
+     * may store.
+     */
     uid: string(),
     exp: number(),
   }),
   /**
-   * 置き場所へ直接上げる約束。上げる先を渡すときに出し、上げ終えた知らせで受ける。部屋のサーバーは
-   * 何も覚えておかず、これだけで、だれが何をどこへ上げたかを確かめる
+   * The ticket for an upload straight to the store. It is given out with the place to upload to,
+   * and comes back with the word that the upload is done. The room server remembers nothing, and
+   * checks from this alone who uploaded what, and where.
    */
   upload: object({
     aud: literal('upload'),
     room: string(),
-    /** アセットの ID（中身の SHA-256） */
+    /** The asset's id (the SHA-256 of its contents). */
     id: string(),
     uid: string(),
-    /** 上げると言ったバイト数 */
+    /** How many bytes the uploader said it would upload. */
     size: number(),
     name: string(),
-    /** 仮置きの場所 */
+    /** Where the upload waits. */
     path: string(),
     exp: number(),
   }),
@@ -92,7 +107,7 @@ const claimSchemas = {
 type Audience = keyof typeof claimSchemas;
 export type Claims<A extends Audience> = InferOutput<(typeof claimSchemas)[A]>;
 
-/** 署名する。exp は今から seconds 秒後 */
+/** Signs a token. Its exp is the given number of seconds from now. */
 export const signToken = <A extends Audience>(
   claims: Omit<Claims<A>, 'exp'>,
   seconds: number,
@@ -104,8 +119,9 @@ export const signToken = <A extends Audience>(
 };
 
 /**
- * 署名と期限と種類を確かめて、中身を返す。どれかが合わなければ null。
- * 鍵が空なら何も通さない。空の鍵の署名は、だれにでも作れる
+ * Checks the signature, the expiry and the kind, and returns the contents. Null when any of them
+ * does not match.
+ * With an empty key nothing gets through. Anyone can make a signature with an empty key.
  */
 export const readToken = <A extends Audience>(token: string, audience: A, secret: string): Claims<A> | null => {
   if (!secret) return null;

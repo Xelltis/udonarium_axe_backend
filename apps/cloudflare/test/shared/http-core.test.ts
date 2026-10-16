@@ -8,7 +8,8 @@ import { onError } from '../../src/core/http/errors.js';
 import { serverRoutes } from '../../src/core/http/routes/index.js';
 import { ORIGIN, PNG_HEAD, ROOM_KEY, SESSION_SECRET, assetTokenFor, fileOf, sha256Hex } from './helpers.js';
 
-// 経路と、それが使う小さなもの。部屋のサーバーから起こしにくいところを、作り物の部屋のサーバーで確かめる
+// The routes and the small pieces they use. Checks, with a fake room server, what is hard to bring
+// about from the room server.
 
 afterEach(() => {
   vi.restoreAllMocks();

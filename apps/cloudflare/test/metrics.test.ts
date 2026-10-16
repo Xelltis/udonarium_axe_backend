@@ -7,7 +7,7 @@ import { FLUSH_TALLY_MS } from '../src/core/rooms/limits';
 import { chatTabList, connect, contextOf, createRoom, eventually, join, listedTabOf } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
 
-/** 部屋が Analytics Engine に書いたものを手元に集める */
+/** Gathers here what the room wrote to Analytics Engine. */
 const recordPoints = async (roomKey: string) => {
   const points: AnalyticsEngineDataPoint[] = [];
   await runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject) => {
@@ -47,7 +47,7 @@ describe('room metrics', () => {
     await guest.client.events();
     await guest.client.events();
     guest.client.send({ type: 'send', events: {} });
-    // 部屋が空になると、まとめておいた書き込みの数を記録する
+    // When the room is empty, it records the number of writes it gathered.
     alice.client.close();
     await eventually(
       async () => points.length,
@@ -69,7 +69,8 @@ describe('room metrics', () => {
         ['flush', ''],
       ])
     );
-    // 書いたのは4つ（コマ、タブの一覧、タブ、振った結果）。それぞれの行と、その主キーの索引の行を書く
+    // Four things were written (a piece, the tab list, a tab, a roll's result). Each writes its row and
+    // a row in its primary key's index.
     const flush = points.find((point) => point.blobs?.[1] === 'flush');
     expect(flush?.doubles?.[0]).toBe(8);
   });
@@ -88,7 +89,7 @@ describe('room metrics', () => {
     alice.client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     await eventually(async () => summary(points).some(([event]) => event === 'flush'), Boolean);
 
-    // 前からの3行に、1つのものの行と索引の行
+    // The 3 rows from before, plus one object's row and its index row.
     expect(points.find((point) => point.blobs?.[1] === 'flush')?.doubles).toEqual([5]);
   });
 

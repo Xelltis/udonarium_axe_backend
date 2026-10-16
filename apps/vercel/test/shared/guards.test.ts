@@ -24,7 +24,8 @@ import { harness } from '../harness.js';
 import { accessTokenFor } from './helpers.js';
 import { chatTabList, connect, contextOf, createRoom, join, listedTabOf, refusalOf } from './room-helpers.js';
 
-// 部屋のサーバーを、名乗り・書き込み・送りすぎで壊させないための守り
+// The guards that keep the room server from being broken by false names, by writes, and by sending
+// too much.
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -41,7 +42,7 @@ const inside = <T>(roomKey: string, run: (room: Internals, host: RoomHost<object
 
 const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
 
-/** Axe が部屋に入るときの形のピア ID。頭はユーザー ID のダイジェスト */
+/** A peer id in the shape Axe uses when it comes into a room. It starts with a digest of the user id. */
 const roomPeerIdOf = (userId: string) =>
   `${toBase62(new Uint8Array(createHash('sha256').update(userId).digest())).slice(0, 6)}abcRoomName-`;
 
@@ -151,7 +152,7 @@ describe('what a write may change', () => {
 
     guest.client.emit([update(contextOf('tab', 9, 0.5, { peerId: 'guest', name: 'guest' }, 'PeerCursor'))]);
 
-    // 書き戻させるのは、置いてあるタブのまま
+    // What it is made to write back is the tab as kept.
     const [answer] = await guest.client.events();
     expect(answer.eventName).toBe(AuthorityEvent.AUTHORITATIVE);
     expect((answer.data as ObjectContext).aliasName).toBe('chat-tab');

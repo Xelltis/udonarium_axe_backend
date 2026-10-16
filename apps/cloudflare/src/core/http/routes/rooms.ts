@@ -8,7 +8,7 @@ import { fail } from '../errors.js';
 import { bearerOf } from '../request.js';
 import { completeUpload, getRoomAsset, listRoomAssets, putRoomAsset, requestUpload } from './assets.js';
 
-/** 部屋の鍵。128 ビットの乱数を小文字の16進で書いたもの */
+/** A room's key: a 128-bit random number written in lowercase hex. */
 const ROOM_KEY = /^[0-9a-f]{32}$/;
 
 const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -21,15 +21,16 @@ const createSchema = object({
 const randomRoomKey = (): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
-/** 表示用の3文字。ぶつかっても困らない（部屋は鍵で区別する） */
+/** Three characters for display. A clash does no harm (rooms are told apart by their keys). */
 const randomRoomId = (): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(3)), (byte) => BASE62[byte % 62]).join('');
 
 export const roomRoutes = new Hono<ServerEnv>();
 
 /**
- * 部屋の一覧。アクセストークンが付いていれば、その人が GM の部屋に deletable を付ける。
- * 一覧は部屋のサーバーに1つしかないので、送り元ごとに数を絞る
+ * The room list. When the request carries an access token, deletable is added to the rooms where
+ * that person is GM.
+ * The room server has only one list, so each sender may ask for it only so many times.
  */
 roomRoutes.get('/', async (c) => {
   const { backend, config } = c.var;
@@ -40,8 +41,8 @@ roomRoutes.get('/', async (c) => {
 });
 
 /**
- * 鍵で1つの部屋を引く。一覧は新しい順に1000件までなので、それより古い部屋への招待リンクや、つなぎ直しが
- * 部屋を見つけられるように。数え方は一覧と同じ
+ * Looks up one room by its key. The list holds only the newest 1000 rooms, so this lets an invite
+ * link or a reconnect find a room older than those. It is counted the same way as the list.
  */
 roomRoutes.get('/:roomKey', async (c) => {
   const { backend, config } = c.var;
@@ -54,7 +55,10 @@ roomRoutes.get('/:roomKey', async (c) => {
   return c.json<RoomResponse>({ room });
 });
 
-/** 部屋を作る。ログインした人だけが作れ、作った人が GM になる。ログインを置いていなければ 503 */
+/**
+ * Makes a room. Only someone logged in can make one, and whoever makes it becomes GM. 503 when no
+ * login is set up.
+ */
 roomRoutes.post('/', async (c) => {
   const { backend, config } = c.var;
   if (!config.login) return fail(c, 503, 'login-unavailable');
@@ -77,7 +81,7 @@ roomRoutes.post('/', async (c) => {
   return c.json<CreateRoomResponse>({ roomKey, roomId }, 201);
 });
 
-/** 部屋を削除する。その部屋の GM だけが削除でき、入っている人は room-deleted で閉じられる */
+/** Deletes a room. Only its GM can delete it, and the connections of those in it close with room-deleted. */
 roomRoutes.delete('/:roomKey', async (c) => {
   const { backend, config } = c.var;
   if (!config.login) return fail(c, 503, 'login-unavailable');
@@ -92,7 +96,7 @@ roomRoutes.delete('/:roomKey', async (c) => {
   return c.body(null, 204);
 });
 
-/** 部屋のアセット。部屋の鍵の形が違えば、部屋のサーバーに尋ねるまでもない */
+/** Room assets. When the room key is in the wrong form, there is no need to ask the room server. */
 roomRoutes.get('/:roomKey/assets', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? listRoomAssets(c) : fail(c, 400, 'invalid-id')
 );
@@ -102,7 +106,8 @@ roomRoutes.get('/:roomKey/assets/:id', (c) =>
 roomRoutes.put('/:roomKey/assets/:id', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? putRoomAsset(c) : fail(c, 400, 'invalid-id')
 );
-// 置き場所へ直接上げる流れ。持たない部屋のサーバー（Cloudflare 版）では not-found
+// The steps for uploading straight to the store. A room server without them (the Cloudflare
+// version) answers not-found.
 roomRoutes.post('/:roomKey/assets/:id/uploads', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? requestUpload(c) : fail(c, 400, 'invalid-id')
 );

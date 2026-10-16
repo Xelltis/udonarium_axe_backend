@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 部屋の置き場所を、まとめておいた変更を書いてから読む */
+/** Reads the room's store after writing the gathered changes. */
 const flushed = async <T>(roomKey: string, read: (sql: SqlStorage) => T): Promise<T> =>
   runInDurableObject(stubOf(roomKey), (instance: RoomDurableObject, state) => {
     instance.store().flush();
@@ -171,7 +171,7 @@ describe('keeping the room', () => {
   });
 });
 
-/** 部屋が空になった時刻と、時計が鳴る時刻 */
+/** When the room became empty, and when the alarm goes off. */
 const clockOf = (roomKey: string) =>
   runInDurableObject(stubOf(roomKey), async (_instance, state) => ({
     emptiedAt: state.storage.sql.exec<{ emptied_at: number | null }>('SELECT emptied_at FROM room').one().emptied_at,
@@ -193,7 +193,8 @@ describe('closing the room', () => {
     );
     const ran = await runDurableObjectAlarm(stubOf(roomKey));
 
-    // 人がいるあいだの時計は見回り。ログインした席のトークンが先に切れるなら、そのころに見る
+    // While people are in the room, the alarm is for checks. When the token of a logged-in seat runs
+    // out sooner, the check comes around then.
     expect(occupied.emptiedAt).toBeNull();
     expect(occupied.alarm).toBeGreaterThan(Date.now() + ACCESS_TOKEN_SECONDS * 1000 - 60_000);
     expect(occupied.alarm).toBeLessThan(Date.now() + OCCUPIED_CHECK_MS);
@@ -242,7 +243,7 @@ describe('closing the room', () => {
   });
 
   it('counts afresh a room left without anyone seen going out, and deletes it after the retention', async () => {
-    // Worker が落ちて、出ていく知らせが来ないまま、つながっていた人がいなくなった部屋
+    // A room whose connected people are gone after the Worker went down, with no word of their leaving.
     const roomKey = await createRoom();
     await runInDurableObject(stubOf(roomKey), (_instance, state) => {
       state.storage.sql.exec('UPDATE room SET emptied_at = NULL');

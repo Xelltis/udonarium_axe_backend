@@ -7,19 +7,20 @@ import { LOBBY_NAME } from '../rooms/lobby';
 import { objectHeaders, setContentRange } from './response';
 import { randomStart, sweepOrphans } from './sweep';
 
-/** R2 が sha256 の照合に失敗したときのエラー番号 */
+/** The error number R2 gives when the sha256 check fails. */
 const R2_BAD_DIGEST = '(10037)';
 
 /**
- * 置いたあとに、部屋がもう無いアセットを掃除する割合。部屋のアセットは部屋が消えるときに消すので、
- * 拾うのは消しそこねたものだけ。バケットはアップロードでしか増えないので、アップロードに比例して見回る
+ * The chance, after an asset is stored, of sweeping away assets whose room is gone. A room's assets
+ * are deleted when the room goes, so this picks up only those that were missed. The bucket grows only
+ * through uploads, so it is swept in step with uploads.
  */
 const SWEEP_CHANCE = 1 / 20;
 
-/** 一覧で読む R2 のページの数の上限。1ページは 1000 件 */
+/** The limit on how many R2 pages a listing reads. A page holds 1000 objects. */
 const MAX_LIST_PAGES = 10;
 
-/** 部屋のアセットを R2 に置き、Cache API を通して配る */
+/** Keeps a room's assets in R2 and serves them through the Cache API. */
 export const r2Assets = (
   env: Env,
   waitUntil: (work: Promise<unknown>) => void,
@@ -30,7 +31,8 @@ export const r2Assets = (
   exists: async (roomKey, id) => (await env.ASSETS.head(roomAssetKey(roomKey, id))) !== null,
 
   store: async (roomKey, id, body, length, type, name) => {
-    // 照合は R2 が書き込みながら行う。長さが Content-Length と違えば、流すあいだに止まる
+    // R2 checks the hash while it writes. When the length differs from Content-Length, it stops
+    // mid-stream.
     try {
       await env.ASSETS.put(roomAssetKey(roomKey, id), body.pipeThrough(new FixedLengthStream(length)), {
         sha256: id,
@@ -49,8 +51,8 @@ export const r2Assets = (
   },
 
   /**
-   * HEAD は R2 の head で答え、中身のストリームを開かない。GET と同じく、キャッシュに残っているものは
-   * キャッシュから答える（GET と HEAD で答えが食い違わないように）
+   * Answers HEAD with R2's head and does not open the body's stream. As with GET, what is left in the
+   * cache is answered from the cache (so that GET and HEAD do not give different answers).
    */
   head: async (request, roomKey, id) => {
     const cached = await caches.default.match(request.url);
@@ -62,15 +64,17 @@ export const r2Assets = (
   },
 
   read: async (request, roomKey, id) => {
-    // Worker が作った応答は CDN に残らないので、Cache API で同じデータセンターからの読み出しを受ける。
-    // トークンを確かめてから引くので、キャッシュに残ったものもトークンの無い人には返らない。
-    // 条件付きリクエスト（304）と Range（206）は cache.match が答える。
+    // A response a Worker makes does not stay in the CDN, so the Cache API takes the reads from the same
+    // data center. The cache is looked up after the token is checked, so even what is left in the cache
+    // does not go back to someone without a token.
+    // cache.match answers conditional requests (304) and Range (206).
     const cache = caches.default;
     const cached = await cache.match(request);
     if (cached) return privately(cached);
 
     if (!(await limit(request, 'read'))) return failure(429, 'rate-limited');
-    // 条件付きリクエストと Range は R2 に任せる。条件が合わないと、R2 は本文の無いものを返す
+    // Conditional requests and Range are left to R2. When the condition fails, R2 returns one without
+    // a body.
     const headers = request.headers;
     const object = await env.ASSETS.get(roomAssetKey(roomKey, id), {
       onlyIf: headers,

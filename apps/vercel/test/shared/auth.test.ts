@@ -22,7 +22,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** ログインの3つを外した Worker に送る */
+/** Sends to a Worker with the three login settings taken away. */
 const withoutLogin = (request: Request) =>
   harness.fetchWith(request, {
     DISCORD_CLIENT_ID: undefined,
@@ -261,7 +261,8 @@ describe('POST /v1/auth/token', () => {
 
   it('drops the whole line even when hashing lets the second refresh in between', async () => {
     const tokens = await logIn({ id: '16', username: 'ren' });
-    // 計算のたびにほかのリクエストへ順番を譲る。workerd の digest が譲らなくても、すき間を作る
+    // Gives way to other requests on each hash. Even if workerd's digest does not give way, this makes
+    // a gap.
     const digest = crypto.subtle.digest.bind(crypto.subtle);
     vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
       await new Promise((resolve) => setTimeout(resolve, 5));

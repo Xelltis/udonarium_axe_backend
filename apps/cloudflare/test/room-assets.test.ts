@@ -8,14 +8,14 @@ import { ORIGIN, PNG_HEAD, accessTokenFor, freshFile, freshIp } from './shared/h
 import { ROOMS, createRoom, join } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
 
-// 部屋が席に渡すアセットのトークンと、部屋が消えるときのアセット
+// The asset tokens a room hands its seats, and the assets when a room goes.
 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-/** 部屋のアセットを、そのトークンで置こうとする */
+/** Tries to store a room asset with the given token. */
 const tryPut = async (roomKey: string, token: string) => {
   const { file, id } = await freshFile(PNG_HEAD, 128);
   const res = await exports.default.fetch(
@@ -33,7 +33,7 @@ const tryPut = async (roomKey: string, token: string) => {
   return { res, id };
 };
 
-/** 部屋のアセットを、そのトークンで置く */
+/** Stores a room asset with the given token. */
 const putIn = async (roomKey: string, token: string) => {
   const { res, id } = await tryPut(roomKey, token);
   expect(res.status).toBe(201);
@@ -44,7 +44,7 @@ describe('a room’s assets when the room goes', () => {
   it('take nothing left behind by an upload still under way as the room was deleted', async () => {
     const roomKey = await createRoom({}, 'gm');
     const gm = await join(roomKey, 'gm');
-    // 部屋に置けると答えたあと、中身を置ききる前に部屋を削除する
+    // After the room has said the asset can be stored, the room is deleted before all of it is stored.
     const put = env.ASSETS.put.bind(env.ASSETS);
     vi.spyOn(env.ASSETS, 'put').mockImplementation(async (...args: Parameters<R2Bucket['put']>) => {
       const deleted = await exports.default.fetch(

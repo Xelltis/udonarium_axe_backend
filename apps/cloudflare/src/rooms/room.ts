@@ -11,7 +11,7 @@ import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../core/roo
 import { LOBBY_NAME } from './lobby';
 import { RoomStore, migrate } from './store';
 
-/** 部屋を消しきれなかったとき、もう一度消しにくるまでの時間（ミリ秒） */
+/** How long to wait before deleting a room again when it could not be deleted all the way (milliseconds). */
 export const WIPE_RETRY_MS = 60_000;
 
 interface RoomRow extends Record<string, SqlStorageValue> {
@@ -21,23 +21,26 @@ interface RoomRow extends Record<string, SqlStorageValue> {
   name: string;
   password_salt: ArrayBuffer | null;
   password_hash: ArrayBuffer | null;
-  /** 最後の1人が出た時刻。だれかいれば null */
+  /** When the last person left. Null while someone is there. */
   emptied_at: number | null;
 }
 
 /**
- * 1つの部屋。部屋にいる人の WebSocket を受け、中継と同期は RoomEngine に任せ、部屋の状態を持つ。
- * 最後の1人が出てから保持期間が過ぎると、部屋ごと消す。
+ * One room. It takes the WebSockets of the people in the room, leaves relaying and syncing to
+ * RoomEngine, and holds the room's state.
+ * When the retention period has passed since the last person left, it deletes the whole room.
  *
- * Hibernation に入るとメモリは消えるので、接続の情報（席）は WebSocket に添え、状態は SQLite に置く。
- * メモリに置くのは、読み直せるもの（索引）と、消えても困らないもの（送りすぎの数）だけ。
+ * Memory is lost on going into hibernation, so what is kept for each connection (the seat) goes with
+ * the WebSocket, and the state is kept in SQLite. Memory holds only what can be read again (the index)
+ * and what does no harm when lost (the counts of sending too much).
  */
 export class RoomDurableObject extends DurableObject<Env> implements RoomHost<WebSocket> {
   private storeCache: RoomStore | null = null;
   private lobbyQueue: Promise<void> = Promise.resolve();
   /**
-   * 部屋を消している最中。消すあいだに一覧や R2 を待つので、そのあいだに来たものを受けないための印。
-   * 消し終われば部屋の行も無くなるので、メモリだけに置けばよい
+   * The room is being deleted. Deleting waits on the room list and R2, so this mark keeps out what
+   * comes in meanwhile. Once the room is deleted its row is gone too, so keeping this in memory is
+   * enough.
    */
   private deleting = false;
   private readonly engine = new RoomEngine<WebSocket>(this);
@@ -47,7 +50,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
   }
 
-  /** 部屋を作る。Worker の POST /v1/rooms から呼ぶ */
+  /** Makes the room. Called from the Worker's POST /v1/rooms. */
   async create(init: RoomInit): Promise<void> {
     const password = init.password ? hashPassword(init.password) : null;
     const sql = this.ctx.storage.sql;
@@ -62,7 +65,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       created_at INTEGER NOT NULL,
       emptied_at INTEGER
     )`);
-    // ログインした人ごとの役割。部屋を作った人が GM になる
+    // The role of each person who logged in. Whoever made the room becomes a GM.
     sql.exec(`CREATE TABLE IF NOT EXISTS seats (
       user_id TEXT PRIMARY KEY,
       role TEXT NOT NULL
@@ -82,7 +85,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       Date.now(),
       Date.now()
     );
-    // だれも入らなければ、入った人が出たときと同じく保持期間で消える
+    // When nobody comes in, the room goes after the retention period, as when everyone in it has left.
     await this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
     await this.lobby().register({
       roomKey: init.roomKey,
@@ -95,9 +98,9 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   /**
-   * 部屋を削除する。Worker の DELETE /v1/rooms/:roomKey から呼ぶ。削除できるのはその部屋の GM だけ。
-   * 入っている人には room-deleted を送ってから閉じ、保持期間が過ぎたときと同じく、一覧から外して
-   * 置いたものをすべて消す
+   * Deletes the room. Called from the Worker's DELETE /v1/rooms/:roomKey. Only a GM of the room can
+   * delete it. The people in it are sent room-deleted and then closed, and as when the retention period
+   * has passed, the room is taken off the list and everything kept is deleted.
    */
   async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const room = this.roomRow();
@@ -111,16 +114,17 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   /**
-   * アセットを置こうとしている人が、いまもこの部屋で置ける役割（GM か PL）か。アセットの PUT から尋ねる。
-   * トークンは15分使えるので、そのあいだに部屋が消えたり、見学に変えられたりしていれば断る
+   * Whether the person about to store an asset still has a role in this room that can store one (GM
+   * or player). Asked from the asset PUT. A token works for 15 minutes, so it refuses when the room has
+   * gone in that time, or the person has been made a guest.
    */
   canUpload(userId: string): 'ok' | 'room-not-found' | 'not-a-player' {
     return this.engine.canUpload(userId);
   }
 
   /**
-   * WebSocket の接続を受ける。Worker が Origin とレート制限を確かめてから回してくる。
-   * 部屋が無いときと満員のときも、つないでから理由を送って閉じる
+   * Takes a WebSocket connection, which the Worker passes on after checking the Origin and the rate
+   * limit. Even when there is no room or it is full, it connects, sends the reason, and then closes.
    */
   override async fetch(): Promise<Response> {
     const { 0: client, 1: server } = new WebSocketPair();
@@ -135,11 +139,12 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
 
   override webSocketClose(ws: WebSocket, code: number, reason: string): void {
     this.engine.closed(ws);
-    // 閉じてきたので、閉じ返して閉じる手順を終える。送れない番号（1005 など）なら 1000 で返す
+    // The other side closed, so this closes back to finish the closing steps. A code that cannot be sent
+    // (such as 1005) is answered with 1000.
     try {
       ws.close(code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000, reason);
     } catch {
-      // もう閉じている
+      // Already closed.
     }
   }
 
@@ -148,19 +153,22 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   /**
-   * 部屋の時計。人がいれば見回り、一覧の人数を合わせて、また見回る。出ていくのを見届けないまま
-   * だれもいなくなっていたら（Worker が落ちたときなど）、そこから保持期間を数え始める。最後の1人が
-   * 出てから保持期間が過ぎていれば、部屋を一覧から外し、置いたものをすべて消す
+   * The room's alarm. With people in the room, it checks, brings the count in the list up to date, and
+   * checks again later. When everyone is gone without their leaving being seen (as when the Worker went
+   * down), it starts counting the retention period from then. When the retention period has passed since
+   * the last person left, it takes the room off the list and deletes everything kept.
    */
   override async alarm(): Promise<void> {
-    // 消しきれなかった部屋を、消しなおす。消している最中なら、終わるのを待って、また来る
+    // Deletes again a room that could not be deleted all the way. If it is being deleted right now, the
+    // alarm waits for that to end and comes back.
     const deleting = this.deletingRoomKey();
     if (deleting !== null && this.deleting) {
       await this.ctx.storage.setAlarm(Date.now() + WIPE_RETRY_MS);
       return;
     }
     if (deleting !== null) return this.wipe(deleting);
-    // トークンの切れた席を外す。最後の1人が外れたなら、出ていったときと同じく保持期間の時計が置かれた
+    // Removes the seats whose token has run out. When the last one was removed, the alarm for the
+    // retention period has been set, as when someone leaves.
     const seated = this.engine.seats().length;
     this.engine.expireSeats();
     if (seated > 0 && this.engine.seats().length === 0) return;
@@ -180,15 +188,17 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   /**
-   * 部屋を一覧から外し、部屋のアセットと置いたものと時計をすべて消す。アセットを消しそこねても、
-   * 部屋が一覧に無いので、アップロードのついでの掃除が拾う
+   * Takes the room off the list and deletes all of its assets, everything kept, and the alarm. When an
+   * asset is missed, the room is no longer in the list, so the sweep that comes with uploads picks it up.
    */
   private async wipe(roomKey: string | null): Promise<void> {
     this.deleting = true;
     try {
       if (roomKey) {
-        // 消しはじめたことを先に書く。途中で失敗しても、Worker が落ちても、入れる部屋には戻らない。
-        // 落ちたときに残りを消しにくる時計も、外へ尋ねる前に置く（もとの時計は保持期間の終わりかもしれない）
+        // Writes first that the deletion has begun, so that even if it fails partway or the Worker goes
+        // down, the room does not go back to one that can be joined. The alarm that comes to delete the
+        // rest after a crash is also set before asking anything outside (the old alarm may be the end of
+        // the retention period).
         const sql = this.ctx.storage.sql;
         sql.exec('CREATE TABLE IF NOT EXISTS deleting (room_key TEXT NOT NULL)');
         sql.exec('DELETE FROM deleting');
@@ -204,7 +214,8 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       await this.ctx.storage.deleteAll();
       await this.ctx.storage.deleteAlarm();
     } catch (err) {
-      // 一覧から外せなかったなどで、消しきれなかった。時計で、もう一度消しにくる
+      // It could not be deleted all the way, as when it could not be taken off the list. The alarm comes
+      // back to delete it again.
       console.error('Room deletion failed, to be tried again:', err);
       await this.ctx.storage.setAlarm(Date.now() + WIPE_RETRY_MS);
     } finally {
@@ -212,16 +223,16 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     }
   }
 
-  /** 消しはじめて、消しきれていない部屋の鍵。無ければ null */
+  /** The key of a room whose deletion began and has not finished. Null when there is none. */
   private deletingRoomKey(): string | null {
     const sql = this.ctx.storage.sql;
     const exists = sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'deleting'").toArray();
     if (exists.length === 0) return null;
-    // 消しはじめるときに1行だけ書き、消しおわると表ごと消える
+    // Just one row is written when the deletion begins, and the whole table goes when it ends.
     return sql.exec<{ room_key: string }>('SELECT room_key FROM deleting').one().room_key;
   }
 
-  // ---- RoomEngine に渡すもの ----
+  // ---- What RoomEngine is given ----
 
   connections(): WebSocket[] {
     return this.ctx.getWebSockets();
@@ -239,7 +250,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     try {
       ws.send(frame);
     } catch {
-      // 閉じかけている。webSocketClose で出たことになる
+      // It is closing. webSocketClose counts it as having left.
     }
   }
 
@@ -247,7 +258,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     try {
       ws.close(code, reason);
     } catch {
-      // もう閉じている
+      // Already closed.
     }
   }
 
@@ -267,7 +278,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.storeCache;
   }
 
-  /** ログインした人ごとの役割。seats の表に置く */
+  /** The role of each person who logged in. Kept in the seats table. */
   readonly roles: RoleBook = {
     roleOf: (userId) =>
       this.ctx.storage.sql.exec<{ role: PeerRole }>('SELECT role FROM seats WHERE user_id = ?', userId).toArray()[0]
@@ -283,33 +294,35 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   };
 
   /**
-   * トークンを確かめる鍵。部屋はログインを置いた Worker でしか作れないが、あとでログインを外すと
-   * null になる。そのあいだはトークンを確かめも作りもしない（見学では入れる）
+   * The key that checks tokens. Rooms can be made only on a Worker with login set up, but when login
+   * is taken away later, this is null. Meanwhile tokens are neither checked nor made (guests can still
+   * come in).
    */
   sessionSecret(): string | null {
     return parseConfig(this.env).login?.sessionSecret ?? null;
   }
 
-  /** 1回の PUT で、種類ごとの上限まで置ける */
+  /** One PUT can store up to the limit for each type. */
   assetUploadPolicy(): null {
     return null;
   }
 
-  /** 人がいるあいだは消さずに見回る */
+  /** While people are in the room, it is checked on, not deleted. */
   occupied(nextCheckAt: number): void {
     this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');
     void this.ctx.storage.setAlarm(nextCheckAt);
   }
 
-  /** だれもいなくなった。ここから保持期間を数える */
+  /** Everyone has gone. The retention period is counted from here. */
   emptied(): void {
     this.ctx.storage.sql.exec('UPDATE room SET emptied_at = ?', Date.now());
     void this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
   }
 
   /**
-   * 一覧の人数と GM を直す。知らせる順に並べ、どちらも知らせるときに数える。
-   * それまでに部屋が削除されていれば知らせない
+   * Brings the count and the GMs in the list up to date. The updates go out in order, and both are
+   * worked out at the time they go out.
+   * When the room has been deleted by then, nothing goes out.
    */
   lobbyChanged(roomKey: string): void {
     this.lobbyQueue = this.lobbyQueue
@@ -327,9 +340,11 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   /**
-   * 部屋で起きたことを Workers Analytics Engine に1点書く。index は部屋の鍵、blob は Worker のホスト名・
-   * 出来事・その中身（役割、閉じた理由、ゲームシステム）、double はその量（人数、つないでいた秒、
-   * 書いた変更の数、振るのにかかったミリ秒）。部屋が消えたあとなら書かない
+   * Writes one data point to Workers Analytics Engine for something that happened in the room. The index
+   * is the room key; the blobs are the Worker's host name, the event and its detail (the role, why the
+   * connection closed, the game system); the double is its amount (the number of people, the seconds
+   * connected, the number of changes written, the milliseconds a roll took). Nothing is written once
+   * the room is gone.
    */
   record(event: RoomEvent, detail: string, value: number): void {
     const room = this.roomRow();
@@ -345,16 +360,16 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     this.ctx.waitUntil(work);
   }
 
-  // ---- 部屋の行 ----
+  // ---- The room's row ----
 
-  /** 部屋の行。作られていないか、消えたあとなら null */
+  /** The room's row, or null when it has not been made or is gone. */
   private roomRow(): RoomRow | null {
     const sql = this.ctx.storage.sql;
     const tables = sql
       .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'deleting')")
       .toArray()
       .map((table) => table.name);
-    // 消しはじめた部屋は、消しきれていなくても無いものとして扱う
+    // A room whose deletion has begun counts as gone, even when it is not deleted all the way.
     if (!tables.includes('room') || tables.includes('deleting')) return null;
     return sql
       .exec<RoomRow>('SELECT room_key, room_id, name, password_salt, password_hash, host, emptied_at FROM room')

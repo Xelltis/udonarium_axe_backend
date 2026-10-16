@@ -19,7 +19,7 @@ const cursorOf = (peerId: string, role: string, majorVersion = 1) =>
     'PeerCursor'
   );
 
-// タブも発言も ObjectNode なので、SyncVar は attributes に入る
+// Tabs and messages are both ObjectNodes, so their SyncVars go in attributes.
 const tabOf = (identifier: string, guestCanSpeak: boolean) =>
   contextOf(
     identifier,
@@ -32,7 +32,7 @@ const tabOf = (identifier: string, guestCanSpeak: boolean) =>
 const messageOf = (identifier: string, tab: string, from: string, majorVersion = 1) =>
   contextOf(identifier, majorVersion, 0.5, { parentIdentifier: tab, value: 'hi', attributes: { from } }, 'chat');
 
-/** GM（gm）と PL（pl）と見学者（guest）のいる部屋 */
+/** A room with a GM (gm), a player (pl) and a guest (guest). */
 const table = async () => {
   const roomKey = await createRoom({}, 'gm');
   const gm = await join(roomKey, 'gm');
@@ -97,7 +97,8 @@ describe('roles', () => {
   });
 
   it('turns away a guest who claims the user id of someone logged in', async () => {
-    // ログインした人のユーザー ID はカーソルに見える。名乗れば、その人の手札や秘話が見えてしまう
+    // The user id of someone logged in shows on their cursor. Claiming it would show that person's hand
+    // and whispers.
     const roomKey = await createRoom();
     const impostor = await connect(roomKey);
 
@@ -160,7 +161,7 @@ describe('invites', () => {
     pl.send({ type: 'invite', role: 'gm' });
     const refused = await pl.next('invite');
     const coGm = await join(roomKey, 'co-gm', { invite: invite.invite });
-    // pl は入ったことがあるので、招待があっても役割は変わらない
+    // pl has been in before, so an invite does not change their role.
     const alreadyIn = await join(roomKey, 'pl', { invite: invite.invite });
     const anonymous = await join(roomKey, 'lurker', { accessToken: null, invite: invite.invite });
 
@@ -275,7 +276,7 @@ describe('whose cursor a seat may write', () => {
     await guest.events();
 
     pl.emit([
-      // ほかの人のカーソルに、自分のユーザー ID を書き込もうとする
+      // Tries to write their own user id into someone else's cursor.
       {
         eventName: SyncEvent.UPDATE,
         data: {
@@ -284,7 +285,7 @@ describe('whose cursor a seat may write', () => {
         },
       },
       { eventName: SyncEvent.DELETE, data: { aliasName: 'PeerCursor', identifier: 'cursor-gm' } },
-      // 自分のカーソルでも、ほかの人を名乗らせない
+      // Even on one's own cursor, nobody may claim to be someone else.
       {
         eventName: SyncEvent.UPDATE,
         data: {
@@ -466,12 +467,12 @@ describe('changing a role', () => {
       minorVersion: expect.any(Number),
     });
     for (const other of [gm, guest]) expect((await other.events())[0]).toEqual(promoted);
-    // 置けるかどうかはトークンの役割で決まるので、新しい役割のトークンが届く
+    // Whether someone can store assets depends on the token's role, so a token for the new role arrives.
     const renewed = await pl.next('asset-token');
     expect(readToken(renewed.assetToken, 'asset', SESSION_SECRET)?.role).toBe('gm');
     expect(renewed.role).toBe('gm');
 
-    // GM が2人になったので、もとの GM は降りられる
+    // There are two GMs now, so the first GM can step down.
     gm.emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId: 'gm', role: 'pl' } }]);
     pl.send({ type: 'invite', role: 'pl' });
     expect((await pl.next('invite')).invite).toEqual(expect.any(String));

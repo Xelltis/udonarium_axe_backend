@@ -2,19 +2,19 @@ import { DurableObject } from 'cloudflare:workers';
 
 import type { RoomSummary } from '../../contracts/protocol';
 
-/** 部屋の一覧を持つ Durable Object の名前。Worker ごとに1つだけ置く */
+/** The name of the Durable Object that holds the room list. There is only one for each Worker. */
 export const LOBBY_NAME = 'lobby';
 
-/** 一覧で返す部屋の数の上限。超えたら新しいものから返す */
+/** The limit on how many rooms the list returns. When there are more, the newest are returned. */
 const MAX_LISTED_ROOMS = 1000;
 
-/** 一覧と鍵で引くときの列。最初の ? は、GM かを確かめるユーザー ID */
+/** The columns for the list and for a lookup by key. The first ? is the user id checked for being a GM. */
 const SUMMARY_COLUMNS = `SELECT room_key, room_id, name, has_password, members,
        EXISTS (SELECT 1 FROM game_masters
                WHERE game_masters.room_key = rooms.room_key AND user_id = ?) AS game_master
      FROM rooms`;
 
-/** 一覧の1行を、部屋の要約にする */
+/** Turns a row of the list into a room summary. */
 const summaryOf = (row: RoomRow): RoomSummary => ({
   roomKey: row.room_key,
   roomId: row.room_id,
@@ -24,7 +24,7 @@ const summaryOf = (row: RoomRow): RoomSummary => ({
   ...(row.game_master === 1 ? { deletable: true } : {}),
 });
 
-/** 1つの文で束ねられる値の数。Durable Objects の SQLite は 100 まで */
+/** How many values one statement can bind. The SQLite of Durable Objects allows up to 100. */
 const MAX_BINDINGS = 100;
 
 interface RoomRow extends Record<string, SqlStorageValue> {
@@ -37,8 +37,9 @@ interface RoomRow extends Record<string, SqlStorageValue> {
 }
 
 /**
- * 部屋の一覧。部屋（RoomDurableObject）が、作られたとき・人が出入りしたとき・役割が変わったとき・
- * 消えたときに知らせてくる。D1 を使わないので、デプロイのときに作るものが増えない。
+ * The room list. A room (RoomDurableObject) tells it when the room is made, when someone joins or
+ * leaves, when a role changes, and when the room is gone. It does not use D1, so a deploy has nothing
+ * more to make.
  */
 export class LobbyDurableObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -51,7 +52,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
       members INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     )`);
-    // 部屋ごとの GM のユーザー ID。一覧を取った人が GM の部屋に印を付ける
+    // The user ids of each room's GMs. They mark the rooms where the person asking for the list is a GM.
     ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS game_masters (
       room_key TEXT NOT NULL,
       user_id TEXT NOT NULL,
@@ -76,7 +77,7 @@ export class LobbyDurableObject extends DurableObject<Env> {
     this.ctx.storage.sql.exec('UPDATE rooms SET members = ? WHERE room_key = ?', members, roomKey);
   }
 
-  /** 部屋の GM を置き換える。一覧に無い部屋（消えたあとに届いた知らせ）のものは置かない */
+  /** Replaces a room's GMs. Nothing is kept for a room not in the list (news that came after it was gone). */
   setGameMasters(roomKey: string, userIds: string[]): void {
     const sql = this.ctx.storage.sql;
     sql.exec('DELETE FROM game_masters WHERE room_key = ?', roomKey);
@@ -97,8 +98,8 @@ export class LobbyDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * 渡した鍵のうち、一覧にある部屋のもの。部屋がもう無いアセットを掃除するときに使う。
-   * 1ページに並ぶ部屋は 100 を超えうるので、MAX_BINDINGS ずつに分けて尋ねる
+   * The given keys whose rooms are in the list. Used when sweeping away assets whose room is gone.
+   * A page can hold more than 100 rooms, so it asks MAX_BINDINGS at a time.
    */
   known(roomKeys: string[]): string[] {
     const found: string[] = [];
@@ -116,8 +117,9 @@ export class LobbyDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * 新しい順に MAX_LISTED_ROOMS まで。userId を渡せば、その人が GM の部屋に deletable を付け、
-   * その部屋は数に入らなくても必ず入れる（削除できる部屋が一覧から消えないように）
+   * Up to MAX_LISTED_ROOMS, newest first. Given a userId, it adds deletable to the rooms where that
+   * person is a GM, and always includes those rooms even past the count (so that a room the person can
+   * delete does not drop out of the list).
    */
   list(userId?: string): RoomSummary[] {
     const sql = this.ctx.storage.sql;
@@ -139,8 +141,8 @@ export class LobbyDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * 鍵で引いた1つの部屋。一覧に載らない古い部屋でも引ける。無ければ null。userId を渡せば、その人が GM
-   * なら deletable を付ける
+   * The one room looked up by key. Even an old room left out of the list can be found. Null when there
+   * is none. Given a userId, it adds deletable when that person is a GM.
    */
   find(roomKey: string, userId?: string): RoomSummary | null {
     const [row] = this.ctx.storage.sql

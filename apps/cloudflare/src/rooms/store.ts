@@ -6,12 +6,12 @@ import { describe } from '../core/rooms/visibility';
 import type { View } from '../core/rooms/visibility';
 
 /**
- * SQLite の1行は 2MB まで。syncData の上限が無いもの（白板の場面など）は、これより大きければ
- * object_chunks に分けて置く
+ * A row in SQLite holds up to 2MB. An object whose syncData has no limit (such as a whiteboard scene)
+ * is split into object_chunks when it is bigger than this.
  */
 export const CHUNK_BYTES = 1024 * 1024;
 
-/** 部屋のテーブル。部屋を作るときに作り、部屋を消すときに deleteAll で丸ごと消える */
+/** The room's tables. Made when the room is made, and wiped out whole by deleteAll when it is deleted. */
 export const migrate = (sql: SqlStorage): void => {
   sql.exec(`CREATE TABLE IF NOT EXISTS objects (
     identifier TEXT PRIMARY KEY,
@@ -36,7 +36,7 @@ export const migrate = (sql: SqlStorage): void => {
   )`);
 };
 
-/** 部屋のオブジェクトを、Durable Object の SQLite に置く */
+/** Keeps a room's objects in the SQLite of a Durable Object. */
 export class RoomStore extends ObjectIndex {
   constructor(
     private readonly storage: DurableObjectStorage,
@@ -49,7 +49,7 @@ export class RoomStore extends ObjectIndex {
     return this.indexRows().map((row) => [row.identifier, entryOf(row)]);
   }
 
-  /** 索引に置く列。identifier を渡せば、その1行だけ */
+  /** The columns kept in the index. Given an identifier, only that one row. */
   private indexRows(identifier?: string): IndexRow[] {
     const columns = 'SELECT identifier, alias, major, minor, owner, parent, view FROM objects';
     return identifier === undefined
@@ -86,12 +86,14 @@ export class RoomStore extends ObjectIndex {
   }
 
   /**
-   * まとめておいた変更を1つのトランザクションで書く。SQLite が書いた行の数（索引の行も入る）を返す。
-   * 無料枠でいちばん先に尽きるのが書いた行の数なので、見積もりと比べられるよう、識別子ではなく行で数える。
+   * Writes the gathered changes in one transaction. Returns how many rows SQLite wrote (index rows
+   * included). Rows written are what runs out first on the free plan, so it counts rows, not
+   * identifiers, to compare with the estimate.
    *
-   * 1つでも書けないもの（SQLite の1行の上限を超えたものなど）があると、トランザクションごと戻る。
-   * そのときは1つずつ書き直し、書けないものだけを捨てて、その索引を SQLite に合わせて戻す。捨てないと、
-   * 次からも同じところで止まり、何も残らなくなる
+   * When even one cannot be written (as when it is over SQLite's limit for a row), the whole
+   * transaction rolls back. Then it writes them again one at a time, drops only those that cannot be
+   * written, and sets their index back to match SQLite. Without dropping them, every later flush stops
+   * at the same place and nothing is kept.
    */
   flush(): number {
     let rows = 0;
@@ -119,7 +121,7 @@ export class RoomStore extends ObjectIndex {
     return rows;
   }
 
-  /** 書いた行の数を返す */
+  /** Returns how many rows it wrote. */
   private writePending(identifier: string, write: PendingWrite): number {
     let rows = 0;
     if (write.context !== undefined) {
@@ -142,14 +144,14 @@ export class RoomStore extends ObjectIndex {
     return rows;
   }
 
-  /** 書く文を最後まで流し、書いた行の数を返す */
+  /** Runs a writing statement through to the end and returns how many rows it wrote. */
   private run(query: string, ...bindings: SqlStorageValue[]): number {
     const cursor = this.storage.sql.exec(query, ...bindings);
     cursor.toArray();
     return cursor.rowsWritten;
   }
 
-  /** 消した印が多すぎれば、古いものから減らす */
+  /** When there are too many tombstones, removes the oldest first. */
   private pruneTombstones(): void {
     const over = this.tombstonesOver();
     if (over === 0) return;
@@ -163,7 +165,7 @@ export class RoomStore extends ObjectIndex {
     }
   }
 
-  /** 書いた行の数を返す */
+  /** Returns how many rows it wrote. */
   private writeObject(context: ObjectContext, owner: string | null): number {
     const data = encodeData(context.syncData);
     const chunks = data.byteLength > CHUNK_BYTES ? Math.ceil(data.byteLength / CHUNK_BYTES) : 0;

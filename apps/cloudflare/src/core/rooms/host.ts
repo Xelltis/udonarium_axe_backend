@@ -3,86 +3,87 @@ import type { ObjectIndex } from './object-index.js';
 import type { PasswordHash } from './password.js';
 
 /**
- * 接続ごとの情報。hello が通るまでは無い。置き場所は部屋のサーバーが決める（Cloudflare 版では
- * WebSocket に添えて置くので、Hibernation から起き直しても残る）
+ * What is kept for each connection, none until its hello is let in. The room server decides where it
+ * is kept (the Cloudflare version keeps it with the WebSocket, so it outlasts waking from hibernation).
  */
 export interface Seat {
   peerId: string;
   userId: string;
-  /** 部屋の一覧に人数を知らせるときの鍵 */
+  /** The key used to tell the room list how many people are in the room. */
   roomKey: string;
-  /** サーバーが決めた役割 */
+  /** The role the server decided. */
   role: PeerRole;
-  /** ログインして入った。ログインしていない人は見学のまま、役割を変えられない */
+  /** Came in logged in. Someone not logged in stays a guest, whose role cannot be changed. */
   account: boolean;
-  /** 入った時刻（Unix ミリ秒） */
+  /** When the seat came in (Unix milliseconds). */
   joinedAt: number;
-  /** ログインして入った人の、アクセストークンが切れる時刻（Unix ミリ秒）。新しいトークンが届けば延びる */
+  /** When the access token of someone who came in logged in runs out (Unix milliseconds). A new token extends it. */
   expiresAt?: number;
-  /** サーバーが閉じた（断った、または同じピア ID の新しい接続に替わった） */
+  /** The server closed it (refused it, or it was replaced by a new connection with the same peer id). */
   closed?: boolean;
 }
 
-/** 部屋について、席を作るのに要ること */
+/** What is needed about the room to make a seat. */
 export interface RoomFacts {
   roomKey: string;
-  /** パスワードの無い部屋なら null */
+  /** Null for a room without a password. */
   password: PasswordHash | null;
 }
 
-/** 部屋の記録に書く出来事 */
+/** The events written to the room's log. */
 export type RoomEvent = 'join' | 'leave' | 'refuse' | 'flush' | 'roll' | 'delete';
 
 /**
- * ログインして入ったことのある人ごとの役割。確かめてから書くまでのあいだに、ほかのメッセージが
- * 割り込まないよう、同期で読み書きする
+ * The role of each person who has come in logged in. It is read and written synchronously, so that no
+ * other message cuts in between checking and writing.
  */
 export interface RoleBook {
-  /** 覚えている役割。入ったことが無ければ null */
+  /** The role remembered, or null for someone who has never come in. */
   roleOf(userId: string): PeerRole | null;
-  /** 初めて席に着いた人の役割を覚える */
+  /** Remembers the role of someone taking a seat for the first time. */
   add(userId: string, role: PeerRole): void;
-  /** 役割を変える */
+  /** Changes a role. */
   set(userId: string, role: PeerRole): void;
-  /** GM の数（いま席にいない人も数える） */
+  /** How many GMs there are (counting those not in a seat now). */
   gameMasterCount(): number;
 }
 
-/** 部屋のオブジェクトの置き場所。flush は書いた数を返す（記録に使う） */
+/** The store for the room's objects. flush returns how many it wrote (used for the log). */
 export interface RoomStore extends ObjectIndex {
   flush(): number;
 }
 
 /**
- * 部屋のサーバーが RoomEngine に渡すもの。接続、席、部屋の行、役割、置き場所、時計と一覧と記録。
- * C は接続を表すもの（Cloudflare 版では WebSocket）
+ * What the room server hands RoomEngine: connections, seats, the room's row, roles, the store, the
+ * clock, the room list and the log.
+ * C stands for a connection (a WebSocket in the Cloudflare version).
  */
 export interface RoomHost<C extends object> {
-  /** 受けている接続すべて。hello の前のものも、閉じかけのものも入る */
+  /** Every connection taken in, including those before their hello and those closing. */
   connections(): readonly C[];
   seatOf(conn: C): Seat | null;
   setSeat(conn: C, seat: Seat): void;
-  /** 送る。閉じかけていて送れなければ何もしない */
+  /** Sends a frame. Does nothing when the connection is closing and cannot send. */
   send(conn: C, frame: Uint8Array): void;
-  /** 閉じる。もう閉じていれば何もしない */
+  /** Closes the connection. Does nothing when it is already closed. */
   close(conn: C, code: number, reason: string): void;
-  /** 部屋。作られていないか、消しはじめたあとなら null */
+  /** The room, or null when it has not been made or is being deleted. */
   room(): RoomFacts | null;
-  /** 部屋を消している最中 */
+  /** Whether the room is being deleted right now. */
   wiping(): boolean;
   store(): RoomStore;
   readonly roles: RoleBook;
-  /** トークンを確かめ、作る鍵。ログインを置いていなければ null */
+  /** The key that checks and makes tokens, or null when login is not set up. */
   sessionSecret(): string | null;
-  /** welcome で知らせるアセットの置き方。種類ごとの上限まで1回の PUT で置けるなら null */
+  /** How assets are put, told in welcome. Null when a single PUT can put each kind up to its limit. */
   assetUploadPolicy(): AssetUploadPolicy | null;
-  /** 人が入った。nextCheckAt までに見回りに来る */
+  /** Someone came in. A check comes by nextCheckAt. */
   occupied(nextCheckAt: number): void;
-  /** だれもいなくなった。ここから保持期間を数える */
+  /** Nobody is left. The retention period counts from here. */
   emptied(): void;
-  /** 一覧の人数と GM を直す */
+  /** Updates the head count and the GMs in the room list. */
   lobbyChanged(roomKey: string): void;
   record(event: RoomEvent, detail: string, value: number): void;
-  /** 返したあとも終わるまで続ける仕事 */
+  /** Work that goes on until it is done, even after returning. */
   defer(work: Promise<unknown>): void;
 }

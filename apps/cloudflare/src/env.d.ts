@@ -1,32 +1,35 @@
 declare namespace Cloudflare {
   interface Env {
-    /** 部屋の画像と音声を、部屋ごとに中身の SHA-256 の16進表記を名前にして置くバケット */
+    /** The bucket that keeps each room's pictures and sounds, named by the hex SHA-256 of their contents. */
     ASSETS: R2Bucket;
-    /** アップロードを送信元（IPv6 は /64）ごとに数えるレート制限 */
+    /** The rate limit that counts uploads for each sender (each /64 for IPv6). */
     UPLOAD_LIMITER: RateLimit;
-    /** R2 から読む回数を送信元ごとに数えるレート制限 */
+    /** The rate limit that counts reads from R2 for each sender. */
     READ_LIMITER: RateLimit;
-    /** 部屋・アセット・ログインを受ける Origin のカンマ区切り。`*` ならすべて */
+    /** The Origins that rooms, assets and login take requests from, separated by commas. `*` allows all. */
     ACCESS_CONTROL_ALLOW_ORIGIN: string;
-    /** 部屋ごとに1つ。名前は部屋の鍵（roomKey） */
+    /** One for each room. Its name is the room key (roomKey). */
     ROOMS: DurableObjectNamespace<import('./rooms/room').RoomDurableObject>;
-    /** 部屋の一覧。Worker ごとに1つ */
+    /** The room list. One for each Worker. */
     LOBBY: DurableObjectNamespace<import('./rooms/lobby').LobbyDurableObject>;
-    /** ログインした人ごとに1つ。名前は `discord:<ID>` */
+    /** One for each person who logged in. Its name is `discord:<ID>`. */
     ACCOUNTS: DurableObjectNamespace<import('./auth/account').AccountDurableObject>;
-    /** 部屋で起きたこと（出入り、閉じた理由、書き込み、ダイス）を書く Workers Analytics Engine */
+    /**
+     * The Workers Analytics Engine that records what happens in rooms (joins and leaves, why connections
+     * closed, writes, dice).
+     */
     METRICS: AnalyticsEngineDataset;
-    /** 部屋を作る回数と、部屋につなぐ回数を送信元ごとに数えるレート制限 */
+    /** The rate limit that counts, for each sender, how often rooms are made and connected to. */
     ROOM_LIMITER: RateLimit;
-    /** ログインとトークンの発行を送信元ごとに数えるレート制限 */
+    /** The rate limit that counts logins and issued tokens for each sender. */
     AUTH_LIMITER: RateLimit;
-    /** Discord のアプリの Client ID。ログインの3つをそろえて置くと、ログインと部屋が使える */
+    /** The Client ID of the Discord app. With all three login settings set, login and rooms work. */
     DISCORD_CLIENT_ID?: string;
-    /** Discord のアプリの Client Secret（シークレットとして置く） */
+    /** The Client Secret of the Discord app (set as a secret). */
     DISCORD_CLIENT_SECRET?: string;
-    /** トークンに署名する鍵。32文字以上の乱数（シークレットとして置く） */
+    /** The key that signs tokens. A random string of 32 characters or more (set as a secret). */
     SESSION_SECRET?: string;
-    /** 最後の1人が出てから部屋を消すまでの時間 */
+    /** The time from the last person leaving until the room is deleted. */
     ROOM_RETENTION_HOURS: string;
   }
 }

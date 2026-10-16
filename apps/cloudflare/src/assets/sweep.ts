@@ -1,18 +1,22 @@
 import { ASSET_ID, ROOMS_PREFIX, roomAssetPrefix, roomKeyOf } from '../core/assets/keys';
 
-/** 1回の掃除で見るオブジェクトの数。R2 の list と delete が一度に扱える上限 */
+/** How many objects one sweep looks at. It is the limit of what R2's list and delete handle at once. */
 const SWEEP_PAGE_SIZE = 1000;
 
-/** 部屋が見当たらなくても、置いてからこの時間は消さない。部屋を作るのと置くのが前後しても消さないため */
+/**
+ * Even when its room is not found, an asset is not deleted for this long after it is stored, so that
+ * it is not deleted when making the room and storing the asset happen out of order.
+ */
 export const ORPHAN_GRACE_MS = 60 * 60 * 1000;
 
-/** 掃除を始める位置。部屋の鍵と同じ形の乱数 */
+/** Where a sweep starts. A random value of the same shape as a room key. */
 export const randomStart = (): string =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
 /**
- * 部屋のアセットをすべて消す。部屋を削除したときと、保持期間が過ぎて部屋を消すときに呼ぶ。
- * 消した数を返す
+ * Deletes all of a room's assets. Called when a room is deleted, and when a room is deleted because its
+ * retention period has passed.
+ * Returns how many it deleted.
  */
 export const deleteRoomAssets = async (bucket: R2Bucket, roomKey: string): Promise<number> => {
   let deleted = 0;
@@ -32,11 +36,12 @@ export const deleteRoomAssets = async (bucket: R2Bucket, roomKey: string): Promi
 };
 
 /**
- * start の後ろから1ページ分を見て、部屋がもう無いアセットを消す。消した数を返す。
- * 部屋が消えるときに消しそこねたもの（途中で落ちたときなど）を拾う。
+ * Looks at one page after start and deletes the assets whose room is gone. Returns how many it deleted.
+ * It picks up those missed when their room went (as when the server went down partway).
  *
- * 部屋の鍵は乱数なので、始める位置を毎回ランダムに選べば、どこまで見たかを覚えておかなくても、
- * いずれバケット全体を見て回れる。部屋に分ける前の、部屋に属さないアセット（名前だけのもの）も消す
+ * Room keys are random, so picking a random place to start each time covers the whole bucket in the
+ * end, without remembering how far it got. It also deletes the assets that belong to no room, from
+ * before assets were split by room (those with only a name).
  */
 export const sweepOrphans = async (
   bucket: R2Bucket,
@@ -56,7 +61,7 @@ export const sweepOrphans = async (
     .filter((object) => now - object.uploaded.getTime() > ORPHAN_GRACE_MS)
     .map((object) => object.key);
 
-  // 部屋に分ける前のものは、名前（64 桁の16進）だけでバケットの頭に並んでいる
+  // Those from before the split by room sit at the head of the bucket under only a name (64 hex digits).
   const unscoped = await bucket.list({ startAfter: start, limit: SWEEP_PAGE_SIZE });
   const legacy = unscoped.objects.map((object) => object.key).filter((key) => ASSET_ID.test(key));
 

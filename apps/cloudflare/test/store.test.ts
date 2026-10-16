@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RoomStore, migrate } from '../src/rooms/store';
 import { contextOf } from './shared/room-helpers';
 
-/** 空の Durable Object の置き場所で、部屋の置き場所を試す */
+/** Tries out the room's store on the storage of an empty Durable Object. */
 const withStore = <T>(name: string, run: (store: RoomStore, storage: DurableObjectStorage) => T) =>
   runInDurableObject(env.ROOMS.getByName(name), (_instance, state) => {
     migrate(state.storage.sql);
@@ -35,7 +35,7 @@ describe('the room store', () => {
       store.put(contextOf('m', 1, 0.5, {}, 'chat'), null);
       store.put(contextOf('r', 1, 0.5, { messageIdentifier: 'm' }, 'chat-reaction'), null);
       const before = [store.dependentsOf('a'), store.dependentsOf('m'), store.descendantsOf('m')];
-      // 付け替えと消したものは、引きからも外れる
+      // What was moved elsewhere and what was deleted drop out of the lookups too.
       store.put(contextOf('r', 2, 0.5, { messageIdentifier: 'other' }, 'chat-reaction'), null);
       store.delete('b', false);
       return [...before, store.dependentsOf('m'), store.dependentsOf('a')];

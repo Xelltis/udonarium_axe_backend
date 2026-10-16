@@ -12,8 +12,8 @@ export { LobbyDurableObject } from './rooms/lobby';
 export { RoomDurableObject } from './rooms/room';
 
 /**
- * 環境変数を確かめてから先へ進める。足りなければ ConfigError で 500 になる。
- * 部屋・一覧・アカウント・アセットは、この Worker のバインディングに置く
+ * Checks the environment variables before going on. When some are missing, a ConfigError makes it a 500.
+ * Rooms, the room list, accounts and assets are kept in this Worker's bindings.
  */
 const configLoader: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.set('config', parseConfig(c.env));

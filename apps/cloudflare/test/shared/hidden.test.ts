@@ -13,7 +13,7 @@ interface Event {
 
 const update = (data: unknown) => ({ eventName: SyncEvent.UPDATE, data });
 
-/** カードと、Axe の Card.create と同じ形のデータ要素 */
+/** A card, and data elements in the same shape as the ones Axe's Card.create makes. */
 const cardTree = (id: string, attributes: Record<string, unknown>, version = 1) => {
   const data = (name: string, parent: string, value: unknown = '') =>
     contextOf(`${name}_${id}`, 1, 0.5, { parentIdentifier: parent, value, attributes: { name } }, 'data');
@@ -34,7 +34,7 @@ const cardTree = (id: string, attributes: Record<string, unknown>, version = 1) 
 const ids = (events: Event[]) =>
   events.map((event) => [event.eventName, (event.data as { identifier: string }).identifier]);
 
-/** GM（gm）と PL の alice・bob と見学者の carol がいる部屋 */
+/** A room with a GM (gm), the players alice and bob, and the guest carol. */
 const table = async () => {
   const roomKey = await createRoom({}, 'gm');
   const gm = (await join(roomKey, 'gm')).client;
@@ -47,7 +47,7 @@ const table = async () => {
   return { roomKey, gm, alice, bob, carol, players: [alice, bob, carol] as Client[] };
 };
 
-/** GM が置いて、みんなが受け取るまで待つ */
+/** Has the GM place the objects, and waits until everyone has received them. */
 const place = async (t: Awaited<ReturnType<typeof table>>, objects: ObjectContext[]) => {
   t.gm.emit(objects.map(update));
   return Promise.all(t.players.map((client) => client.events()));
@@ -203,7 +203,7 @@ describe('parts that arrive before what they belong to', () => {
         ['back_c6', 'c6', 'card_c6', 'common_c6', 'detail_c6', 'image_c6'].sort()
       );
     }
-    // 子を送ってきた本人は、もう持っている
+    // The one who sent the children already has them.
     await t.gm.expectQuiet();
   });
 
@@ -228,7 +228,7 @@ describe('parts that arrive before what they belong to', () => {
     const down = cardTree('c8', { state: 1, location: { name: 'table' } });
     await place(t, [up.card, ...up.elements, down.card, ...down.elements]);
 
-    // 裏向きのカードの絵の入れ物を、表向きのカードの下へ移す
+    // Moves the holder of the face-down card's image under the face-up card.
     t.gm.emit([
       update(
         contextOf('image_c8', 2, 0.5, { parentIdentifier: 'card_c7', value: '', attributes: { name: 'image' } }, 'data')
@@ -246,7 +246,7 @@ describe('writes that would uncover what is kept back', () => {
   const memoOf = (id: string, disclosureMode: string, owner = '') =>
     contextOf(id, 1, 0.5, { attributes: { disclosureMode, owner } }, 'text-note');
 
-  /** 断られたなら、送り主には置いてあるものが返り、ほかの人には何も届かない */
+  /** When refused, the sender gets back what is kept, and nothing reaches anyone else. */
   const expectRefused = async (t: Awaited<ReturnType<typeof table>>, identifier: string) => {
     const back = await t.alice.events();
     expect(ids(back)).toEqual([['AUTHORITATIVE_OBJECT', identifier]]);
@@ -351,7 +351,7 @@ describe('writes that would uncover what is kept back', () => {
     const stacked = { ...card, syncData: { ...card.syncData, parentIdentifier: 'deck' } };
     await place(t, [deck, stacked, ...elements]);
 
-    // Axe は山札から外すのと手札に入れるのを、1つの書き込みにまとめて送る
+    // Axe sends taking a card off the deck and putting it in a hand as one write.
     t.alice.emit([
       update({
         ...card,
@@ -395,7 +395,8 @@ describe('writes that would uncover what is kept back', () => {
       part('text', 'common_m9', 'the plan'),
     ]);
 
-    // 決まりを持つメモの下から、まだ無い親の下へ移す。親を作れば、決まりの外で読めてしまう
+    // Moves it from under a note with rules to under a parent not there yet. Making that parent would
+    // let it be read outside the rules.
     t.alice.emit([update({ ...part('common', 'ghost'), majorVersion: 2 })]);
 
     await expectRefused(t, 'common_m9');
@@ -423,7 +424,7 @@ describe('writes that would uncover what is kept back', () => {
   it('takes back, rather than answers emptily, a stale write to something whose parent is not there', async () => {
     const t = await table();
     await place(t, [contextOf('x1', 1, 0.5)]);
-    // alice がまだ無い親の下へ移した。だれにとっても見え方が決まらない
+    // alice moved it under a parent not there yet. How it shows is not settled for anyone.
     t.alice.emit([update(contextOf('x1', 3, 0.5, { parentIdentifier: 'later' }))]);
     expect(ids(await t.gm.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'x1']]);
 
@@ -443,7 +444,8 @@ describe('writes that would uncover what is kept back', () => {
   it('has a player drop what it holds whose parent is not there, as it does what it may not see', async () => {
     const t = await table();
     t.gm.emit([update(contextOf('orphan', 1, 0.5, { parentIdentifier: 'later' }))]);
-    // 別の WebSocket どうしは、着く順が決まらない。GM の書き込みが着いてから
+    // The order of arrival across different WebSockets is not fixed. This goes on once the GM's write
+    // has arrived.
     await t.gm.expectQuiet();
 
     t.alice.emit([{ eventName: SyncEvent.CATALOG, data: [{ identifier: 'orphan', version: 1.5 }] }]);
@@ -498,7 +500,7 @@ describe('whispers and secrets', () => {
     { attributes: { name: 'main', plCanView: true, guestCanView: true } },
     'chat-tab'
   );
-  // 振った結果は、タブの一覧の直下のタブにだけ置ける
+  // Roll results can go only in a tab right under the tab list.
   const listedTab = listedTabOf('tab', { name: 'main', plCanView: true, guestCanView: true });
   const line = (id: string, attributes: Record<string, unknown>, version = 1) =>
     contextOf(id, version, 0.5, { parentIdentifier: 'tab', value: `text of ${id}`, attributes }, 'chat');
@@ -527,7 +529,8 @@ describe('whispers and secrets', () => {
     expect((masked.data as ObjectContext).syncData.value).toBe('');
     expect((full.data as ObjectContext).syncData.value).toBe('text of s1');
 
-    // 伏せた形を持っている bob が書き戻しても、中身は消えない。bob には伏せた形が返る
+    // Even when bob, who holds the masked form, writes it back, the contents are not lost. bob gets the
+    // masked form back.
     t.bob.emit([update({ ...(masked.data as ObjectContext), majorVersion: 2 })]);
     expect(((await t.gm.events())[0].data as ObjectContext).syncData.value).toBe('text of s1');
     const [kept] = await t.bob.events();
@@ -607,7 +610,7 @@ describe('whispers and secrets', () => {
     expect(ids(await t.alice.events())).toEqual([['UPDATE_GAME_OBJECT', 'r1']]);
     await t.carol.expectQuiet();
 
-    // 宛先を替えると、リアクションも一緒に出入りする
+    // When the addressee changes, the reactions come and go along with the message.
     t.alice.emit([update(line('w2', { from: 'user-alice', to: 'user-carol' }, 2))]);
     expect(ids(await t.carol.events())).toEqual([
       ['UPDATE_GAME_OBJECT', 'w2'],
@@ -722,10 +725,11 @@ describe('roles and what they see', () => {
     t.alice.emit([update(die)]);
     await t.bob.events();
 
-    // 伏せた形（3.25）より新しく、本物（3.5）より古い版で書いてくる
+    // Writes with a version newer than the masked form (3.25) and older than the real one (3.5).
     t.bob.emit([update({ ...die, minorVersion: 0.4 })]);
 
-    // 伏せた形には本物より小さい版が付き、送り主の版より低いので、版にかかわらず置き換えさせる
+    // The masked form carries a version below the real one, lower than the sender's, so the sender is
+    // made to replace it whatever the version.
     expect(await t.bob.events()).toEqual([
       {
         eventName: AuthorityEvent.AUTHORITATIVE,

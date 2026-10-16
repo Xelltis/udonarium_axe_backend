@@ -10,9 +10,9 @@ export type { LoginConfig } from '../core/config/login';
 const HOUR_SECONDS = 60 * 60;
 
 export interface AppConfig {
-  /** 部屋とアセットとログインを受ける Origin */
+  /** The Origins that rooms, assets and login take requests from. */
   allowedOrigins: string[];
-  /** 部屋から最後の1人が出てから、部屋を消すまでの秒数 */
+  /** The seconds from the last person leaving a room until the room is deleted. */
   roomRetentionSeconds: number;
   login: LoginConfig | null;
 }
@@ -29,7 +29,7 @@ export const parseConfig = (env: unknown): AppConfig => {
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
-    // 3つがそろっていることは envSchema で確かめてある
+    // envSchema has already checked that all three are there.
     login: loginOf(parsed),
   };
 };

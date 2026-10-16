@@ -1,12 +1,12 @@
 /**
- * 送信元の IP アドレスを、レート制限で数える単位にする。
+ * Turns the sender's IP address into the unit that rate limits count by.
  *
- * IPv4 はアドレスそのまま、IPv6 は先頭の /64 にまとめる。IPv6 の利用者はふつう /64 を丸ごと
- * 持っていて、その中でアドレスを替えるだけで別の送信元として数えられてしまうため。
+ * IPv4 keeps the address as it is, and IPv6 is grouped into its leading /64. An IPv6 user usually
+ * has a whole /64, and would be counted as a different sender just by changing addresses inside it.
  */
 export const networkOf = (address: string): string => {
   if (!address.includes(':')) return address;
-  // ::ffff:192.0.2.1 のように IPv4 を埋め込んだものは、その IPv4 として数える
+  // An address with an IPv4 address inside, such as ::ffff:192.0.2.1, counts as that IPv4 address.
   if (address.includes('.')) return address.slice(address.lastIndexOf(':') + 1);
 
   const [head, tail] = address.split('::');

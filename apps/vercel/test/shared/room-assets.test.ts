@@ -5,7 +5,7 @@ import { harness } from '../harness.js';
 import { ORIGIN, PNG_HEAD, SESSION_SECRET, accessTokenFor, freshFile, freshIp } from './helpers.js';
 import { ROOMS, createRoom, eventually, join } from './room-helpers.js';
 
-// 部屋が席に渡すアセットのトークンと、部屋が消えるときのアセット
+// The asset tokens a room hands its seats, and the assets when a room goes.
 
 afterEach(() => {
   vi.useRealTimers();
@@ -14,7 +14,7 @@ afterEach(() => {
 
 const claimsOf = (token: string) => readToken(token, 'asset', SESSION_SECRET);
 
-/** 部屋のアセットを、そのトークンで置こうとする */
+/** Tries to store a room asset with the given token. */
 const tryPut = async (roomKey: string, token: string) => {
   const { file, id } = await freshFile(PNG_HEAD, 128);
   const res = await harness.fetch(
@@ -32,7 +32,7 @@ const tryPut = async (roomKey: string, token: string) => {
   return { res, id };
 };
 
-/** 部屋のアセットを、そのトークンで置く */
+/** Stores a room asset with the given token. */
 const putIn = async (roomKey: string, token: string) => {
   const { res, id } = await tryPut(roomKey, token);
   expect(res.status).toBe(201);

@@ -4,7 +4,7 @@ import { ACCESS_TOKEN_SECONDS, ASSET_TOKEN_SECONDS, signToken } from '../../src/
 import { harness } from '../harness.js';
 
 export const ORIGIN = 'https://app.example';
-/** アセットのテストで使う部屋。アセットの経路は部屋の Durable Object に尋ねないので、作らなくてよい */
+/** The room the asset tests use. The asset routes do not ask the room's Durable Object, so it need not be made. */
 export const ROOM_KEY = '0123456789abcdef0123456789abcdef';
 export const OTHER_ROOM_KEY = 'fedcba9876543210fedcba9876543210';
 export const BASE = `https://backend.example/v1/rooms/${ROOM_KEY}/assets`;
@@ -14,30 +14,30 @@ export const OGG_HEAD = [0x4f, 0x67, 0x67, 0x53];
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** テストの部屋のサーバーに置いた SESSION_SECRET と同じもの */
+/** The same SESSION_SECRET as the one set on the room server under test. */
 export const SESSION_SECRET = 'test-session-secret-0123456789abcdef';
 
-/** ログインした人のアクセストークン。userId を指定しなければ、同じ1人 */
+/** The access token of a logged-in person. Without a userId, always the same person. */
 export const accessTokenFor = (userId = 'uploader', seconds = ACCESS_TOKEN_SECONDS) =>
   signToken<'access'>({ aud: 'access', sub: `discord:${userId}`, uid: userId, name: userId }, seconds, SESSION_SECRET);
 
-/** アセットを置く人。ROOM_KEY と OTHER_ROOM_KEY の部屋を作った GM */
+/** The person who stores assets. The GM who made the ROOM_KEY and OTHER_ROOM_KEY rooms. */
 export const UPLOADER = 'uploader';
 
-/** 部屋のサーバーが席に渡す、部屋のアセットのトークン */
+/** The room asset token the room server hands a seat. */
 export const assetTokenFor = (role: PeerRole = 'pl', room = ROOM_KEY, seconds = ASSET_TOKEN_SECONDS, uid = UPLOADER) =>
   signToken<'asset'>({ aud: 'asset', room, role, uid }, seconds, SESSION_SECRET);
 
-/** ROOM_KEY の部屋に置いたアセットが、バケットで置かれる名前 */
+/** The name in the bucket of an asset stored in the ROOM_KEY room. */
 export const storedKeyOf = (id: string) => roomAssetKey(ROOM_KEY, id);
 
-/** 本文に使うバイト列。どの部屋のサーバーの型でも、Request の本文に渡せるもの */
+/** Bytes for a body. They can be a Request's body under the types of any room server. */
 export type Bytes = Uint8Array<ArrayBuffer>;
 
-/** 文字列のバイト列 */
+/** The bytes of a string. */
 export const textOf = (text: string): Bytes => new TextEncoder().encode(text) as Bytes;
 
-/** 応答の本文を、その形として読む */
+/** Reads a response's body as the given shape. */
 export const jsonOf = async <T>(res: Response): Promise<T> => (await res.json()) as T;
 
 export const fileOf = (head: number[], size: number, seed = 0): Bytes => {
@@ -53,19 +53,19 @@ export const sha256Hex = async (data: Bytes): Promise<string> =>
   ).join('');
 
 let seed = 0;
-/** テストごとに別の中身にして、R2 とキャッシュに残ったものを混ぜない */
+/** Different contents for each test, so that what is left in R2 and the cache does not mix. */
 export const freshFile = async (head = PNG_HEAD, size = 256) => {
   const file = fileOf(head, size, ++seed);
   return { file, id: await sha256Hex(file) };
 };
 
 let lastIp = 0;
-/** テストごとに別の IP にして、レート制限の数え方を混ぜない */
+/** A different IP for each test, so that the rate limit counts do not mix. */
 export const freshIp = () => `198.51.${Math.floor(++lastIp / 250)}.${lastIp % 250}`;
 
 /**
- * ROOM_KEY の部屋のアセットを呼ぶ。指定しなければ、毎回別の IP から、許可した Origin の
- * ページとして、見学のトークンを付けて呼ぶ
+ * Calls an asset of the ROOM_KEY room. Unless told otherwise, it calls each time from a new IP, as a
+ * page of an allowed Origin, with a guest's token.
  */
 export const call = (path: string, init: RequestInit = {}) => {
   const headers = new Headers(init.headers);
@@ -88,8 +88,8 @@ export const put = (id: string, body: Bytes, headers: Record<string, string> = {
   });
 
 /**
- * 値の形。キーと値の型を並べたもの。配列は1つ目の形。null は文字列とみなす（契約で null になるのは、
- * 無いかもしれない文字列だけ）
+ * The shape of a value: its keys with the types of their values. An array has the shape of its first
+ * item. Null counts as a string (in the contract, only a string that may be missing is ever null).
  */
 export const shapeOf = (value: unknown): unknown => {
   if (value === null) return 'string';

@@ -6,13 +6,13 @@ import { harness } from '../harness.js';
 import { ORIGIN, accessTokenFor, freshIp, jsonOf } from './helpers.js';
 import { Client, connect, createRoom, eventually, HOST, join, listRooms, refusalOf, ROOMS } from './room-helpers.js';
 
-// GM が部屋を削除するときと、一覧で削除できる部屋に印を付けるとき
+// A GM deleting a room, and the list marking the rooms that can be deleted.
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 部屋を削除する API を呼ぶ。userId が null ならログインせずに */
+/** Calls the API that deletes a room. Without logging in when userId is null. */
 const deleteRoom = (roomKey: string, userId: string | null, ip = freshIp()) =>
   harness.fetch(
     new Request(`${ROOMS}/${roomKey}`, {
@@ -25,7 +25,7 @@ const deleteRoom = (roomKey: string, userId: string | null, ip = freshIp()) =>
     })
   );
 
-/** アクセストークンを付けて一覧を取る */
+/** Gets the room list with an access token. */
 const listAs = async (authorization: string): Promise<RoomSummary[]> => {
   const res = await harness.fetch(
     new Request(ROOMS, {
@@ -38,7 +38,7 @@ const listFor = (userId: string) => listAs(`Bearer ${accessTokenFor(userId)}`);
 const rowOf = <T extends { roomKey: string }>(rooms: T[], roomKey: string) =>
   rooms.find((room) => room.roomKey === roomKey);
 
-/** 次に届いた error。そこまでに届いたほかのものは読み捨てる */
+/** The next error to arrive. Anything else that arrives before it is read and thrown away. */
 const errorOf = async (client: Client): Promise<ErrorMessage> => {
   for (;;) {
     const { message } = await client.nextRaw();

@@ -3,21 +3,22 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 
 import type { ServerMessage } from '../../../contracts/protocol.js';
 
-/** これより大きいフレームは gzip を試す。クライアントの SkyWay の送り方と揃える */
+/** Frames bigger than this are tried with gzip. Kept the same as how the client sends over SkyWay. */
 const COMPRESS_OVER_BYTES = 1024;
 
 /**
- * 受けたフレームを展開したあとの上限。Durable Object が受けられる WebSocket のメッセージ（32MiB）と揃える。
- * 小さな gzip が大きく膨らむもので、メモリを使い切らせないため
+ * The limit on a received frame after it is unpacked. Kept the same as the WebSocket message a
+ * Durable Object can take (32MiB).
+ * It is there so that a small gzip that swells into something huge cannot use up the memory.
  */
 const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
-/** 配列と map の要素数の上限。短いバイト列で大きな配列を作らせない */
+/** The limit on the number of items in an array or a map. Keeps a few bytes from making a huge array. */
 const MAX_COLLECTION_LENGTH = 200_000;
 
 const isGzip = (bytes: Uint8Array): boolean => bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 
-/** 送るフレーム。MessagePack にし、1KiB を超えて gzip で縮むなら縮める */
+/** A frame to send. In MessagePack, and gzipped when it is over 1KiB and gzip makes it smaller. */
 export const encodeFrame = (message: ServerMessage): Uint8Array => {
   const bytes = encode(message);
   if (bytes.byteLength <= COMPRESS_OVER_BYTES) return bytes;
@@ -25,7 +26,7 @@ export const encodeFrame = (message: ServerMessage): Uint8Array => {
   return compressed.byteLength < bytes.byteLength ? compressed : bytes;
 };
 
-/** 受けたフレームを読む。gzip ならまず展開する。読めなければ例外 */
+/** Reads a received frame. Unpacks it first when it is gzip. Throws when it cannot be read. */
 export const decodeFrame = (frame: ArrayBuffer | Uint8Array): unknown => {
   const bytes = new Uint8Array(frame);
   const plain = isGzip(bytes) ? gunzipSync(bytes, { maxOutputLength: MAX_FRAME_BYTES }) : bytes;
@@ -35,7 +36,7 @@ export const decodeFrame = (frame: ArrayBuffer | Uint8Array): unknown => {
   });
 };
 
-/** SQLite に置く syncData のバイト列 */
+/** The bytes of syncData to store in SQLite. */
 export const encodeData = (data: unknown): ArrayBuffer => {
   const bytes = encode(data);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

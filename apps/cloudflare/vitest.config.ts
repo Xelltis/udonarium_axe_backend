@@ -12,7 +12,7 @@ export default defineConfig({
           DISCORD_CLIENT_SECRET: 'test-client-secret',
           SESSION_SECRET: 'test-session-secret-0123456789abcdef',
         },
-        // テストでは上限を小さくして、429 を数回のリクエストで確かめる
+        // The tests use smaller limits, to see a 429 within a few requests.
         ratelimits: {
           UPLOAD_LIMITER: { namespace_id: '1001', simple: { limit: 5, period: 60 } },
           READ_LIMITER: { namespace_id: '1002', simple: { limit: 5, period: 60 } },
@@ -25,7 +25,7 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     coverage: {
-      // workerd の中では V8 のカバレッジを取れないので istanbul を使う
+      // V8 coverage cannot be taken inside workerd, so istanbul is used.
       provider: 'istanbul',
       reporter: ['text', 'lcovonly'],
       include: ['src/**/*.ts', 'contracts/**/*.ts'],

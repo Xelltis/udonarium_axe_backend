@@ -17,13 +17,13 @@ const owner: Viewer = { userId: 'u-owner', role: 'pl' };
 const player: Viewer = { userId: 'u-pl', role: 'pl' };
 const guest: Viewer = { userId: 'u-guest', role: 'guest' };
 
-/** 中身を並べた部屋の索引 */
+/** A room's index over the objects given. */
 const world = (...objects: ObjectContext[]): Lookup => {
   const entries = new Map<string, ViewEntry>(objects.map((o) => [o.identifier, describe(o)]));
   return (identifier) => entries.get(identifier) ?? null;
 };
 
-/** Axe の createDataElements と同じ形のデータ要素の木 */
+/** A tree of data elements in the same shape as the one Axe's createDataElements makes. */
 const dataUnder = (holder: string, alias: string, paths: string[]) => {
   const made: ObjectContext[] = [
     context('data', `${alias}_${holder}`, {
@@ -272,7 +272,8 @@ group('masking', () => {
       tag: 'system secret',
       name: 'Kai',
     });
-    // 置いてある中身に無い項目は undefined になる（toEqual は無いものと同じに見る）
+    // A field missing from the kept contents becomes undefined (toEqual sees that as the same as
+    // missing).
     expect(unmasked({ ...hidden, majorVersion: 2 }, line)).toEqual({ ...line, majorVersion: 2 });
   });
 

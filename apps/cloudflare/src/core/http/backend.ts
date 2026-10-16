@@ -2,30 +2,30 @@ import type { Account, DirectUploadTarget, RoomAsset, RoomSummary } from '../../
 import type { Profile, Secret, Session } from '../auth/secrets.js';
 import type { LoginConfig } from '../config/login.js';
 
-/** 部屋のサーバーの経路が要る設定。部屋のサーバーごとの設定は、これに足して持つ */
+/** The settings the room server's routes need. Each room server keeps its own settings on top of these. */
 export interface ServerConfig {
-  /** 部屋とアセットとログインを受ける Origin */
+  /** The Origins accepted for rooms, assets and login. */
   allowedOrigins: string[];
   login: LoginConfig | null;
 }
 
-/** 部屋を作るときに渡すもの */
+/** What is handed over to make a room. */
 export interface RoomInit {
   roomKey: string;
   roomId: string;
   name: string;
-  /** 空ならパスワードの無い部屋 */
+  /** Empty for a room without a password. */
   password: string;
-  /** 部屋を作った人のユーザー ID。この人が GM になる */
+  /** The user id of the one who made the room. That person becomes GM. */
   creatorUserId: string;
-  /** 受けたホスト名。同じ置き場所を使う別のインスタンスと、記録を分けるのに使う */
+  /** The host name the request came to. It keeps the log apart from other instances on the same store. */
   host: string;
 }
 
-/** 送信元ごとに数を絞るもの。上限は部屋のサーバーが決める */
+/** What each sender may do only so many times. The room server decides the limits. */
 export type LimitKind = 'upload' | 'read' | 'room' | 'auth';
 
-/** ログインした1人ぶんのアカウント */
+/** The account of one person who has logged in. */
 export interface AccountPort {
   signIn(profile: Profile, challenge: string): Promise<Secret>;
   redeem(code: Secret, verifier: string): Promise<Session | null>;
@@ -35,15 +35,15 @@ export interface AccountPort {
   erase(userId: string): Promise<boolean>;
 }
 
-/** 部屋のアセットの置き場所 */
+/** The store for room assets. */
 export interface AssetBackend {
-  /** 運営する人が置かせないようにしたものか */
+  /** Whether whoever runs the server has barred it from being stored. */
   blocked(id: string): Promise<boolean>;
-  /** その部屋にもう置いてあるか */
+  /** Whether it is already stored in that room. */
   exists(roomKey: string, id: string): Promise<boolean>;
   /**
-   * 置く。body は先頭から流れてくる中身で、length バイトのはず。中身のハッシュが id と合わなければ
-   * 置かずに 'hash-mismatch'
+   * Stores it. body is the contents flowing in from the start, and should be length bytes. When the
+   * hash of the contents does not match id, it is not stored and the answer is 'hash-mismatch'.
    */
   store(
     roomKey: string,
@@ -53,40 +53,50 @@ export interface AssetBackend {
     type: string,
     name: string
   ): Promise<'stored' | 'hash-mismatch'>;
-  /** 置いたものを取り除く（置いているあいだに部屋が消えたとき） */
+  /** Removes what was stored (when the room was deleted while it was being stored). */
   discard(roomKey: string, id: string): Promise<void>;
-  /** GET の応答。トークンは確かめてある。レート制限と条件付きリクエストと Range はここで扱う */
+  /**
+   * The response to a GET. The token has been checked. Rate limits, conditional requests and Range
+   * are handled here.
+   */
   read(request: Request, roomKey: string, id: string): Promise<Response>;
-  /** HEAD の応答。トークンは確かめてある */
+  /** The response to a HEAD. The token has been checked. */
   head(request: Request, roomKey: string, id: string): Promise<Response>;
-  /** その部屋に置いてあるもの */
+  /** What is stored in that room. */
   list(roomKey: string): Promise<RoomAsset[]>;
-  /** 新しく置いたあとのついでの仕事（消しそこねの掃除など） */
+  /** Extra work done after something new is stored (such as cleaning up what failed to be deleted). */
   afterStore(): void;
-  /** 置き場所へ直接上げる流れ。1回の要求の本文に上限のある部屋のサーバー（Vercel 版）だけが持つ */
+  /**
+   * The steps for uploading straight to the store. Only a room server with a limit on the body of
+   * one request (the Vercel version) has them.
+   */
   direct?: DirectUploads;
 }
 
-/** 置き場所へ直接上げる流れ。仮置きへ上げさせ、確かめてから部屋のアセットにする */
+/**
+ * The steps for uploading straight to the store. An upload goes first to where uploads wait, and
+ * becomes a room asset once checked.
+ */
 export interface DirectUploads {
-  /** 1回の PUT で受けるバイト数の上限。これを超えるものは、直接上げてもらう */
+  /** The limit on the bytes taken in one PUT. Anything over it is uploaded straight to the store. */
   maxPutBytes: number;
-  /** 仮置きの場所へ、size バイトまでを一度だけ上げさせる先を作る */
+  /** Makes a target that lets up to size bytes be uploaded, once only, to where the upload waits. */
   target(path: string, size: number): Promise<DirectUploadTarget>;
-  /** 仮置きの中身を流す。無ければ（まだ上げていないか、掃除で消えた）null */
+  /** Streams the contents of the waiting upload. Null when there are none (not uploaded yet, or cleaned up). */
   open(path: string): Promise<ReadableStream<Uint8Array> | null>;
-  /** 仮置きを消す */
+  /** Deletes the waiting upload. */
   discard(path: string): Promise<void>;
 }
 
 /**
- * 部屋のサーバーが、共有の経路に渡すもの。リクエストごとに作り、Request だけを受ける
+ * What the room server hands to the shared routes. It is made for each request and takes only the
+ * Request.
  */
 export interface ServerBackend {
-  /** 送信元ごとに数える上限のうちか */
+  /** Whether it is within the limit counted for each sender. */
   limit(request: Request, kind: LimitKind): Promise<boolean>;
   lobby: {
-    /** 部屋の一覧。userId を渡せば、その人が GM の部屋に deletable を付ける */
+    /** The room list. Given userId, it adds deletable to the rooms where that person is GM. */
     list(userId?: string): Promise<RoomSummary[]>;
     find(roomKey: string, userId?: string): Promise<RoomSummary | null>;
   };
@@ -94,14 +104,14 @@ export interface ServerBackend {
     create(init: RoomInit): Promise<void>;
     remove(roomKey: string, userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'>;
     canUpload(roomKey: string, userId: string): Promise<'ok' | 'room-not-found' | 'not-a-player'>;
-    /** 部屋の WebSocket につなぐ。Origin とレート制限は確かめてある */
+    /** Connects to the room's WebSocket. The Origin and the rate limit have been checked. */
     connect(request: Request, roomKey: string): Promise<Response>;
   };
   account(accountKey: string): AccountPort;
   assets: AssetBackend;
 }
 
-/** 共有の経路の Hono の型。config と backend は部屋のサーバーが先に置く */
+/** The Hono type of the shared routes. The room server sets config and backend first. */
 export interface ServerEnv {
   Variables: { config: ServerConfig; backend: ServerBackend };
 }

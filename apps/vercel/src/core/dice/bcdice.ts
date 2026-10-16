@@ -5,12 +5,13 @@ import type { I18nJsonObject, getGameSystemClass } from 'bcdice/lib/loader/loade
 import { GAME_SYSTEM_IMPORTERS, I18N_IMPORTERS } from './bcdice-importers.generated.js';
 
 /**
- * ゲームシステムのクラス。名前で書き出された関数の戻り値から取る（default で書き出された型は、
- * Vercel 版の Node の解決では CommonJS のモジュールそのものになってしまう）
+ * A game system's class. It is taken from what the function exported by name returns (the type
+ * exported as default turns into the CommonJS module itself under the Vercel version's Node
+ * resolution).
  */
 type GameSystemClass = ReturnType<typeof getGameSystemClass>;
 
-/** CommonJS のモジュールの default。バンドルのしかたによって1段か2段になる */
+/** The default of a CommonJS module. It is one or two levels deep, depending on how it is bundled. */
 export const unwrapDefault = <T>(module: { default: T | { default?: T } }): T => {
   const first = module.default as { default?: T };
   return first.default ?? (first as T);
@@ -18,12 +19,15 @@ export const unwrapDefault = <T>(module: { default: T | { default?: T } }): T =>
 
 const Loader = unwrapDefault(LoaderModule as unknown as { default: typeof BaseLoader });
 
-/** 名前から読み込む表を使う loader。bcdice 同梱の DynamicLoader は、パスを実行時に組み立てるので使えない */
+/**
+ * A loader that uses the tables of what to load for each name. The DynamicLoader that comes with
+ * bcdice cannot be used, since it builds its paths at run time.
+ */
 export class WorkerLoader extends Loader {
   override async dynamicImportI18n(baseClassName: string, locale: string): Promise<I18nJsonObject> {
     const importer = I18N_IMPORTERS[`${baseClassName}.${locale}`];
     if (!importer) throw new Error(`BCDice has no translation ${baseClassName}.${locale}`);
-    // JSON のモジュールは、中身を default に持つ
+    // A JSON module holds its contents in default.
     return ((await importer()) as { default: I18nJsonObject }).default;
   }
 
@@ -36,10 +40,10 @@ export class WorkerLoader extends Loader {
 
 const loader = new WorkerLoader();
 
-/** 読み込んだシステム。bcdice は尋ねるたびにクラスを作り直すので、ここで使い回す */
+/** The systems loaded. bcdice makes the class anew each time it is asked, so they are reused here. */
 const loaded = new Map<string, GameSystemClass>();
 
-/** ゲームシステムを読み込む。読み込んだものはそのまま使い回す。知らない ID なら null */
+/** Loads a game system. One already loaded is reused as it is. Null for an id it does not know. */
 export const loadGameSystem = async (id: string): Promise<GameSystemClass | null> => {
   const known = loaded.get(id);
   if (known) return known;

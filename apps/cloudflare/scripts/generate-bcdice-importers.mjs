@@ -1,11 +1,12 @@
 /* global console */
-// BCDice のゲームシステムと翻訳を、名前から読み込むための import 表を作る。
-// bcdice 同梱の DynamicLoader は実行時に組み立てたパスを require に渡すため、バンドラが追えない。
-// そこでパスを前もって書き出しておく。Worker はすべてを1つのバンドルに入れるが、
-// 動的 import にしておけば、評価されるのは振るときに初めて使うシステムだけになり、起動は遅くならない。
-// パスは拡張子まで書き、JSON には属性を付ける。Vercel 版では Node がバンドルせずにそのまま読むため。
+// Writes the table of imports that load BCDice's game systems and translations by name.
+// The DynamicLoader that comes with bcdice hands require a path put together at run time, which a
+// bundler cannot follow, so the paths are written out beforehand. The Worker puts everything in one
+// bundle, but as dynamic imports, only the systems a roll first uses are evaluated, and starting up
+// is no slower. The paths carry their extensions and the JSON imports their attribute, because the
+// Vercel version has Node read them as they are, without a bundle.
 //
-// bcdice を上げたら `npm run generate:bcdice` で作り直す。
+// After upgrading bcdice, write it again with `npm run generate:bcdice`.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const LIB = 'node_modules/bcdice/lib/bcdice';
@@ -20,14 +21,14 @@ const translations = i18nList
   .sort();
 
 const lines = [
-  '// scripts/generate-bcdice-importers.mjs が作る。手で直さない',
+  '// Written by scripts/generate-bcdice-importers.mjs. Do not edit it by hand.',
   '',
-  '/** ゲームシステムのクラス名から、そのシステムを読み込む */',
+  '/** Loads a game system by its class name. */',
   'export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {',
   ...classNames.map((name) => `  '${name}': () => import('bcdice/lib/bcdice/game_system/${name}.js'),`),
   '};',
   '',
-  '/** 「元のクラス名.ロケール」から、その翻訳を読み込む */',
+  '/** Loads a translation by its `base class name.locale`. */',
   'export const I18N_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {',
   ...translations.map(
     (key) => `  '${key}': () => import('bcdice/lib/bcdice/i18n/${key}.json', { with: { type: 'json' } }),`

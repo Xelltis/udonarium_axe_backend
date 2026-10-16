@@ -12,10 +12,10 @@ import { fail } from '../errors.js';
 import { isAllowedOrigin, tryParseUrl } from '../origin.js';
 import { bearerOf } from '../request.js';
 
-/** PKCE の code_challenge（SHA-256 の base64url。43文字） */
+/** The PKCE code_challenge (the SHA-256 in base64url, 43 characters). */
 const CHALLENGE = /^[\w-]{43}$/;
 
-/** PKCE の code_verifier（RFC 7636 の決まりの文字と長さ） */
+/** The PKCE code_verifier (the characters and length set by RFC 7636). */
 const VERIFIER = /^[\w.~-]{43,128}$/;
 
 const tokenRequestSchema = variant('grant_type', [
@@ -32,8 +32,8 @@ const logoutSchema = object({ refresh_token: string() });
 const callbackUrl = (c: Context<ServerEnv>): string => `${new URL(c.req.url).origin}/v1/login/discord/callback`;
 
 /**
- * ログインのあとに戻ってよい場所。許可した Origin のページだけで、`*` は数えない。
- * どこにでも戻せると、ほかのサイトがログインのコードを受け取れてしまうため
+ * Where a login may return to: only pages on allowed Origins, and `*` does not count.
+ * If it could return anywhere, another site could receive the login code.
  */
 const isLoginRedirect = (redirect: string, allowedOrigins: string[]): boolean => {
   const url = tryParseUrl(redirect);
@@ -48,7 +48,7 @@ const isLoginRedirect = (redirect: string, allowedOrigins: string[]): boolean =>
 
 type LoginHandler = (c: Context<ServerEnv>, login: LoginConfig) => Response | Promise<Response>;
 
-/** ログインを置いていない部屋のサーバーでは 503 で断る */
+/** Refuses with 503 on a room server with no login set up. */
 const withLogin =
   (handler: LoginHandler) =>
   (c: Context<ServerEnv>): Response | Promise<Response> => {
@@ -56,12 +56,13 @@ const withLogin =
     return login ? handler(c, login) : fail(c, 503, 'login-unavailable');
   };
 
-/** ブラウザがページとして開くもの。CORS は要らない */
+/** What a browser opens as a page. It needs no CORS. */
 export const loginRoutes = new Hono<ServerEnv>();
 
 /**
- * ログインを始める。Axe は code_verifier を作って手元に置き、その SHA-256（code_challenge）と、
- * 戻ってくる URL を渡してここを開く。戻ってきたら、コードと code_verifier をトークンに替える
+ * Starts a login. Axe makes a code_verifier and keeps it to itself, then opens this with its
+ * SHA-256 (code_challenge) and the URL to come back to. Once back, it exchanges the code and the
+ * code_verifier for tokens.
  */
 loginRoutes.get(
   '/discord',
@@ -76,7 +77,10 @@ loginRoutes.get(
   })
 );
 
-/** Discord から戻ってくる。Axe の戻り先へ、フラグメントにコードか失敗の理由を付けて返す */
+/**
+ * Comes back from Discord. Sends the browser back to Axe's return address, with the code or the
+ * reason it failed in the fragment.
+ */
 loginRoutes.get(
   '/discord/callback',
   withLogin(async (c, login) => {
@@ -98,7 +102,7 @@ loginRoutes.get(
   })
 );
 
-/** Axe から呼ぶもの。許可した Origin からだけ受ける */
+/** What Axe calls. Taken only from allowed Origins. */
 export const authRoutes = new Hono<ServerEnv>();
 
 authRoutes.get('/config', (c) => c.json<AuthConfigResponse>({ providers: c.var.config.login ? ['discord'] : [] }));
@@ -125,8 +129,8 @@ authRoutes.post(
 authRoutes.post(
   '/logout',
   withLogin(async (c) => {
-    // 鍵からアカウントを引くので、トークンと同じく数を絞る。絞らないと、でたらめな鍵で
-    // いくらでもアカウントの置き場所を起こさせられる
+    // An account is looked up from the key, so, as for tokens, each sender may do this only so many
+    // times. Otherwise made-up keys could wake up any number of account stores.
     if (!(await c.var.backend.limit(c.req.raw, 'auth'))) return fail(c, 429, 'rate-limited');
     const parsed = safeParse(logoutSchema, await c.req.json().catch(() => null));
     if (!parsed.success) return fail(c, 400, 'invalid-request');
@@ -136,7 +140,7 @@ authRoutes.post(
   })
 );
 
-/** ログインしている人のアカウント。Authorization: Bearer のアクセストークンで尋ねる */
+/** The account of whoever is logged in. Asked for with the access token in Authorization: Bearer. */
 export const accountRoutes = new Hono<ServerEnv>();
 
 accountRoutes.get(
@@ -144,19 +148,23 @@ accountRoutes.get(
   withLogin(async (c, login) => {
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
-    // 消したあと同じ人が作り直したアカウントは、前のアカウントのトークンでは見せない
+    // An account the same person made again after deleting one is not shown for a token of the
+    // old account.
     const account = await c.var.backend.account(claims.sub).account();
     return account?.userId === claims.uid ? c.json(account) : fail(c, 404, 'not-found');
   })
 );
 
-/** アカウントを消す。人の情報とトークンが消え、そのアクセストークンが切れたあとはもうログインしていない */
+/**
+ * Deletes the account. The person's details and tokens are deleted, and once that access token
+ * runs out the person is no longer logged in.
+ */
 accountRoutes.delete(
   '/',
   withLogin(async (c, login) => {
     const claims = bearerOf(c, login);
     if (!claims) return fail(c, 401, 'login-required');
-    // 前のアカウントのトークンで、作り直したアカウントを消させない
+    // A token of the old account cannot delete the account made again.
     if (!(await c.var.backend.account(claims.sub).erase(claims.uid))) return fail(c, 404, 'not-found');
     return c.body(null, 204);
   })

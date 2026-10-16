@@ -3,7 +3,7 @@ import { networkOf } from './core/http/network';
 import { r2Assets } from './assets/r2';
 import { LOBBY_NAME } from './rooms/lobby';
 
-/** 数を絞るものと、その上限を持つバインディング（wrangler.jsonc の ratelimits） */
+/** What is rate limited, and the binding that holds its limit (the ratelimits in wrangler.jsonc). */
 const LIMITERS = {
   upload: 'UPLOAD_LIMITER',
   read: 'READ_LIMITER',
@@ -12,14 +12,14 @@ const LIMITERS = {
 } as const satisfies Record<LimitKind, keyof Env>;
 
 /**
- * Worker の部屋のサーバー。部屋・一覧・アカウントは Durable Object に、部屋のアセットは R2 に置き、
- * 送信元ごとの数はレート制限のバインディングで数える
+ * The Worker's room server. It keeps rooms, the room list and accounts in Durable Objects and a room's
+ * assets in R2, and counts each sender's requests with the rate limit bindings.
  */
 export const cloudflareBackend = (env: Env, waitUntil: (work: Promise<unknown>) => void): ServerBackend => {
   /**
-   * 送信元（IPv6 は /64 ごと）の数が上限のうちか。namespace_id は同じアカウントの Worker どうしで
-   * 共有されるので、鍵の頭に受けたホスト名を付けて、同じアカウントに置いた別のインスタンスと
-   * 数えるものを混ぜない
+   * Whether the count for the sender (each /64 for IPv6) is within the limit. namespace_id is shared
+   * among the Workers of one account, so the key starts with the host name the request came to, and
+   * the counts do not mix with those of another instance on the same account.
    */
   const limit = async (request: Request, kind: LimitKind): Promise<boolean> => {
     const network = networkOf(request.headers.get('CF-Connecting-IP') ?? 'unknown');

@@ -10,10 +10,10 @@ import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp, js
 
 export const ROOMS = 'https://backend.example/v1/rooms';
 
-/** 部屋を作った人。どの部屋にも入らないので、入る人はみな PL になる */
+/** The person who made the rooms. They come into none of them, so everyone who comes in is a player. */
 export const HOST = 'user-host';
 
-/** 部屋を作る API を呼ぶ。指定しなければ HOST がログインして作る */
+/** Calls the API that makes a room. Unless told otherwise, HOST makes it, logged in. */
 export const postRoom = (body: unknown, headers: Record<string, string> = {}) =>
   harness.fetch(
     new Request(ROOMS, {
@@ -29,7 +29,7 @@ export const postRoom = (body: unknown, headers: Record<string, string> = {}) =>
     })
   );
 
-/** 部屋を作り、その鍵を返す。creator を指定すれば、その peerId の人が GM になる */
+/** Makes a room and returns its key. Given a creator, the person with that peerId becomes the GM. */
 export const createRoom = async (body: { name?: string; password?: string } = {}, creator?: string) => {
   const res = await postRoom(
     { name: 'test room', ...body },
@@ -44,7 +44,7 @@ export const listRooms = async () => {
   return (await jsonOf<{ rooms: { roomKey: string; members: number; hasPassword: boolean }[] }>(res)).rooms;
 };
 
-/** 部屋への WebSocket を開く要求 */
+/** A request that opens a WebSocket to a room. */
 export const upgrade = (roomKey: string, headers: Record<string, string> = {}) =>
   harness.upgrade(
     new Request(`${ROOMS}/${roomKey}/ws`, {
@@ -54,9 +54,9 @@ export const upgrade = (roomKey: string, headers: Record<string, string> = {}) =
 
 const WAIT_MS = 30_000;
 
-/** 部屋につないだクライアント。届いたものを順に読む */
+/** A client connected to a room. Reads what arrives, in order. */
 export class Client {
-  /** 届いたフレームのうち、まだ読んでいないもの */
+  /** The frames that have arrived and have not been read yet. */
   private readonly inbox: { raw: ArrayBuffer | string; message: ServerMessage | string }[] = [];
   private wake: (() => void) | null = null;
   readonly closed: Promise<{ code: number; reason: string }>;
@@ -72,7 +72,7 @@ export class Client {
     });
   }
 
-  /** 次に届いたもの。届かなければ例外 */
+  /** The next thing to arrive. Throws when nothing arrives. */
   async nextRaw(): Promise<{ raw: ArrayBuffer | string; message: ServerMessage | string }> {
     const deadline = Date.now() + WAIT_MS;
     while (this.inbox.length === 0) {
@@ -85,7 +85,7 @@ export class Client {
     return this.inbox.shift() as { raw: ArrayBuffer | string; message: ServerMessage | string };
   }
 
-  /** 次に届いたメッセージ。種類が違えば例外 */
+  /** The next message to arrive. Throws when it is of another type. */
   async next<T extends ServerMessage['type']>(type: T): Promise<Extract<ServerMessage, { type: T }>> {
     const { message } = await this.nextRaw();
     if (typeof message === 'string' || message.type !== type) {
@@ -94,12 +94,12 @@ export class Client {
     return message as Extract<ServerMessage, { type: T }>;
   }
 
-  /** 次に届いた data のイベント */
+  /** The events of the next data to arrive. */
   async events(): Promise<{ eventName: string; data: unknown; sendFrom: string }[]> {
     return (await this.next('data')).events;
   }
 
-  /** 何も届いていないことを、印を自分宛てに折り返してもらって確かめる */
+  /** Checks that nothing has arrived, by having a marker sent back to itself. */
   async expectQuiet(): Promise<void> {
     this.send({ type: 'time' });
     await this.next('time');
@@ -110,12 +110,12 @@ export class Client {
     this.socket.send(options.gzip ? gzipSync(bytes) : bytes);
   }
 
-  /** イベントを送る */
+  /** Sends events. */
   emit(events: { eventName: string; data: unknown }[], to?: string): void {
     this.send({ type: 'send', ...(to === undefined ? {} : { to }), events });
   }
 
-  /** 入る。ふだんは `user-<peerId>` としてログインしている。accessToken を null にすれば見学で入る */
+  /** Comes in. Usually logged in as `user-<peerId>`. With accessToken set to null, comes in as a guest. */
   hello(peerId: string, extra: Record<string, unknown> = {}): void {
     this.send({
       type: 'hello',
@@ -138,7 +138,10 @@ export const connect = async (roomKey: string): Promise<Client> => {
   return new Client(res.socket);
 };
 
-/** 部屋につないだところで断られたときの理由。部屋が無いときと満員のときは、つないでから断る */
+/**
+ * The reason given when a connection to a room is refused. When there is no room or it is full, the
+ * connection is made and then refused.
+ */
 export const refusalOf = async (roomKey: string) => {
   const client = await connect(roomKey);
   const code = (await client.next('error')).code;
@@ -146,7 +149,7 @@ export const refusalOf = async (roomKey: string) => {
   return code;
 };
 
-/** 部屋に入る。welcome と、続くサーバーのカタログまで読んだところで返す */
+/** Comes into a room. Returns once it has read welcome and the server catalog that follows. */
 export const join = async (roomKey: string, peerId: string, extra: Record<string, unknown> = {}) => {
   const client = await connect(roomKey);
   client.hello(peerId, extra);
@@ -155,12 +158,13 @@ export const join = async (roomKey: string, peerId: string, extra: Record<string
   return { client, welcome, catalog };
 };
 
-/** 席に着けておいた UPLOADER の接続。部屋の鍵ごと */
+/** The connections that keep UPLOADER in a seat. One for each room key. */
 const seatedUploaders = new Map<string, Client>();
 
 /**
- * ROOM_KEY と OTHER_ROOM_KEY の部屋を、まだ無ければ UPLOADER が作り、席に着けておく。置くときは、置く人が
- * いまその部屋に GM か PL として着いているかを部屋に尋ねるので、アセットの経路を試す前に呼ぶ
+ * Has UPLOADER make the ROOM_KEY and OTHER_ROOM_KEY rooms when they are not there yet, and keeps it
+ * seated in them. Storing an asset asks the room whether the person storing it has a seat there now as
+ * a GM or player, so this is called before trying the asset routes.
  */
 export const prepareAssetRooms = async () => {
   for (const roomKey of [ROOM_KEY, OTHER_ROOM_KEY]) {
@@ -183,7 +187,7 @@ export const prepareAssetRooms = async () => {
   }
 };
 
-/** 同期するオブジェクトの中身 */
+/** The contents of an object that is synced. */
 export const contextOf = (
   identifier: string,
   majorVersion: number,
@@ -192,10 +196,10 @@ export const contextOf = (
   aliasName = 'character'
 ) => ({ aliasName, identifier, majorVersion, minorVersion, syncData });
 
-/** Axe のチャットのタブの一覧。タブはこの下に置き、振った結果はこの直下のタブにだけ置ける */
+/** Axe's list of chat tabs. Tabs go under it, and roll results can go only in the tabs right under it. */
 export const chatTabList = () => contextOf(CHAT_TAB_LIST_IDENTIFIER, 1, 0.5, { attributes: {} }, 'chat-tab-list');
 
-/** タブの一覧の直下に置くタブ */
+/** A tab right under the tab list. */
 export const listedTabOf = (identifier: string, attributes: Record<string, unknown> = {}) =>
   contextOf(
     identifier,
@@ -205,7 +209,7 @@ export const listedTabOf = (identifier: string, attributes: Record<string, unkno
     'chat-tab'
   );
 
-/** 条件が満たされるまで待つ。部屋の一覧への知らせは、応答のあとに届く */
+/** Waits until the condition holds. News for the room list arrives after the response. */
 export const eventually = async <T>(read: () => Promise<T>, accept: (value: T) => boolean) => {
   const deadline = Date.now() + WAIT_MS;
   for (;;) {

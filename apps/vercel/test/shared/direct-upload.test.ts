@@ -25,8 +25,9 @@ import {
 } from './helpers.js';
 import { prepareAssetRooms } from './room-helpers.js';
 
-// 置き場所へ直接上げる流れ（Vercel 版が持つ）を、作り物の部屋のサーバーで確かめる。どの部屋のサーバーでも
-// 同じ経路が、持つ部屋のサーバーでは上げる先を渡し、持たない部屋のサーバーでは not-found と答える
+// Checks, with a fake room server, the flow of uploading straight to the store (which the Vercel version
+// has). The same route on every room server hands out where to upload on a room server that has the
+// flow, and answers not-found on one that does not.
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -34,12 +35,12 @@ afterEach(() => {
 
 const MAX_PUT_BYTES = 100;
 
-/** JSON にせず、そのまま送る本文 */
+/** A body sent as it is, not as JSON. */
 class Raw {
   constructor(readonly text: string) {}
 }
 
-/** 仮置きと置いたものをメモリに持つ、作り物の部屋のサーバー */
+/** A fake room server that holds in memory what is uploaded for now and what is kept. */
 const setUp = (options: { direct?: boolean } = {}) => {
   const uploaded = new Map<string, Bytes>();
   const kept = new Map<string, { type: string; name: string }>();
@@ -98,7 +99,7 @@ const setUp = (options: { direct?: boolean } = {}) => {
   });
   app.route('/v1', serverRoutes());
 
-  /** 本文は JSON にして送る。Raw は、そのまま送る（JSON でない本文を試すため） */
+  /** Sends the body as JSON. A Raw is sent as it is (to try bodies that are not JSON). */
   const post = (path: string, body: unknown, token: string | null = assetTokenFor('pl')) =>
     app.fetch(
       new Request(`https://backend.example/v1/rooms/${path}`, {
@@ -111,13 +112,13 @@ const setUp = (options: { direct?: boolean } = {}) => {
         },
       })
     );
-  /** 上げる先を尋ねる */
+  /** Asks where to upload. */
   const ask = (id: string, body: unknown, token?: string | null) =>
     post(`${ROOM_KEY}/assets/${id}/uploads`, body, token);
-  /** 上げ終えたと知らせる */
+  /** Says the upload is done. */
   const finish = (id: string, ticket: string, token?: string | null) =>
     post(`${ROOM_KEY}/assets/${id}/uploads/complete`, { ticket }, token);
-  /** ブラウザの代わりに、渡された先へ上げる */
+  /** Uploads to the place it was given, in place of the browser. */
   const upload = (ticket: UploadTicketResponse, bytes: Bytes) => {
     uploaded.set(new URL(ticket.upload.url).pathname.slice(1), bytes);
   };
@@ -126,11 +127,11 @@ const setUp = (options: { direct?: boolean } = {}) => {
 
 const errorOf = async (res: Response) => (await jsonOf<{ error: ErrorCode }>(res)).error;
 
-/** 上げる先の形。ヘッダーは置き場所しだいなので、名前までは比べない */
+/** The shape of where to upload. The headers depend on the store, so their names are not compared. */
 const ticketShapeOf = (ticket: UploadTicketResponse) =>
   shapeOf({ ...ticket, upload: { ...ticket.upload, headers: {} } });
 
-/** 中身と、その ID */
+/** Contents, and their id. */
 const fileFor = async (head = PNG_HEAD, size = MAX_PUT_BYTES * 2) => {
   const bytes = fileOf(head, size);
   return { bytes, id: await sha256Hex(bytes) };
@@ -282,7 +283,8 @@ describe('putting up an asset straight to the store', () => {
       await tryWith(png, MAX_BYTES.image + 1),
       await tryWith(png, png.bytes.byteLength, fileOf(PNG_HEAD, MAX_PUT_BYTES * 2, 7)),
     ];
-    // 尋ねたとき、知らせを受けたとき、置いたあと、の3度尋ねる。置いたあとで部屋が無くなる
+    // The room is asked three times: when asked where to upload, when told the upload is done, and
+    // after storing. The room is gone after storing.
     backend.rooms.canUpload
       .mockResolvedValueOnce('ok')
       .mockResolvedValueOnce('ok')

@@ -4,14 +4,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * オブジェクトの attributes。Axe の ObjectNode（カード、チャットの発言、タブ、データ要素など）は
- * SyncVar を syncData.attributes に置く（decorator.ts）。PeerCursor のような ObjectNode でないものは
- * syncData の直下に置くので、これは空になる
+ * An object's attributes. Axe's ObjectNodes (cards, chat lines, tabs, data elements and so on) keep
+ * their SyncVars in syncData.attributes (decorator.ts). Something that is not an ObjectNode, like
+ * PeerCursor, keeps them right under syncData, so for it this is empty.
  */
 export const attributesOf = (context: ObjectContext): Record<string, unknown> =>
   isRecord(context.syncData.attributes) ? context.syncData.attributes : {};
 
-/** attributes の一部を替えた写し。元は変えない */
+/** A copy with some of the attributes changed. The original is left as it is. */
 export const withAttributes = (context: ObjectContext, changes: Record<string, unknown>): ObjectContext => ({
   ...context,
   syncData: { ...context.syncData, attributes: { ...attributesOf(context), ...changes } },

@@ -1,92 +1,99 @@
 /**
- * サーバー版の部屋（apps/cloudflare の RoomDurableObject）と Udonarium Axe のあいだのプロトコル。
+ * The protocol between a room in the server version (RoomDurableObject in apps/cloudflare) and
+ * Udonarium Axe.
  *
- * このファイルはサーバー側が持ち主で、クライアントは同じ内容を写して使う。npm には出さない。
- * 両側のテストが fixtures/ の同じ JSON を読み、判定が食い違わないことを確かめる。
+ * The server side owns this file, and the client uses a copy of the same content. It is not published
+ * to npm. The tests on both sides read the same JSON in fixtures/ and make sure their verdicts do not
+ * differ.
  *
- * WebSocket のフレームはバイナリで、中身は下の封筒（ClientMessage と ServerMessage）を
- * MessagePack にしたもの。フレーム全体を gzip してもよい（先頭が 1f 8b なら gzip とみなす）。
- * テキストのフレームは、生きているかの確認（`ping` に `pong` が返る）にだけ使う。
+ * A WebSocket frame is binary, and holds one of the envelopes below (ClientMessage and ServerMessage)
+ * in MessagePack. The whole frame may be gzipped (it is taken as gzip when it starts with 1f 8b).
+ * A text frame is used only to check that the connection is alive (`ping` is answered with `pong`).
  */
 
-/** 封筒の形を変えたら上げる。hello の版が違えば、サーバーは protocol-mismatch で断る */
+/** Raised when an envelope changes shape. The server refuses a hello of another version with protocol-mismatch. */
 export const PROTOCOL_VERSION = 2;
 
 /**
- * 部屋のサーバー自身のピア ID。クライアントの ID とぶつからない形にしてある。
- * クライアントは、ほかのメンバーと並べてこのピアがいるものとして扱い、カタログの交換をこのピアとだけ行う。
+ * The room server's own peer id. It has a shape that cannot clash with a client's id.
+ * A client treats this peer as present alongside the other members, and trades catalogs with this
+ * peer only.
  */
 export const AUTHORITY_PEER_ID = '@authority';
 
-/** 生きているかの確認。テキストのフレームで送ると、サーバーを起こさずに PONG が返る */
+/** The check that the connection is alive. Sent in a text frame, it gets PONG back without waking the server. */
 export const PING = 'ping';
 export const PONG = 'pong';
 
-/** 部屋の名前の最長（文字数）。クライアントの入力欄と揃える */
+/** The longest room name (in characters). Kept the same as the client's input field. */
 export const MAX_ROOM_NAME_LENGTH = 255;
-/** 部屋のパスワードの最長（文字数） */
+/** The longest room password (in characters). */
 export const MAX_PASSWORD_LENGTH = 64;
-/** 1つの部屋に同時に入れる人数 */
+/** How many people can be in one room at once. */
 export const MAX_MEMBERS = 32;
 
-/** クライアントどうしで交わすイベント。中身はサーバーが読むものを除いて、そのまま届ける */
+/** An event between clients. Except for the ones the server reads, its contents are passed on as they are. */
 export interface EventContext {
   eventName: string;
   data: unknown;
-  /** 送り主のピア ID。サーバーが、受けた接続のピア ID で上書きする */
+  /** The sender's peer id. The server overwrites it with the peer id of the connection it came on. */
   sendFrom: string;
 }
 
 /**
- * 部屋での役割。サーバーが決め、PeerCursor の role もサーバーが上書きする。
+ * The role in a room. The server decides it, and the server also overwrites the role on PeerCursor.
  *
- * - gm：部屋を作った人と、GM が gm にした人
- * - pl：ログインして入った人（招待リンクや GM が変えたときを除く）
- * - guest：ログインせずに入った人（見学）。自分のカーソルと、見学者も話せるタブへの発言しか書けない
+ * - gm: whoever made the room, and whoever a GM made gm
+ * - pl: whoever came in logged in (unless an invite link or a GM changed it)
+ * - guest: whoever came in without logging in, as a guest. They can write only their own cursor and
+ *   lines in the tabs that guests may also speak in
  */
 export const PEER_ROLES = ['gm', 'pl', 'guest'] as const;
 export type PeerRole = (typeof PEER_ROLES)[number];
 
 /**
- * ログインした人のユーザー ID の頭。サーバーが `acct_` に続けて UUID を付けて決める。
- * 見学者（トークンの無い hello）は、これで始まる userId を名乗れない（unauthorized で断る）。
- * 見え方はユーザー ID で決まるので、カーソルに見えるほかの人のユーザー ID を名乗れば、
- * その人の手札や秘話が見えてしまうため
+ * How the user id of someone logged in begins. The server makes it by putting a UUID after `acct_`.
+ * A guest (a hello without a token) cannot claim a userId that begins with this (it is refused with
+ * unauthorized). That is because visibility follows the user id, so claiming the user id of someone
+ * else, which shows on their cursor, would let one see that person's hand and whispers.
  */
 export const ACCOUNT_USER_ID_PREFIX = 'acct_';
 
 /**
- * Axe が部屋に入るときのピア ID の形。ユーザー ID のダイジェスト（6文字）、部屋の ID（3文字）、
- * 部屋の名前のダイジェスト（8文字）、`-`、パスワードのダイジェスト（パスワードがあれば7文字）。
- * この形のピア ID は、頭のダイジェストが名乗るユーザー ID のものでなければ受けない
+ * The shape of the peer id Axe joins a room with: the digest of the user id (6 characters), the room
+ * id (3 characters), the digest of the room name (8 characters), `-`, and the digest of the password
+ * (7 characters when there is a password).
+ * A peer id of this shape is not accepted unless the leading digest is that of the user id it claims.
  */
 export const ROOM_PEER_ID_PATTERN = /^(\w{6})\w{3}\w{8}-(?:\w{7})?$/;
 
 /**
- * オブジェクトの majorVersion の上限。これより大きい版の UPDATE は受けない。
- * 版は書くたびに 1 足すので、大きすぎると足しても変わらず、だれも書き換えられなくなる
+ * The limit on an object's majorVersion. An UPDATE with a version above this is not accepted.
+ * A version goes up by 1 with each write, so one that is too big stays the same when 1 is added, and
+ * nobody can change the object anymore.
  */
 export const MAX_OBJECT_VERSION = 2 ** 50;
 
 /**
- * 1つの書き込みで majorVersion を上げてよい幅。初めて置くものは、この値まで。Axe は書くたびに 1 足すので、
- * 届かなかった書き込みがあってもこの幅には届かない。大きく跳ばさせると、上限まで上げて、だれにも書き換え
- * られなくできる。minorVersion は -1 より大きく 1 より小さい（Axe は 0 以上 1 未満の乱数を付け、伏せた形には
- * サーバーが -0.5 を付けることがある）
+ * How far one write may raise majorVersion. Something placed for the first time may go up to this
+ * value. Axe adds 1 with each write, so even with writes that did not arrive, it does not reach this
+ * step. Letting the version jump far would let someone raise it to the limit and make the object
+ * impossible for anyone to change. minorVersion is greater than -1 and less than 1 (Axe gives it a
+ * random number at least 0 and less than 1, and the server may give -0.5 to a masked form).
  */
 export const MAX_VERSION_STEP = 2 ** 20;
 
-/** Axe のチャットのタブをまとめる親の識別子。タブはこの直下に置く */
+/** The identifier of the parent that holds Axe's chat tabs together. Tabs are placed right under it. */
 export const CHAT_TAB_LIST_IDENTIFIER = 'ChatTabList';
 
-/** ピア ID の頭に置く、ユーザー ID のダイジェストの長さ（SHA-256 を toBase62 にした頭） */
+/** The length of the user id digest at the start of a peer id (the start of its SHA-256 put through toBase62). */
 export const PEER_ID_USER_DIGEST_LENGTH = 6;
 
 const BASE62 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /**
- * バイト列を、Axe がピア ID に使うのと同じ base62 にする。数として 62 進に直し、先頭の 0 のバイトは
- * 1つずつ `0` にする（base-x と同じ）
+ * Turns bytes into the same base62 that Axe uses for peer ids. It writes them as a number in base 62,
+ * and turns each leading 0 byte into one `0` (the same as base-x).
  */
 export const toBase62 = (bytes: Uint8Array): string => {
   let zeros = 0;
@@ -101,129 +108,133 @@ export const toBase62 = (bytes: Uint8Array): string => {
   return '0'.repeat(zeros) + digits;
 };
 
-/** 部屋にいる人 */
+/** Someone in the room. */
 export interface Member {
   peerId: string;
   userId: string;
   role: PeerRole;
 }
 
-// ---- クライアントからサーバーへ ----
+// ---- client to server ----
 
-/** 接続して最初に送るもの。これより前のものは受けない */
+/** The first thing sent after connecting. Nothing before it is accepted. */
 export interface HelloMessage {
   type: 'hello';
   protocolVersion: number;
-  /** 今と同じ形のピア ID（ユーザー・部屋・パスワードのダイジェストから作る） */
+  /** A peer id of the current shape (made from the digests of the user, the room and the password). */
   peerId: string;
   userId: string;
-  /** パスワードのある部屋に入るとき */
+  /** For joining a room that has a password. */
   password?: string;
   /**
-   * ログインしているときのアクセストークン（POST /v1/auth/token で得たもの）。
-   * 付けなければ見学（guest）として入る。付けるなら userId はトークンの userId と同じにする。
-   * 付けないなら userId は ACCOUNT_USER_ID_PREFIX で始まってはいけない
+   * The access token when logged in (the one from POST /v1/auth/token).
+   * Without it, the sender comes in as a guest (the `guest` role). With it, userId must be the same as
+   * the token's userId. Without it, userId must not begin with ACCOUNT_USER_ID_PREFIX.
    */
   accessToken?: string;
-  /** 招待リンクに付いてきた招待。ログインして初めて入るときの役割になる */
+  /** The invite that came with an invite link. It sets the role of someone logged in on their first time in. */
   invite?: string;
 }
 
-/** イベントの束を送る。to を付ければその人にだけ、付けなければ自分以外の全員に届く */
+/** Sends a batch of events. With `to`, it reaches only that peer; without it, everyone but the sender. */
 export interface SendMessage {
   type: 'send';
   to?: string;
   events: EventContext[];
 }
 
-/** サーバーの時刻を尋ねる。時計のずれを測るのに使う */
+/** Asks the server for its time. Used to measure how far the clocks are apart. */
 export interface TimeRequest {
   type: 'time';
 }
 
-/** 招待を作ってもらう。GM だけが作れる */
+/** Asks for an invite to be made. Only a GM can make one. */
 export interface InviteRequest {
   type: 'invite';
   role: PeerRole;
 }
 
 /**
- * つながったまま、新しいアクセストークンを渡す。ログインして入った席は、アクセストークンが切れてから
- * 1分のうちに新しいものが届かなければ unauthorized で閉じる。Axe はトークンを替えたら送る
+ * Hands over a new access token while staying connected. A seat that came in logged in is closed with
+ * unauthorized unless a new one arrives within a minute after its access token runs out. Axe sends
+ * this when it changes its token.
  */
 export interface AuthMessage {
   type: 'auth';
   accessToken: string;
 }
 
-/** 部屋のアセットのトークンを渡し直してもらう。切れる前に頼む。答えは asset-token で届く */
+/** Asks to be handed the room's asset token again, before it runs out. The answer comes as asset-token. */
 export interface AssetTokenRequest {
   type: 'asset-token';
 }
 
 export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest;
 
-// ---- サーバーからクライアントへ ----
+// ---- server to client ----
 
-/** hello が通ったときの返事。続けてサーバーのカタログが届く */
+/** The answer to a hello that is let in. The server's catalog comes right after it. */
 export interface WelcomeMessage {
   type: 'welcome';
   protocolVersion: number;
-  /** 受け付けたピア ID */
+  /** The peer id that was accepted. */
   peerId: string;
-  /** サーバー自身のピア ID。ピア ID の形から推し量らず、この値を使う */
+  /** The server's own peer id. Use this value rather than guessing it from the shape of peer ids. */
   authorityPeerId: string;
-  /** サーバーが決めた自分の役割。自分の PeerCursor の role はこれにする */
+  /** This client's role, as the server decided it. Its own PeerCursor's role is set to this. */
   role: PeerRole;
-  /** いま部屋にいる人。接続した本人とサーバーは入らない */
+  /** Who is in the room now. Neither the one who connected nor the server is included. */
   members: Member[];
-  /** サーバーの時刻（Unix ミリ秒） */
+  /** The server's time (Unix milliseconds). */
   serverTime: number;
   /**
-   * この部屋のアセット（/v1/rooms/:roomKey/assets/:sha256）を読み書きするトークン。
-   * Authorization: Bearer に付ける。読むのはどの役割でもよく、置けるのは GM と PL だけ
+   * The token for reading and writing this room's assets (/v1/rooms/:roomKey/assets/:sha256).
+   * It goes in Authorization: Bearer. Any role may read, and only a GM or a player may put assets.
    */
   assetToken: string;
-  /** assetToken が使えなくなる時刻（Unix ミリ秒）。その前に asset-token で渡し直してもらう */
+  /** When assetToken stops working (Unix milliseconds). Ask for it again with asset-token before then. */
   assetTokenExpiresAt: number;
   /**
-   * アセットの置き方。無ければ、種類ごとの上限（画像 2MiB、音声 10MiB。Axe が読み込める大きさと同じ）
-   * まで1回の PUT で置ける。
-   * 省略できる欄は、これからも足すことがある。クライアントは知らない欄を無視する
+   * How assets are put. Without it, an asset can be put with a single PUT up to the limit for its kind
+   * (2MiB for pictures and 10MiB for sounds, the same sizes Axe can load).
+   * Optional fields may still be added later. A client ignores fields it does not know.
    */
   assetUpload?: AssetUploadPolicy;
 }
 
 /**
- * 部屋のサーバーのアセットの置き方。1回の要求の本文に上限のある部屋のサーバー（Vercel 版）が、welcome で
- * 知らせる
+ * How assets are put on the room server. A room server with a limit on the body of a single request
+ * (the Vercel version) tells it in welcome.
  */
 export interface AssetUploadPolicy {
-  /** 1回の PUT で受けるバイト数の上限。これを超えるものは PUT では置けない */
+  /** The limit on the bytes a single PUT takes. Anything bigger cannot be put with a PUT. */
   maxPutBytes: number;
   /**
-   * maxPutBytes を超えるものを、置き場所へ直接上げられるか。上げられるなら、POST …/uploads で上げる先を
-   * 受け取って上げ、POST …/uploads/complete で知らせる。上げられなければ、超えるものは置けない
+   * Whether something bigger than maxPutBytes can be uploaded straight to the store. If it can, get
+   * where to upload it from POST …/uploads, upload it, and report it with POST …/uploads/complete. If
+   * it cannot, anything bigger cannot be put.
    */
   directUpload: boolean;
 }
 
-/** だれかが部屋に入った */
+/** Someone came into the room. */
 export interface JoinMessage {
   type: 'join';
   member: Member;
 }
 
-/** だれかが部屋を出た（接続が切れた） */
+/** Someone left the room (their connection was lost). */
 export interface LeaveMessage {
   type: 'leave';
   peerId: string;
 }
 
 /**
- * イベントの束。from は送り主のピア ID で、サーバー自身なら AUTHORITY_PEER_ID。
- * サーバーは、ほかの人の束にも自分のイベント（見え方が変わったものの出し入れなど）を差し込むことがある。
- * 誰からのイベントかは、束の from ではなく、イベントごとの sendFrom で見ること
+ * A batch of events. `from` is the sender's peer id, and AUTHORITY_PEER_ID when it is the server
+ * itself.
+ * The server may also slip its own events into someone else's batch (such as putting in and taking
+ * out things whose visibility changed).
+ * Tell who an event is from by each event's sendFrom, not by the batch's `from`.
  */
 export interface DataMessage {
   type: 'data';
@@ -237,49 +248,56 @@ export interface TimeMessage {
 }
 
 /**
- * 招待。invite を招待リンクに載せる。GM でない人が頼んだときは invite と expiresAt が null。
- * 招待は、まだこの部屋に入ったことのないログインした人の役割を決める（入ったことのある人は今の役割のまま）
+ * An invite. `invite` goes in the invite link. When someone who is not a GM asked, invite and
+ * expiresAt are null.
+ * An invite decides the role of someone logged in who has not been in this room yet (someone who has
+ * keeps their current role).
  */
 export interface InviteMessage {
   type: 'invite';
   role: PeerRole;
   invite: string | null;
-  /** 招待が使えなくなる時刻（Unix ミリ秒） */
+  /** When the invite stops working (Unix milliseconds). */
   expiresAt: number | null;
 }
 
 /**
- * 部屋のアセットの新しいトークン。asset-token を頼んだときと、役割が変わったときに届く。
- * 今のトークンと入れ替える
+ * A new asset token for the room. It comes after asking with asset-token, and when the role changes.
+ * It takes the place of the current token.
  */
 export interface AssetTokenMessage {
   type: 'asset-token';
   assetToken: string;
-  /** Unix ミリ秒 */
+  /** Unix milliseconds. */
   expiresAt: number;
   /**
-   * いまの役割。役割が変わったときに届くトークンは新しい役割のものなので、Axe はこれで自分の役割を
-   * 知り直す（GM か PL になったら、手元の画像や音声を部屋に上げるなど）
+   * The role now. A token that comes when the role changes is for the new role, so Axe learns its own
+   * role again from this (for example, when it becomes a GM or a player, it uploads the pictures and
+   * sounds it has to the room).
    */
   role: PeerRole;
 }
 
 /**
- * 接続を閉じる理由。サーバーはこれを送ってから、同じ code を reason にして閉じる。
- * それぞれが起きるときは fixtures/errors.json にある。
+ * Why a connection is closed. The server sends this, then closes with the same code as the reason.
+ * When each one happens is in fixtures/errors.json.
  *
- * - protocol-mismatch：hello の版がサーバーと違う
- * - room-not-found：部屋が無い（作られていないか、保持期間を過ぎて消えた）
- * - room-full：部屋の人数が MAX_MEMBERS に達している
- * - wrong-password：パスワードが違う
- * - hello-required：最初のメッセージが hello でない
- * - bad-message：読めないメッセージを送った
- * - too-many-messages：短いあいだに送りすぎた
- * - replaced：同じピア ID で新しく接続した人がいるので、こちらを閉じる。つなぎ直さないこと
- * - unauthorized：アクセストークンが無効か期限切れ、または userId がトークンと違う。トークンを更新してつなぎ直す。
- *   つながったあと、トークンが切れて1分のうちに新しいもの（auth）が届かなかったときも。
- *   トークンを付けずに、ログインした人のユーザー ID（ACCOUNT_USER_ID_PREFIX で始まるもの）を名乗ったときも
- * - room-deleted：GM が部屋を削除した。部屋はもう無いので、つなぎ直さないこと
+ * - protocol-mismatch: the hello's version differs from the server's
+ * - room-not-found: there is no room (it has not been made, or it was deleted after its retention
+ *   period)
+ * - room-full: the room has reached MAX_MEMBERS people
+ * - wrong-password: the password is wrong
+ * - hello-required: the first message is not a hello
+ * - bad-message: a message that cannot be read was sent
+ * - too-many-messages: too much was sent in a short time
+ * - replaced: someone made a new connection with the same peer id, so this one is closed. Do not
+ *   reconnect
+ * - unauthorized: the access token is invalid or expired, or userId differs from the token's. Refresh
+ *   the token and reconnect.
+ *   Also when, after connecting, no new token (auth) arrives within a minute after the token runs out.
+ *   Also when someone claims the user id of someone logged in (one that begins with
+ *   ACCOUNT_USER_ID_PREFIX) without a token
+ * - room-deleted: a GM deleted the room. The room is gone, so do not reconnect
  */
 export const ERROR_CODES = [
   'protocol-mismatch',
@@ -299,7 +317,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 export interface ErrorMessage {
   type: 'error';
   code: ErrorCode;
-  /** サーバーの版。protocol-mismatch のときに、どの版に合わせればよいかがわかる */
+  /** The server's version. On protocol-mismatch, it tells which version to match. */
   protocolVersion: number;
 }
 
@@ -313,44 +331,45 @@ export type ServerMessage =
   | AssetTokenMessage
   | ErrorMessage;
 
-/** サーバーが閉じるときの WebSocket の close code */
+/** The WebSocket close code the server closes with. */
 export const CLOSE_CODE = 4000;
 
 /**
- * 別の接続でつなぎ直してもらうときの close code（Service Restart）。error は送らない。reason は、
- * 接続を長く持てない基盤で数分ごとに閉じる rotate か、部屋を受け持つインスタンスが替わった moved。
- * クライアントは、ほかの人に出入りを見せずに、すぐつなぎ直す
+ * The close code for asking a client to reconnect on another connection (Service Restart). No error
+ * is sent. The reason is rotate, for closing every few minutes on a platform that cannot hold a
+ * connection for long, or moved, when the instance in charge of the room has changed.
+ * The client reconnects at once, without showing the others that it left and came back.
  */
 export const COME_BACK_CODE = 1012;
 export const COME_BACK_REASONS = ['rotate', 'moved'] as const;
 
 // ---- HTTP ----
 
-/** POST /v1/rooms の本文 */
+/** The body of POST /v1/rooms. */
 export interface CreateRoomRequest {
   name: string;
   password?: string;
 }
 
-/** POST /v1/rooms の返事（201） */
+/** The answer to POST /v1/rooms (201). */
 export interface CreateRoomResponse {
-  /** 部屋の鍵。GET /v1/rooms/:roomKey/ws で入るときと、招待リンクに使う */
+  /** The room's key. Used to join with GET /v1/rooms/:roomKey/ws, and in invite links. */
   roomKey: string;
-  /** 表示用の3文字の ID */
+  /** The 3-character id that is shown. */
   roomId: string;
 }
 
-/** GET /v1/rooms の1行 */
+/** One row of GET /v1/rooms. */
 export interface RoomSummary {
   roomKey: string;
   roomId: string;
   name: string;
   hasPassword: boolean;
-  /** いま入っている人数 */
+  /** How many people are in it now. */
   members: number;
   /**
-   * アクセストークンを付けて一覧を取った人が、この部屋の GM なら true（そうでなければ付かない）。
-   * DELETE /v1/rooms/:roomKey で削除できる部屋
+   * True when whoever got the list with an access token is a GM of this room (missing otherwise).
+   * A room that can be deleted with DELETE /v1/rooms/:roomKey.
    */
   deletable?: boolean;
 }
@@ -359,127 +378,140 @@ export interface RoomListResponse {
   rooms: RoomSummary[];
 }
 
-/** GET /v1/rooms/:roomKey の答え。一覧に載らない古い部屋も、鍵で引ける */
+/** The answer to GET /v1/rooms/:roomKey. An old room that is not on the list can also be looked up by its key. */
 export interface RoomResponse {
   room: RoomSummary;
 }
 
 /**
- * PUT /v1/rooms/:roomKey/assets/:sha256 に付けてよいヘッダー。アセットの名前（ファイル名）を
- * encodeURIComponent したもの。GET /v1/rooms/:roomKey/assets の一覧で返るほか、HEAD と GET の答えにも
- * 同じヘッダーで付く（Access-Control-Expose-Headers で、ページから読める）
+ * A header that may be sent with PUT /v1/rooms/:roomKey/assets/:sha256. It holds the asset's name (the
+ * file name) run through encodeURIComponent. Besides coming back in the list from
+ * GET /v1/rooms/:roomKey/assets, it also comes with the answers to HEAD and GET in the same header (a
+ * page can read it, through Access-Control-Expose-Headers).
  */
 export const ASSET_NAME_HEADER = 'X-Asset-Name';
-/** アセットの名前の最長（文字数）。長いものは切る */
+/** The longest asset name (in characters). A longer one is cut short. */
 export const MAX_ASSET_NAME_LENGTH = 255;
 
-/** 部屋に置いてあるアセット1つ */
+/** One asset stored in the room. */
 export interface RoomAsset {
-  /** 中身の SHA-256（小文字の16進） */
+  /** The SHA-256 of its contents (lowercase hex). */
   id: string;
-  /** 中身の形式（image/png、audio/ogg など） */
+  /** The type of its contents (image/png, audio/ogg and so on). */
   type: string;
   size: number;
-  /** 置いた人が付けた名前。無ければ空 */
+  /** The name given by whoever put it. Empty when there is none. */
   name: string;
 }
 
 /**
- * GET /v1/rooms/:roomKey/assets の返事。その部屋に置いてあるアセットすべて。部屋のアセットのトークンで尋ねる。
- * 部屋に入ったとき、だれのカタログにも無いが部屋に残っている画像や音声を取りに行くのに使う
+ * The answer to GET /v1/rooms/:roomKey/assets: every asset stored in that room. Asked with the room's
+ * asset token.
+ * Used on joining a room, to fetch pictures and sounds that are in no one's catalog but are still in
+ * the room.
  */
 export interface RoomAssetListResponse {
   assets: RoomAsset[];
 }
 
-/** PUT /v1/rooms/:roomKey/assets/:sha256 と POST …/uploads/complete の返事。置いたら 201、あれば 200 */
+/**
+ * The answer to PUT /v1/rooms/:roomKey/assets/:sha256 and POST …/uploads/complete. 201 when it was
+ * stored, and 200 when it was already there.
+ */
 export interface AssetStoredResponse {
   id: string;
   status: 'stored' | 'exists';
 }
 
 /**
- * POST /v1/rooms/:roomKey/assets/:sha256/uploads の本文。welcome の assetUpload が directUpload の
- * 部屋のサーバーで、maxPutBytes を超えるものを置くときに、上げる先を尋ねる。部屋のアセットのトークンで
- * 尋ねる。もう置いてあれば、上げる先の代わりに AssetStoredResponse（200、exists）が返る
+ * The body of POST /v1/rooms/:roomKey/assets/:sha256/uploads. On a room server whose welcome has an
+ * assetUpload with directUpload, it asks where to upload something bigger than maxPutBytes. It is
+ * asked with the room's asset token. When the asset is already stored, AssetStoredResponse (200,
+ * exists) comes back instead of where to upload.
  */
 export interface UploadTicketRequest {
-  /** 上げる中身のバイト数 */
+  /** The size in bytes of the contents to upload. */
   size: number;
-  /** アセットの名前（ファイル名）。長いものは MAX_ASSET_NAME_LENGTH 文字で切る */
+  /** The asset's name (the file name). A longer one is cut at MAX_ASSET_NAME_LENGTH characters. */
   name?: string;
 }
 
 /**
- * 置き場所へ直接上げる先。この URL へ、このメソッドとヘッダーで中身だけを送る。部屋のアセットの
- * トークン（Authorization）は付けない。置き場所が、大きさと期限と上書きしないことを確かめる
+ * Where to upload straight to the store. Send only the contents to this URL, with this method and
+ * these headers. Do not add the room's asset token (Authorization). The store checks the size, the
+ * expiry and that nothing is overwritten.
  */
 export interface DirectUploadTarget {
   url: string;
   method: 'PUT';
   headers: Record<string, string>;
-  /** この時刻（Unix ミリ秒）を過ぎると上げられない */
+  /** Uploading no longer works after this time (Unix milliseconds). */
   expiresAt: number;
 }
 
-/** POST …/uploads の返事（201）。upload へ上げてから、ticket を POST …/uploads/complete に送る */
+/** The answer to POST …/uploads (201). Upload to `upload`, then send `ticket` to POST …/uploads/complete. */
 export interface UploadTicketResponse {
   ticket: string;
   upload: DirectUploadTarget;
 }
 
 /**
- * POST /v1/rooms/:roomKey/assets/:sha256/uploads/complete の本文。上げ終えたことを知らせると、部屋の
- * サーバーが中身を確かめて部屋のアセットにする。返事は AssetStoredResponse
+ * The body of POST /v1/rooms/:roomKey/assets/:sha256/uploads/complete. When told the upload is done,
+ * the room server checks the contents and makes them an asset of the room. The answer is
+ * AssetStoredResponse.
  */
 export interface UploadCompleteRequest {
   ticket: string;
 }
 
-/** GET /v1/auth/config。ログインに使える提供元。空なら、このサーバーではログインも部屋も使えない */
+/** GET /v1/auth/config: the login providers. When empty, neither login nor rooms can be used on this server. */
 export interface AuthConfigResponse {
   providers: 'discord'[];
 }
 
 /**
- * POST /v1/auth/token の本文。
+ * The body of POST /v1/auth/token.
  *
- * - login_code：ログインから戻ったときに URL のフラグメント（#login_code=…）に付いてきたコードと、
- *   ログインを始めるときに code_challenge の元にした code_verifier を渡す
- * - refresh_token：アクセストークンが切れる前に、リフレッシュトークンで新しい組に替える。
- *   使ったリフレッシュトークンは使えなくなる。同じものをもう一度使うと、その系統のトークンをすべて無効にする
+ * - login_code: hands over the code that came in the URL fragment (#login_code=…) on coming back
+ *   from logging in, and the code_verifier that the code_challenge was made from when the login began
+ * - refresh_token: before the access token runs out, trades the refresh token for a new pair.
+ *   A refresh token that has been used stops working. Using the same one again makes every token in
+ *   that family invalid
  */
 export type TokenRequest =
   | { grant_type: 'login_code'; code: string; code_verifier: string }
   | { grant_type: 'refresh_token'; refresh_token: string };
 
-/** ログインしている人 */
+/** Someone logged in. */
 export interface Account {
-  /** ずっと同じユーザー ID（ACCOUNT_USER_ID_PREFIX で始まる）。hello の userId にこれを使う */
+  /** The user id that never changes (it begins with ACCOUNT_USER_ID_PREFIX). Use it as the hello's userId. */
   userId: string;
   name: string;
-  /** アバターの画像の URL。無ければ null */
+  /** The URL of the avatar picture. Null when there is none. */
   avatarUrl: string | null;
 }
 
-/** POST /v1/auth/token の返事 */
+/** The answer to POST /v1/auth/token. */
 export interface TokenResponse {
-  /** WebSocket の hello と、Authorization: Bearer に使う */
+  /** Used in the WebSocket hello and in Authorization: Bearer. */
   accessToken: string;
-  /** アクセストークンが使える秒数 */
+  /** How many seconds the access token works for. */
   expiresIn: number;
   refreshToken: string;
   account: Account;
 }
 
-// ---- 同期 ----
+// ---- sync ----
 
 /**
- * サーバーが中身を読むイベント。ほかのイベントは中身を読まずに届ける。
+ * The events whose contents the server reads. Other events are passed on without reading their
+ * contents.
  *
- * - UPDATE と DELETE は、宛先にかかわらずサーバーの持つ状態に当ててから、送り主以外の全員に配る
- * - CATALOG・REQUEST・REQUEST_CATALOG は、宛先がサーバー（または宛先なし）ならサーバーが答える
- * - FORGET_DELETED は、サーバーの tombstone も消してから全員に配る
+ * - UPDATE and DELETE are applied to the state the server holds, whoever they are addressed to, and
+ *   then sent to everyone but the sender
+ * - CATALOG, REQUEST and REQUEST_CATALOG are answered by the server when they are addressed to the
+ *   server (or to no one)
+ * - FORGET_DELETED also clears the server's tombstones, and is then sent to everyone
  */
 export const SyncEvent = {
   UPDATE: 'UPDATE_GAME_OBJECT',
@@ -491,20 +523,24 @@ export const SyncEvent = {
 } as const;
 
 /**
- * サーバーとのあいだだけで使うイベント。
+ * Events used only between a client and the server.
  *
- * - AUTHORITATIVE（サーバーから）：data は ObjectContext。版にかかわらず置き換え、消した印も外す。
- *   書く権限の無い変更を戻させるときと、サーバーが中身を直したものを送り主に渡すときに使う
- * - WITHDRAW（サーバーから）：data は { identifier }。消した印を残さずに、手元から外す。
- *   書く権限の無い人が作ったものを取り下げさせるときに使う
- * - ROLE_REQUEST（サーバーへ）：data は { peerId, role }。GM が、部屋にいる人の役割を変える
- * - ROLE_REJECTED（サーバーから）：data は { peerId, role, reason }。ROLE_REQUEST を断った
- * - ROLL_REQUEST（サーバーへ）：data は RollRequest。サーバーが BCDice で振り、結果の発言を全員に配る
- * - ROLL_REJECTED（サーバーから）：data は { identifier, reason }。ROLL_REQUEST を振らなかった。
- *   identifier は頼まれた結果の発言の識別子
+ * - AUTHORITATIVE (from the server): data is an ObjectContext. Replace the object whatever its
+ *   version, and also remove its deleted mark. Used to have a client undo a change made without
+ *   permission to write it, and to hand the sender something whose contents the server fixed
+ * - WITHDRAW (from the server): data is { identifier }. Take the object out locally without leaving a
+ *   deleted mark. Used to have clients withdraw something made by someone without permission to
+ *   write it
+ * - ROLE_REQUEST (to the server): data is { peerId, role }. A GM changes the role of someone in the
+ *   room
+ * - ROLE_REJECTED (from the server): data is { peerId, role, reason }. The ROLE_REQUEST was refused
+ * - ROLL_REQUEST (to the server): data is a RollRequest. The server rolls with BCDice and sends the
+ *   result line to everyone
+ * - ROLL_REJECTED (from the server): data is { identifier, reason }. The ROLL_REQUEST was not rolled.
+ *   identifier is the identifier of the result line that was asked for
  *
- * サーバーからだけ届くもの（AUTHORITATIVE・WITHDRAW・ROLE_REJECTED・ROLL_REJECTED）をクライアントが送っても、
- * サーバーはだれにも届けない
+ * When a client sends one of those that only come from the server (AUTHORITATIVE, WITHDRAW,
+ * ROLE_REJECTED and ROLL_REJECTED), the server passes it on to nobody.
  */
 export const AuthorityEvent = {
   AUTHORITATIVE: 'AUTHORITATIVE_OBJECT',
@@ -515,7 +551,7 @@ export const AuthorityEvent = {
   ROLL_REJECTED: 'ROLL_REJECTED',
 } as const;
 
-/** サーバーだけが送るイベント。クライアントから来たものは届けない */
+/** The events only the server sends. Those that come from a client are not passed on. */
 export const AUTHORITY_ONLY_EVENTS: readonly string[] = [
   AuthorityEvent.AUTHORITATIVE,
   AuthorityEvent.WITHDRAW,
@@ -524,57 +560,67 @@ export const AUTHORITY_ONLY_EVENTS: readonly string[] = [
 ];
 
 /**
- * ダイスを振ってもらう。Axe は、自分で振るときと同じ形で結果の発言（alias 'chat'）を用意して送る。
- * サーバーは振った結果で syncData.value（文面）と、attributes の dicebot・tag・name を埋め、
- * attributes の from を `System-BCDice`、originFrom を頼んだ人の userId に、serverRoll を true にして、
- * 新しい発言として配る。
- * 頼んだ人の手元には、まだ置かないこと（サーバーから届く）。
+ * Asks the server to roll dice. Axe prepares the result line (alias 'chat') in the same form as when
+ * it rolls by itself, and sends it.
+ * With the result of the roll, the server fills in syncData.value (the text) and dicebot, tag and
+ * name in attributes, sets `from` in attributes to `System-BCDice`, originFrom to the userId of
+ * whoever asked, and serverRoll to true, and sends it out as a new line.
+ * Do not place it on the asker's side yet (it comes from the server).
  *
- * 発言は、タブの一覧（CHAT_TAB_LIST_IDENTIFIER）の直下のタブに置く。そうでなければ振らない（invalid）。
- * 版は MAX_VERSION_STEP まで。attributes の timestamp は、サーバーの時刻より10分以上前なら、10分前へ
- * 寄せる（先の時刻は寄せない）。並びの位置は majorIndex を 0、minorIndex を 0 以上 1 未満にする。
- * stamp・attachmentImageIdentifiers・replyTo・quoteOf・fixd は既定の値に戻し、editHistory・disclosedAt・
- * pseudoDeletedAt・afterWhisper* は外す
+ * The line goes in a tab right under the tab list (CHAT_TAB_LIST_IDENTIFIER). Otherwise it is not
+ * rolled (invalid).
+ * The version goes up to MAX_VERSION_STEP. When the timestamp in attributes is 10 minutes or more
+ * before the server's time, it is moved up to 10 minutes before (a later time is not moved). For the
+ * place in the order, majorIndex is set to 0, and minorIndex to at least 0 and less than 1.
+ * stamp, attachmentImageIdentifiers, replyTo, quoteOf and fixd are set back to their defaults, and
+ * editHistory, disclosedAt, pseudoDeletedAt and afterWhisper* are removed.
  */
 export interface RollRequest {
   message: ObjectContext;
-  /** 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい */
+  /** The command to roll, with full-width characters made half-width. It may start with a repeat count (`3 2d6`). */
   command: string;
-  /** ゲームシステムの ID。知らないものなら DiceBot で振る */
+  /** The game system's id. An unknown one is rolled with DiceBot. */
   gameSystem: string;
-  /** 発言した人の名前。結果の名前は `<BCDice：名前>`（シークレットなら `<Secret-BCDice：名前>`） */
+  /**
+   * The name of whoever spoke. The result's name is `<BCDice：name>` (`<Secret-BCDice：name>` for a
+   * secret roll), with a full-width colon.
+   */
   speaker: string;
   /**
-   * 結果の文面の後ろに付ける、対象のキャラの名前。` [名前]` の形で、名前は改行と角括弧と `→` を含まず
-   * MAX_ROLL_TARGET_NAME_LENGTH 文字まで。違う形なら、サーバーは振らない（ROLL_REJECTED の invalid）
+   * The name of the targeted character, put after the text of the result. It has the form ` [name]`,
+   * where the name has no line break, square bracket or `→`, and is at most
+   * MAX_ROLL_TARGET_NAME_LENGTH characters. When the form is different, the server does not roll
+   * (invalid in ROLL_REJECTED).
    */
   suffix?: string;
 }
 
-/** ROLL_REQUEST の command の最長（文字数）。これより長い行は、Axe が手元で振る */
+/** The longest command in a ROLL_REQUEST (in characters). Axe rolls a longer line by itself. */
 export const MAX_ROLL_COMMAND_LENGTH = 4000;
 
-/** RollRequest の suffix に入れる名前の最長（文字数） */
+/** The longest name that goes in the suffix of a RollRequest (in characters). */
 export const MAX_ROLL_TARGET_NAME_LENGTH = 128;
 
 /**
- * 1つの接続について、送れるものや頼めるダイスを数える窓の長さ（秒）。窓が切れたあとに最初に届いたものから、
- * この長さのあいだを数える
+ * The length (in seconds) of the window in which what one connection sends and the dice it asks for
+ * are counted. Counting runs for this long from the first thing that arrives after a window ends.
  */
 export const RATE_WINDOW_SECONDS = 10;
 
-/** 1つの接続が RATE_WINDOW_SECONDS のあいだに頼めるダイスの数。超えたものは rate-limited で断る */
+/** How many rolls one connection may ask for in RATE_WINDOW_SECONDS. Any more are refused with rate-limited. */
 export const MAX_ROLLS_PER_WINDOW = 20;
 
 /**
- * ROLL_REQUEST を振らなかった理由。
+ * Why a ROLL_REQUEST was not rolled.
  *
- * - invalid：頼み方の形が違う（結果の発言の形、置くタブ、版、suffix の形、大きすぎるもの）
- * - not-allowed：見学者が、見学者の話せないタブで振ろうとした
- * - rate-limited：短いあいだに頼みすぎた（MAX_ROLLS_PER_WINDOW）
- * - busy：部屋で振るのを待っているダイスが多すぎる
- * - not-a-command：BCDice のコマンドとして振れなかった（Axe が手元で振っても何も出ないもの）
- * - failed：振るあいだにサーバーで失敗した
+ * - invalid: the request has the wrong form (the form of the result line, the tab it goes in, the
+ *   version, the form of suffix, or something too big)
+ * - not-allowed: a guest tried to roll in a tab where guests cannot speak
+ * - rate-limited: too many were asked for in a short time (MAX_ROLLS_PER_WINDOW)
+ * - busy: too many dice are waiting to be rolled in the room
+ * - not-a-command: it could not be rolled as a BCDice command (one that shows nothing even when Axe
+ *   rolls it by itself)
+ * - failed: something failed on the server while rolling
  */
 export const ROLL_REJECT_REASONS = [
   'invalid',
@@ -586,45 +632,52 @@ export const ROLL_REJECT_REASONS = [
 ] as const;
 export type RollRejectReason = (typeof ROLL_REJECT_REASONS)[number];
 
-/** サーバーが振った結果の発言の from */
+/** The sender (from) of a result line that the server rolled. */
 export const DICE_BOT_SENDER = 'System-BCDice';
 
 /**
- * サーバーが振った結果の発言にだけ true が入る attributes の項目。クライアントが送ってきた発言からは消す。
- * Axe はこれを見て、サーバーで振った結果だとわかるように見せられる
+ * The field in attributes that is true only on a result line the server rolled. It is removed from
+ * lines a client sends. From it, Axe can show that a result was rolled on the server.
  */
 export const SERVER_ROLL_FIELD = 'serverRoll';
 
 /**
- * ROLE_REQUEST を断った理由。
+ * Why a ROLE_REQUEST was refused.
  *
- * - not-game-master：頼んだ人が GM でない
- * - unknown-peer：その peerId の人が部屋にいない
- * - not-logged-in：ログインしていない人は見学のまま
- * - last-game-master：部屋の GM がいなくなる
+ * - not-game-master: whoever asked is not a GM
+ * - unknown-peer: nobody with that peerId is in the room
+ * - not-logged-in: someone not logged in stays a guest
+ * - last-game-master: the room would be left with no GM
  */
 export const ROLE_REJECT_REASONS = ['not-game-master', 'unknown-peer', 'not-logged-in', 'last-game-master'] as const;
 export type RoleRejectReason = (typeof ROLE_REJECT_REASONS)[number];
 
 /**
- * 見てはいけない人に届けないもの、伏せて届けるもの。期待値は fixtures/visibility.json にある。
+ * What is not sent to those who must not see it, and what is sent masked. The expected results are in
+ * fixtures/visibility.json.
  *
- * - カード：表が見えない人（裏向きで、自分が覗いておらず、自分の手札でもない人。GM は見える）には、
- *   カードの下のデータ要素のうち image/front・common/name・common/text と detail の下を届けない
- * - メモ（disclosureMode が gm か selected で、見えない人）：common/title と common/text は文字を █ にして
- *   届け（空白はそのまま）、detail の下は届けない
- * - 持ち主のいるダイス：持ち主と GM のほかには、attributes.face を空にして届け、ダイスの下のデータ要素の
- *   common/name（名前）は届けない
- * - 秘話（attributes.to が空でない発言）：宛先と送り主（from か originFrom）だけに届ける。GM にも届けない
- * - シークレット（attributes.tag に secret がある発言）：送り主と GM のほかには、value と、attributes の
- *   MASKED_CHAT_ATTRIBUTES を空にして届ける
- * - タブ：plCanView・guestCanView で見てよくない役割には、そのタブの発言を届けない（SystemTab は誰にでも）
- * - リアクション（chat-reaction）：その発言が届かない人には届けない
+ * - Cards: to those who cannot see the face (when it is face down, they have not peeked at it, and it
+ *   is not in their own hand; a GM can see it), image/front, common/name and common/text among the
+ *   data elements under the card, and everything under detail, are not sent
+ * - Notes (to those who cannot see them, when disclosureMode is gm or selected): common/title and
+ *   common/text are sent with their characters turned into █ (spaces stay as they are), and
+ *   everything under detail is not sent
+ * - Dice with an owner: to anyone but the owner and GMs, attributes.face is sent empty, and
+ *   common/name (the name) among the data elements under the dice is not sent
+ * - Whispers (lines whose attributes.to is not empty): sent only to the addressees and the sender
+ *   (from or originFrom). Not sent to GMs either
+ * - Secret lines (lines with secret in attributes.tag): to anyone but the sender and GMs, value and
+ *   MASKED_CHAT_ATTRIBUTES in attributes are sent empty
+ * - Tabs: the lines in a tab are not sent to roles that plCanView and guestCanView do not let see it
+ *   (SystemTab goes to everyone)
+ * - Reactions (chat-reaction): not sent to anyone the line does not reach
  *
- * 見え方が変わったら、見えるようになった人には AUTHORITATIVE_OBJECT、見えなくなった人には
- * WITHDRAW_GAME_OBJECT を送る。見えないものに書こうとすると WITHDRAW_GAME_OBJECT が返り、伏せた形で
- * 持っているものを書き戻すと、伏せたところは置いてある中身に戻る。見えないものは消せない。
- * 消したものの子孫は、見えない人が消したときもサーバーが一緒に消し、持っている人に DELETE を送る
+ * When visibility changes, AUTHORITATIVE_OBJECT is sent to those who can now see a thing, and
+ * WITHDRAW_GAME_OBJECT to those who no longer can. Trying to write to something that cannot be seen
+ * gets WITHDRAW_GAME_OBJECT back, and writing back something held in masked form returns the masked
+ * parts to the stored contents. Something that cannot be seen cannot be deleted.
+ * The descendants of something deleted are deleted along with it by the server, even when someone who
+ * cannot see them deleted it, and DELETE is sent to those who hold them.
  */
 export const MASKED_CHAT_ATTRIBUTES = [
   'dicebot',
@@ -634,20 +687,22 @@ export const MASKED_CHAT_ATTRIBUTES = [
   'vnEmote',
 ] as const;
 
-/** チャットの発言と、発言を入れるタブの種類。見学者が話せるのは guestCanSpeak のタブだけ */
+/** The kinds of a chat line and of the tab that lines go in. Guests can speak only in tabs with guestCanSpeak. */
 export const CHAT_MESSAGE_ALIAS = 'chat';
 export const CHAT_TAB_ALIAS = 'chat-tab';
 
 /**
- * 接続しているあいだだけ置くオブジェクトの種類。syncData.peerId の人が部屋にいるあいだだけ持ち、
- * その人が出たら消す（DELETE は配らない。クライアントが leave を受けて自分で片付ける）。tombstone も残さない
+ * The kind of object kept only while connected. It is held only while the person with its
+ * syncData.peerId is in the room, and removed when that person leaves (DELETE is not sent out; clients
+ * clean up by themselves on leave). No tombstone is left either.
  */
 export const PEER_CURSOR_ALIAS = 'PeerCursor';
 
 /**
- * UPDATE_GAME_OBJECT の data。サーバーは、決まった項目のほかは syncData を読まずに、そのまま置いて返す。
- * ObjectNode（カード、チャットの発言、タブ、データ要素など）の SyncVar は syncData.attributes に、
- * それ以外（PeerCursor など）の SyncVar は syncData の直下に入る
+ * The data of UPDATE_GAME_OBJECT. Apart from certain fields, the server does not read syncData, and
+ * stores and returns it as it is.
+ * The SyncVars of an ObjectNode (a card, a chat line, a tab, a data element and so on) go in
+ * syncData.attributes, and those of anything else (PeerCursor and so on) go right under syncData.
  */
 export interface ObjectContext {
   aliasName: string;
@@ -657,32 +712,36 @@ export interface ObjectContext {
   syncData: Record<string, unknown>;
 }
 
-/** SYNCHRONIZE_GAME_OBJECT の data の1件。version は majorVersion + minorVersion */
+/** One item in the data of SYNCHRONIZE_GAME_OBJECT. Its version is majorVersion + minorVersion. */
 export interface CatalogItem {
   identifier: string;
   version: number;
 }
 
-/** SYNCHRONIZE_GAME_OBJECT の1件に入れる最大の件数。クライアントと揃える */
+/** The most items that go in one SYNCHRONIZE_GAME_OBJECT. Kept the same as the client. */
 export const CATALOG_BATCH = 2048;
 
-/** 同期するオブジェクトの版。majorVersion + minorVersion の和で比べる（minorVersion は 0 以上 1 未満） */
+/** A synced object's version, compared by majorVersion + minorVersion (minorVersion is at least 0 and less than 1). */
 export interface ObjectVersion {
   majorVersion: number;
   minorVersion: number;
 }
 
 /**
- * 届いた UPDATE_GAME_OBJECT をどう扱うか。
+ * What to do with an UPDATE_GAME_OBJECT that arrives.
  *
- * - accept：持っているものより新しい（または初めて見る）。置き換えて、ほかの人に配る
- * - same：持っているものと同じ版。何もしない
- * - stale：持っているものより古い。持っている方を送り主に送り返す
- * - deleted：消されたオブジェクト。送り主に DELETE_GAME_OBJECT を返す
+ * - accept: newer than the one held (or seen for the first time). Replace it, and send it to the
+ *   others
+ * - same: the same version as the one held. Do nothing
+ * - stale: older than the one held. Send the one held back to the sender
+ * - deleted: a deleted object. Send DELETE_GAME_OBJECT back to the sender
  */
 export type UpdateVerdict = 'accept' | 'same' | 'stale' | 'deleted';
 
-/** 最後に書いたものを勝たせる（LWW）判定。クライアントの ObjectSynchronizer と同じく、和が厳密に大きいときだけ採る */
+/**
+ * The verdict that lets the last write win (LWW). As in the client's ObjectSynchronizer, it takes the
+ * update only when the sum is strictly greater.
+ */
 export const judgeUpdate = (stored: ObjectVersion | null, incoming: ObjectVersion, deleted: boolean): UpdateVerdict => {
   if (deleted) return 'deleted';
   if (!stored) return 'accept';

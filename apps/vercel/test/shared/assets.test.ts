@@ -25,8 +25,8 @@ import { prepareAssetRooms } from './room-helpers.js';
 
 beforeAll(prepareAssetRooms);
 
-// 部屋のアセット。置き場所は部屋ごとに分かれ、読むのも置くのも、部屋のサーバーが席に渡した
-// トークンを持つ人だけ。置けるのは GM と PL
+// Room assets. The store is split by room, and only someone with the token the room server handed
+// their seat can read or store them. GMs and players can store them.
 
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
@@ -35,7 +35,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 部屋の鍵の形が違うものも含めて、どこかの部屋のアセットの URL */
+/** The URL of an asset in some room, including rooms whose key has the wrong shape. */
 const urlIn = (roomKey: string, id: string) => `https://backend.example/v1/rooms/${roomKey}/assets/${id}`;
 
 describe('PUT /v1/rooms/:roomKey/assets/:id', () => {

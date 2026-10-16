@@ -6,8 +6,9 @@ import { accountRoutes, authRoutes, loginRoutes } from './auth.js';
 import { roomRoutes } from './rooms.js';
 
 /**
- * 部屋のサーバーの経路（/v1 の下）。どの部屋のサーバーでも同じ順に確かめ、同じ形で答える。
- * config と backend は、部屋のサーバーが先に置いておく
+ * The room server's routes (under /v1). Every room server checks things in the same order and
+ * answers in the same form.
+ * The room server sets config and backend beforehand.
  */
 export const serverRoutes = (): Hono<ServerEnv> => {
   const routes = new Hono<ServerEnv>();
@@ -18,7 +19,8 @@ export const serverRoutes = (): Hono<ServerEnv> => {
   routes.route('/rooms', roomRoutes);
   routes.route('/auth', authRoutes);
   routes.route('/account', accountRoutes);
-  // ブラウザがページとして開くもの（Discord への行き来）。Origin は付かないので確かめない
+  // What a browser opens as a page (the trip to Discord and back). It carries no Origin, so that is
+  // not checked.
   routes.route('/login', loginRoutes);
   return routes;
 };

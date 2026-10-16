@@ -16,11 +16,12 @@ import type { StoredEntry } from './object-index.js';
 import { describe, seesDisclosed } from './visibility.js';
 import type { View } from './visibility.js';
 
-// 部屋のサーバーが、受けたものを確かめるときの決まり。どれも状態を持たない
+// The rules by which the room server checks what it receives. None of them keeps any state.
 
 /**
- * 時刻を、今から ROLL_TIME_TOLERANCE_MS より前へはずらさせない。数でなければ今。先へは寄せない。
- * Axe は次の発言をタブの最後の行より後ろに置くので、先の時刻の行があるタブでは、結果もその後ろに来る
+ * Keeps a time from going back more than ROLL_TIME_TOLERANCE_MS before now. Now when it is not a
+ * number. A time ahead is not pulled back. Axe puts the next message after the tab's last line, so
+ * in a tab with a line at a later time, the result comes after that line too.
  */
 export const notLongAgo = (timestamp: unknown): number => {
   const now = Date.now();
@@ -28,7 +29,10 @@ export const notLongAgo = (timestamp: unknown): number => {
   return Math.max(timestamp, now - ROLL_TIME_TOLERANCE_MS);
 };
 
-/** 並びの位置の端数。Axe は 0 以上 1 未満を付ける。その外のものと数でないものは 0 */
+/**
+ * The fraction of a place in the order. Axe gives one of 0 or more and under 1. Anything outside
+ * that, and anything not a number, is 0.
+ */
 export const indexFraction = (value: unknown): number =>
   typeof value === 'number' && value >= 0 && value < 1 ? value : 0;
 
@@ -39,20 +43,21 @@ export const memberOf = (seat: Seat) => ({
 });
 
 /**
- * 同じ人の席か。ピア ID が同じでも、ユーザー ID とログインの有無まで同じでなければ別人とみなす。
- * ログインした人のユーザー ID はトークンで確かめてあるので、ほかの人には名乗れない
+ * Whether two seats are the same person's. Even with the same peer id, they count as different
+ * people unless the user id and whether they are logged in match too. A logged-in person's user id
+ * has been checked against the token, so nobody else can claim it.
  */
 export const isSamePerson = (a: Seat, b: Seat): boolean => a.userId === b.userId && a.account === b.account;
 
 /**
- * そのユーザー ID で、そのピア ID を名乗ってよいか。Axe の部屋のピア ID は、頭にユーザー ID の
- * ダイジェストを持つので、合わないものはほかの人のピア ID。形の違うものは、だれの Axe のピア ID とも
- * 重ならないので受ける
+ * Whether that user id may claim that peer id. Axe's room peer id begins with a digest of the user
+ * id, so one that does not match is someone else's peer id. One of another shape cannot be the same
+ * as anyone's Axe peer id, so it is taken.
  */
 export const mayClaimPeerId = (userId: string, peerId: string): boolean => {
   const shaped = ROOM_PEER_ID_PATTERN.exec(peerId);
   if (!shaped) return true;
-  // 確かめるあいだにほかのメッセージが割り込まないよう、同期で計算する
+  // Worked out synchronously, so that no other message cuts in during the check.
   const digest = toBase62(new Uint8Array(createHash('sha256').update(userId).digest()));
   return shaped[1] === digest.slice(0, PEER_ID_USER_DIGEST_LENGTH);
 };
@@ -66,29 +71,35 @@ export const fromAuthority = (eventName: string, data: unknown): EventContext =>
   sendFrom: AUTHORITY_PEER_ID,
 });
 
-/** シークレットの tag から secret の語を外したものか。Axe の公開（discloseMessage）が書き換える形 */
+/**
+ * Whether tag is the secret's tag with the word secret taken out: the form Axe's disclosure
+ * (discloseMessage) rewrites it to.
+ */
 export const isDisclosureOf = (secretTag: unknown, tag: unknown): boolean => {
   const words = String(secretTag).trim().split(/\s+/);
   return words.includes('secret') && tag === words.filter((word) => word !== 'secret').join(' ');
 };
 
-/** 見え方の手がかりが、索引と SQLite の1行に置ける大きさか */
+/** Whether the view hint is small enough to fit in the index and in one SQLite row. */
 export const fitsIndex = (context: ObjectContext): boolean => {
   const { parent, view } = describe(context);
   return parent.length <= 256 && JSON.stringify(view).length <= MAX_VIEW_BYTES;
 };
 
 /**
- * GM でない人が、見え方を決めるところをそう変えてよいか。Axe の画面が許すことだけを許す。
+ * Whether someone who is not GM may change what decides the view in this way. Only what Axe's
+ * screens allow is allowed.
  *
- * - メモの公開の範囲は、持ち主だけが変えられる。持ち主は、持ち主か、持ち主のいないものを自分にする人が変えられる。
- *   持ち主のいないメモを自分のものにできるのは、いまそのメモが見える人だけ（GM だけのメモは取れない）
- * - ダイスの持ち主も同じ
- * - カードの持ち主（覗いている人）は、自分にするか、空にするだけ。ほかの人の手札のカードは、向きも
- *   持ち主も変えられない
- * - ほかの人の手札のカードは、伏せたまま自分の手札へ引くことだけができる
- * - タブを PL や見学者に見せるかは、GM だけが変えられる
- * - 発言の宛先と、シークレットを外すことは、送り主だけ（ダイスの結果は振った人）。送り主はだれも変えられない
+ * - Only the owner can change who a note is disclosed to. The owner can be changed by the owner, or
+ *   by someone making an ownerless one their own. Only someone who can see an ownerless note now
+ *   can make it their own (a GM-only note cannot be taken).
+ * - The same goes for a die's owner.
+ * - A card's owner (the one peeking) can only be set to oneself or cleared. A card in someone
+ *   else's hand can have neither its facing nor its owner changed.
+ * - A card in someone else's hand can only be drawn into one's own hand, still face down.
+ * - Only the GM can change whether a tab is shown to players and guests.
+ * - A message's addressees, and taking secret off it, are for the sender alone (for a roll result,
+ *   the one who rolled). Nobody can change the sender.
  */
 export const mayChangeView = (before: View | null, after: View | null, seat: Seat): boolean => {
   if (!before || !after || before.kind !== after.kind) return true;
@@ -106,7 +117,8 @@ export const mayChangeView = (before: View | null, after: View | null, seat: Sea
     case 'card': {
       const next = after as typeof before;
       if (before.hand !== '' && before.hand !== seat.userId) {
-        // 引くことだけは通す。自分の手札へ、伏せて、だれも覗いていない形で移す（Axe の「相手の手札から引く」）
+        // Only a draw is let through: a move into one's own hand, face down, with nobody peeking
+        // (Axe's "draw from the other's hand").
         const drawn = next.hand === seat.userId && !next.front && next.owner === '';
         return drawn || JSON.stringify(next) === JSON.stringify(before);
       }
@@ -129,20 +141,23 @@ export const mayChangeView = (before: View | null, after: View | null, seat: Sea
 };
 
 /**
- * タブを別の親の下へ移す書き込みか。Axe はタブを動かさないので、GM のほかには許さない。許すと、見えない
- * ところに作ったタブで振り、よい目のときだけタブごと見えるところへ出せてしまう
+ * Whether a write moves a tab under another parent. Axe does not move tabs, so nobody but the GM is
+ * allowed to. If it were allowed, someone could roll in a tab made out of sight and bring the whole
+ * tab into view only when the rolls were good.
  */
 export const movesTab = (existing: StoredEntry, context: ObjectContext): boolean =>
   existing.alias === CHAT_TAB_ALIAS && describe(context).parent !== existing.parent;
 
-/** 人の名乗れないユーザー ID。Axe が発言の送り主に使う名前 */
+/** User ids nobody may claim: the names Axe uses as the sender of messages. */
 export const RESERVED_USER_IDS: ReadonlySet<string> = new Set([DICE_BOT_SENDER, 'System']);
 
 /**
- * サーバーが振った結果の発言で、書き換えさせない attributes（ほかに syncData の value と親のタブと並びの
- * 位置 ROLLED_PLACE も）。宛先と時刻と並びの位置も守る。守らないと、自分だけに宛てて何度も振り、よい目だけを
- * 全員に宛て直したり、行を好きな位置へ動かしたりできてしまう。並びの位置（disclosedAt と ROLLED_PLACE）は、
- * シークレットを公開したときだけ変わってよい
+ * The attributes that may not be rewritten in a message with a result the server rolled (besides
+ * these, the value in syncData, the parent tab and the place in the order, ROLLED_PLACE). The
+ * addressees, the time and the place in the order are guarded too. Otherwise someone could roll
+ * again and again addressed to themselves alone and readdress only the good rolls to everyone, or
+ * move a line to any place they liked. The place in the order (disclosedAt and ROLLED_PLACE) may
+ * change only when a secret is disclosed.
  */
 export const ROLLED_ATTRIBUTES = [
   'disclosedAt',
@@ -166,9 +181,10 @@ export const ROLLED_ATTRIBUTES = [
 ];
 
 /**
- * 振った結果に、頼んだ人が付けてきても持ち込ませない attributes と、その代わりに置く値（undefined は外す）。
- * 本文のほかに見えるもの（スタンプ・添付の画像・返信や引用）、手を加えた印、並びの位置と、後からだけ
- * 付く印。Axe が結果に付けるのは、どれも既定の値だけ
+ * The attributes kept out of a roll result even when the one who asked sends them, and the values
+ * put in their place (undefined drops the field). They are what shows besides the text (a stamp,
+ * attached pictures, a reply or a quote), the marks of having been altered, the place in the order,
+ * and marks that only come later. Axe gives a result only the default value of each.
  */
 export const ROLL_NEUTRAL_ATTRIBUTES: Readonly<Record<string, unknown>> = {
   stamp: '',
@@ -184,19 +200,28 @@ export const ROLL_NEUTRAL_ATTRIBUTES: Readonly<Record<string, unknown>> = {
   afterWhisperName: undefined,
 };
 
-/** 頼まれた結果の attributes から、持ち込ませないものを既定の値にする。もとから無いものは足さない */
+/**
+ * Sets what may not be brought in to its default value in the attributes of a result asked for.
+ * Adds nothing that was not there to begin with.
+ */
 export const neutralRollAttributes = (attributes: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(attributes).flatMap(([field, value]): [string, unknown][] => {
-      // 継承した名前（constructor など）は、持ち込ませない項目に数えない
+      // An inherited name (constructor and the like) does not count as a field kept out.
       if (!Object.hasOwn(ROLL_NEUTRAL_ATTRIBUTES, field)) return [[field, value]];
       const neutral = ROLL_NEUTRAL_ATTRIBUTES[field];
       return neutral === undefined ? [] : [[field, neutral]];
     })
   );
 
-/** 発言の並びの位置。ObjectNode そのものの SyncVar なので、attributes ではなく syncData の直下にある */
+/**
+ * A message's place in the order. These are SyncVars of the ObjectNode itself, so they sit right
+ * in syncData, not in attributes.
+ */
 export const ROLLED_PLACE = ['majorIndex', 'minorIndex'];
 
-/** サーバーが振った結果の発言で、GM のほかには書き換えさせない attributes（消したことにする印） */
+/**
+ * The attributes nobody but the GM may rewrite in a message with a result the server rolled (the
+ * mark that treats it as deleted).
+ */
 export const ROLLED_GM_ATTRIBUTES = ['pseudoDeletedAt'];

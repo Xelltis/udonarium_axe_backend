@@ -3,14 +3,14 @@
   "name": "udonarium-axe-backend",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-15",
-  // 部屋のフレームの gzip に node:zlib を使う
+  // Rooms gzip their frames with node:zlib.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // 部屋の画像と音声を、部屋ごとに SHA-256 の名前で置く。部屋が消えるときに一緒に消す。
-  // バケット名は書かず、最初のデプロイで「<Worker 名>-assets」を作らせる。
-  // 同じアカウントに何台置いても、Worker ごとに別のバケットになる
+  // Keeps each room's pictures and sounds under their SHA-256 names, and deletes them with the room.
+  // No bucket name is written, so that the first deploy creates `<Worker name>-assets`. However many
+  // are put on one account, each Worker gets a bucket of its own.
   "r2_buckets": [{ "binding": "ASSETS" }],
-  // 部屋ごとに1つの Durable Object と、部屋の一覧を持つ Durable Object。どちらも SQLite に置く
+  // One Durable Object for each room, and one that holds the room list. Both keep their data in SQLite.
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "RoomDurableObject" },
@@ -18,36 +18,37 @@
       { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
     ],
   },
-  // 部屋で起きたことを書く。データセットは最初に書いたときに作られる。
-  // 同じアカウントの Worker で共有するので、書くときに Worker のホスト名を付けて分ける
+  // Where what happens in rooms is written. The dataset is created by the first write. Workers on the
+  // same account share it, so each write carries the Worker's host name to tell them apart.
   "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "udonarium_axe_rooms" }],
-  // 足すときは tag を増やす。いまある tag は書き換えない
+  // To add classes, add a tag. Never rewrite the tags already here.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "LobbyDurableObject"] },
     { "tag": "v2", "new_sqlite_classes": ["AccountDurableObject"] },
   ],
-  // namespace_id は同じアカウントの Worker で共有されるが、鍵に受けたホスト名を付けて Worker ごとに数える
+  // Workers on the same account share a namespace_id, but the key carries the host name the request
+  // came to, so each Worker counts on its own.
   "ratelimits": [
-    // 新しく置くアップロードを、送信元（IPv6 は /64）ごとに数える。
-    // 部屋を読み込むと画像がまとめて上がるので、余裕を持たせる
+    // Counts new uploads by sender (by /64 for IPv6). Loading a room sends up many pictures at once,
+    // so the limit leaves room for that.
     {
       "name": "UPLOAD_LIMITER",
       "namespace_id": "1001",
       "simple": { "limit": 100, "period": 60 },
     },
-    // R2 から読む回数を送信元ごとに数える。データセンターのキャッシュから返すものは数えない
+    // Counts reads from R2 by sender. What a data center's cache answers is not counted.
     {
       "name": "READ_LIMITER",
       "namespace_id": "1002",
       "simple": { "limit": 600, "period": 60 },
     },
-    // 部屋を作る回数と、部屋につなぐ回数を送信元ごとに数える
+    // Counts, by sender, the rooms made and the connections to rooms.
     {
       "name": "ROOM_LIMITER",
       "namespace_id": "1003",
       "simple": { "limit": 30, "period": 60 },
     },
-    // Discord から戻ってきたときと、トークンを発行するときを送信元ごとに数える
+    // Counts, by sender, the returns from Discord and the tokens issued.
     {
       "name": "AUTH_LIMITER",
       "namespace_id": "1004",
@@ -55,12 +56,12 @@
     },
   ],
   "vars": {
-    // カンマ区切り。部屋・アセット・ログインは、この Origin からしか受けない。
-    // CI のデプロイでは、同じ名前のシークレットで本番の Origin に置き換わる（README 参照）
+    // Comma-separated. Rooms, assets and login take requests from these origins only. A deploy from CI
+    // replaces them with the production origins, from the secret of the same name (see the README).
     "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
-    // 最後の1人が出てから部屋を消すまでの時間
+    // How long after the last person leaves a room it is deleted.
     "ROOM_RETENTION_HOURS": "24",
-    // DISCORD_CLIENT_ID・DISCORD_CLIENT_SECRET・SESSION_SECRET はシークレットとして置く（README 参照）。
-    // 手元では .dev.vars に書く
+    // DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET are set as secrets (see the README).
+    // Locally, they go in .dev.vars.
   },
 }

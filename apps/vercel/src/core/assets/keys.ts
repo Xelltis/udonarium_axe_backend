@@ -1,30 +1,41 @@
-/** アセットの名前。中身の SHA-256 を小文字の16進で書いたもの */
+/** An asset's name: the SHA-256 of its contents, written in lowercase hex. */
 export const ASSET_ID = /^[0-9a-f]{64}$/;
 
-/** 部屋ごとのアセットを置く場所の頭 */
+/** The prefix under which each room's assets are kept. */
 export const ROOMS_PREFIX = 'rooms/';
 
-/** 部屋のアセットの置き場所。部屋ごとに分け、部屋が消えるときにまとめて消す */
+/**
+ * Where a room's assets are kept in the store. They are kept apart for each room and deleted all
+ * together when the room is deleted.
+ */
 export const roomAssetPrefix = (roomKey: string): string => `${ROOMS_PREFIX}${roomKey}/`;
 
 export const roomAssetKey = (roomKey: string, id: string): string => `${roomAssetPrefix(roomKey)}${id}`;
 
-/** 置き場所から、その部屋の鍵を取り出す。部屋のアセットでなければ null */
+/** Takes the room's key out of a key in the store. Null when it is not a room's asset. */
 export const roomKeyOf = (key: string): string | null => {
   if (!key.startsWith(ROOMS_PREFIX)) return null;
   const roomKey = key.slice(ROOMS_PREFIX.length).split('/')[0];
   return roomKey.length > 0 ? roomKey : null;
 };
 
-/** 置き場所へ直接上げるものの仮置きの頭。確かめてから部屋のアセットにし、仮置きは消す */
+/**
+ * The prefix where uploads made straight to the store wait. Once checked, an upload is made a room
+ * asset and the waiting one is deleted.
+ */
 export const UPLOADS_PREFIX = 'uploads/';
 
-/** 仮置きの場所。同じものを何人が上げても、ぶつからないよう nonce で分ける */
+/**
+ * Where an upload waits. A nonce keeps uploads apart, so they do not clash however many people
+ * upload the same thing.
+ */
 export const uploadKeyOf = (roomKey: string, id: string, nonce: string): string =>
   `${UPLOADS_PREFIX}${roomKey}/${id}/${nonce}`;
 
 /**
- * 置かせないアセットの印。権利侵害の申し立てなどで消したものを、また上げさせないために置く。
- * 中身は空で、名前だけに意味がある（運用は README の「特定の画像を消したいとき」）。部屋にかかわらず効く
+ * The mark for an asset that may not be stored. It is put there so that something deleted after,
+ * for example, a claim of infringed rights cannot be uploaded again. It is empty and only its name
+ * means anything (how to use it is in docs/cloudflare/policies.md, under answering a claim of
+ * infringed rights). It applies in every room.
  */
 export const blockedKeyOf = (id: string): string => `blocked/${id}`;

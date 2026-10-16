@@ -17,7 +17,7 @@ const userSchema = object({
   avatar: nullish(string()),
 });
 
-/** Discord の同意の画面。identify だけを求め、メールアドレスやサーバーの一覧は求めない */
+/** Discord's consent screen. It asks only for identify, not for the email address or the list of servers. */
 export const authorizeUrl = (login: LoginConfig, redirectUri: string, state: string): string => {
   const url = new URL(AUTHORIZE_URL);
   url.search = new URLSearchParams({
@@ -31,9 +31,9 @@ export const authorizeUrl = (login: LoginConfig, redirectUri: string, state: str
 };
 
 /**
- * Discord から戻ってきたコードを使い、その人の情報を取る。うまくいかなければ null。
+ * Uses the code that came back from Discord to get the person's details. Null when that fails.
  *
- * Discord のアクセストークンは、人の情報を1度読むのに使うだけで、どこにも置かない。
+ * The Discord access token is used only to read the person's details once, and is kept nowhere.
  */
 export const fetchProfile = async (login: LoginConfig, code: string, redirectUri: string): Promise<Profile | null> => {
   const tokenResponse = await fetch(TOKEN_URL, {

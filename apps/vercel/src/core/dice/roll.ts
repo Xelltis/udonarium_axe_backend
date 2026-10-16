@@ -1,19 +1,22 @@
 import { loadGameSystem } from './bcdice.js';
 
-/** 知らないシステムのときに使う、ふつうのダイスボット。Axe と同じく、知らない ID はこれで振る */
+/** The plain dice bot used for a system it does not know. As in Axe, an unknown id rolls with this. */
 export const PLAIN_DICE_BOT = 'DiceBot';
 
-/** 振った結果。チャットの発言の文面と、印と、出目の内訳 */
+/** The result of a roll: the text of the chat message, the mark, and the breakdown of the dice. */
 export interface Rolled {
-  /** 発言の文面。Axe が自分で振ったときと同じ形 */
+  /** The text of the message, in the same form as when Axe rolls by itself. */
   text: string;
-  /** シークレットダイス（振った人と GM にだけ見せる） */
+  /** A secret roll (shown only to the one who rolled and the GM). */
   secret: boolean;
-  /** 出目と成否を JSON にしたもの（ChatMessage の dicebot）。無ければ空 */
+  /**
+   * The numbers rolled and the success or failure, as JSON (the dicebot of ChatMessage). Empty when
+   * there are none.
+   */
   dicebot: string;
 }
 
-/** BCDice が返すもののうち、使うところだけ */
+/** Of what BCDice returns, only the parts that are used. */
 interface BCDiceResult {
   text: string;
   secret: boolean;
@@ -31,8 +34,9 @@ const numberOf = (value: unknown): number => {
 };
 
 /**
- * 出目と成否を、Axe の encodeDiceRollDetail と同じ形の JSON にする（dice-roll-detail.ts）。
- * どちらも無ければ空
+ * Turns the numbers rolled and the success or failure into JSON of the same form as Axe's
+ * encodeDiceRollDetail (dice-roll-detail.ts).
+ * Empty when there is neither.
  */
 export const encodeDetail = (system: string, result: BCDiceResult): string => {
   const faces = (
@@ -48,7 +52,8 @@ export const encodeDetail = (system: string, result: BCDiceResult): string => {
           kind: 'normal',
         }))
   ).filter((face) => face.sides > 0);
-  // クリティカルとファンブルは成功や失敗を伴うので、強いものから見る
+  // A critical or a fumble comes with a success or a failure, so the stronger ones are looked at
+  // first.
   const outcome = result.critical
     ? 'critical'
     : result.fumble
@@ -63,11 +68,12 @@ export const encodeDetail = (system: string, result: BCDiceResult): string => {
 };
 
 /**
- * チャットの1行をダイスのコマンドとして振る。コマンドでなければ null。
+ * Rolls one line of chat as a dice command. Null when it is not a command.
  *
- * Axe の DiceBot（handleSendMessage・diceRollAsync・sendResultMessage）と同じ手順で、
- * 先頭の回数（`3 2d6`）を `x3` に直し、システムのコマンドの形に合うものだけを振り、
- * 結果の文面を同じ形に整える。text は全角を半角に直したもの（Axe が直してから送る）
+ * In the same steps as Axe's DiceBot (handleSendMessage, diceRollAsync and sendResultMessage),
+ * it turns a leading count (`3 2d6`) into `x3`, rolls only what fits the form of the system's
+ * commands, and puts the text of the result into the same form. text has had its full-width
+ * characters turned into half-width ones (Axe turns them before it sends).
  */
 export const rollLine = async (gameType: string, text: string): Promise<Rolled | null> => {
   const match = /^((\d+)?\s+)?(.*)?/i.exec(text) as RegExpExecArray;
@@ -89,12 +95,12 @@ export const rollLine = async (gameType: string, text: string): Promise<Rolled |
   if (!result) return null;
 
   let formatted = `${system.ID} : ${result.text}`
-    // 繰り返しのロールを行ごとに並べ、見出しの直後の改行を除く
+    // Puts repeated rolls one to a line, and drops the line break right after the heading.
     .replace(/\n*(#\d+)\n/gi, '\n$1 ')
     .replace(/: \n/, ': ')
     .replace(/[＞]/g, '→')
     .trim();
-  // 3つ以上の段を経る結果は、段ごとに行を分ける
+  // A result that goes through three or more steps gets a line for each step.
   if (formatted.split(' → ').length > 3) formatted = formatted.replace(/ → /g, '\n→ ');
   return { text: formatted, secret: result.secret, dicebot: encodeDetail(system.ID, result) };
 };

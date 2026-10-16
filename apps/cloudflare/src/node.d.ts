@@ -1,8 +1,8 @@
-// nodejs_compat で使える node: のうち、同期で使う gzip・PBKDF2・HMAC だけの型。
-// @types/node を入れると workers-types と大域の型がぶつかるので、要るものだけ書く。
+// Types for only the synchronous gzip, PBKDF2 and HMAC, out of the node: modules nodejs_compat offers.
+// Installing @types/node makes its global types clash with workers-types, so only what is needed is here.
 declare module 'node:zlib' {
   interface ZlibOptions {
-    /** 展開したあとの最大バイト数。超えると例外になる */
+    /** The most bytes there may be after decompressing. Going over throws. */
     maxOutputLength?: number;
   }
   export function gzipSync(data: Uint8Array): Uint8Array;

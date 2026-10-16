@@ -10,12 +10,13 @@ import { ObjectIndex } from '../../src/core/rooms/object-index.js';
 import type { StoredEntry } from '../../src/core/rooms/object-index.js';
 import { describe } from '../../src/core/rooms/visibility.js';
 
-// RoomEngine を、部屋のサーバー抜きで動かすための、メモリだけの部屋。どちらの部屋のサーバーでも、
-// 部屋のサーバーからは起こしにくいこと（消しているあいだに届いたものなど）を確かめるのに使う
+// A room in memory only, for running RoomEngine without a room server. Used to check, for either
+// room server, what is hard to bring about from the room server (such as what arrives while the room
+// is being deleted).
 
 export const SECRET = 'fake-host-secret-0123456789abcdefgh';
 
-/** メモリに置く、部屋のオブジェクト */
+/** A room's objects, kept in memory. */
 export class MemoryStore extends ObjectIndex implements RoomStore {
   readonly rows = new Map<string, { entry: StoredEntry; data: unknown }>();
   readonly marks = new Set<string>();
@@ -44,7 +45,7 @@ export class MemoryStore extends ObjectIndex implements RoomStore {
     return count;
   }
 
-  /** 書けなかったことにして、索引を置いてあるとおりに戻す */
+  /** Acts as if the write failed, and sets the index back to what is stored. */
   goBack(identifier: string): void {
     this.resync(identifier, this.rows.get(identifier)?.entry ?? null, this.marks.has(identifier));
   }
@@ -61,13 +62,13 @@ const rowOf = (context: ObjectContext, owner: string | null) => ({
   data: context.syncData,
 });
 
-/** メモリの部屋につないだ人 */
+/** Someone connected to the room in memory. */
 export class FakeConn {
   seat: Seat | null = null;
   readonly received: ServerMessage[] = [];
   closed: { code: number; reason: string } | null = null;
 
-  /** 届いたうち、その種類のもの */
+  /** The messages received that are of that type. */
   of<T extends ServerMessage['type']>(type: T): Extract<ServerMessage, { type: T }>[] {
     return this.received.filter((message): message is Extract<ServerMessage, { type: T }> => message.type === type);
   }
@@ -80,10 +81,13 @@ export class FakeHost implements RoomHost<FakeConn> {
   readonly objects = new MemoryStore();
   readonly roleMap = new Map<string, PeerRole>();
   readonly events: [RoomEvent, string, number][] = [];
-  /** 人が入った・いなくなった・一覧を直す、の知らせ */
+  /** The notices that people are in, that everyone is gone, and that the list is to be updated. */
   readonly notices: string[] = [];
   readonly deferred: Promise<unknown>[] = [];
-  /** welcome で知らせるアセットの置き方。Vercel 版のように、本文に上限のある部屋のサーバーにしておく */
+  /**
+   * How assets are stored, as told in welcome. Set as for a room server with a limit on the body, like
+   * the Vercel version.
+   */
   policy: AssetUploadPolicy | null = { maxPutBytes: 4_000_000, directUpload: true };
   readonly engine = new RoomEngine<FakeConn>(this);
 
@@ -154,7 +158,7 @@ export class FakeHost implements RoomHost<FakeConn> {
     this.deferred.push(work);
   }
 
-  /** つないで、部屋に受けさせる */
+  /** Connects, and has the room take the connection. */
   connect(): FakeConn {
     const conn = new FakeConn();
     this.conns.push(conn);
@@ -162,14 +166,14 @@ export class FakeHost implements RoomHost<FakeConn> {
     return conn;
   }
 
-  /** つないで、ログインした `user-<peerId>` として入る */
+  /** Connects, and comes in as `user-<peerId>`, logged in. */
   join(peerId: string, role: PeerRole = 'pl'): FakeConn {
     const conn = this.connect();
     this.hello(conn, peerId, role);
     return conn;
   }
 
-  /** ログインした `user-<peerId>` として hello を送る */
+  /** Sends hello as `user-<peerId>`, logged in. */
   hello(conn: FakeConn, peerId: string, role: PeerRole = 'pl'): void {
     const userId = `user-${peerId}`;
     this.roleMap.set(userId, role);
@@ -189,7 +193,7 @@ export class FakeHost implements RoomHost<FakeConn> {
     );
   }
 
-  /** 部屋にイベントを送る */
+  /** Sends events to the room. */
   emit(conn: FakeConn, events: { eventName: string; data: unknown }[], to?: string): void {
     this.engine.receive(conn, encode({ type: 'send', ...(to === undefined ? {} : { to }), events }));
   }

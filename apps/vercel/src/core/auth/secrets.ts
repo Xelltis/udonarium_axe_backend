@@ -3,33 +3,36 @@ import { timingSafeEqual } from 'node:crypto';
 import type { Account } from '../../../contracts/protocol.js';
 import { base64url } from './tokens.js';
 
-/** ログインから戻ったときのコードが使える秒数 */
+/** How many seconds the code given on the way back from a login can be used for. */
 export const LOGIN_CODE_SECONDS = 5 * 60;
-/** リフレッシュトークンが使える秒数 */
+/** How many seconds a refresh token can be used for. */
 export const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
 
-/** ログインの提供元から受け取った人の情報 */
+/** The person's details as received from the login provider. */
 export interface Profile {
-  /** 提供元と、そこでの ID を組にしたもの（例：`discord:123`）。アカウントを置く場所の名前 */
+  /**
+   * The provider and the id there, put together (for example `discord:123`). The name of where the
+   * account is kept.
+   */
   accountKey: string;
   name: string;
   avatarUrl: string | null;
 }
 
-/** 使い捨ての秘密。行の ID と、その行に置いたハッシュの元 */
+/** A secret for one use: the row's id, and what the hash stored in that row was made from. */
 export interface Secret {
   id: string;
   secret: string;
 }
 
-/** ログインやリフレッシュで渡すもの。アクセストークンは受けた側が署名する */
+/** What a login or a refresh hands over. The side that receives it signs the access token. */
 export interface Session {
   account: Account;
   accountKey: string;
   refreshToken: Secret;
 }
 
-/** 書き込む前に作っておくリフレッシュトークンと、そのハッシュ（SHA-256 の base64url） */
+/** A refresh token made before it is written, and its hash (the SHA-256 in base64url). */
 export interface IssuedToken {
   token: Secret;
   hash: string;
@@ -42,14 +45,14 @@ export const randomText = (bytes: number) => base64url(crypto.getRandomValues(ne
 export const sha256 = async (text: string): Promise<string> =>
   base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))));
 
-/** 同じ長さの文字列を、どこで違っても同じ時間で比べる */
+/** Compares strings of the same length in the same time, wherever they differ. */
 export const sameText = (a: string, b: string): boolean => {
   const left = new TextEncoder().encode(a);
   const right = new TextEncoder().encode(b);
   return left.length === right.length && timingSafeEqual(left, right);
 };
 
-/** ログインから戻ったときの使い捨てのコード */
+/** The code for one use, given on the way back from a login. */
 export const newLoginCode = (): Secret => ({ id: randomText(12), secret: randomText(32) });
 
 export const newRefreshToken = async (): Promise<IssuedToken> => {

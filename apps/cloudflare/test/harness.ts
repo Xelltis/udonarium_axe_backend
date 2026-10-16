@@ -9,13 +9,13 @@ import type { RoomHost } from '../src/core/rooms/host';
 import type { RoomDurableObject } from '../src/rooms/room';
 import type { Harness, TestSocket } from './shared/harness-api';
 
-// 共有のテストを、Worker と Durable Object の上で動かす
+// Runs the shared tests on the Worker and Durable Objects.
 
 const room = (roomKey: string) => env.ROOMS.getByName(roomKey);
 
-/** Worker が返した WebSocket を受け、テストの形にする */
+/** Takes the WebSocket the Worker returned and puts it in the shape the tests use. */
 const socketOf = (ws: WebSocket): TestSocket => {
-  // 新しい互換日付では、バイナリは Blob で届くのが標準になった
+  // Under newer compatibility dates, binary data arrives as a Blob by default.
   ws.binaryType = 'arraybuffer';
   ws.accept();
   return {
@@ -27,7 +27,7 @@ const socketOf = (ws: WebSocket): TestSocket => {
 };
 
 export const harness: Harness = {
-  // 1回の PUT で、種類ごとの上限まで置ける
+  // One PUT can store up to the limit for each type.
   assetUpload: null,
 
   fetch: (request) => exports.default.fetch(request),

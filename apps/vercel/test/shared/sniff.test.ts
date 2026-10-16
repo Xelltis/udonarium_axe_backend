@@ -7,7 +7,7 @@ const bytes = (...values: (number | string)[]): Uint8Array =>
     values.flatMap((value) => (typeof value === 'string' ? [...value].map((char) => char.charCodeAt(0)) : [value]))
   );
 
-/** BMP のファイルヘッダー（14バイト）と、長さ size の情報ヘッダーの書き出し */
+/** A BMP file header (14 bytes) and the start of an info header of the given size. */
 const bmp = (infoHeaderSize: number) => bytes('BM', 0x36, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, infoHeaderSize, 0, 0, 0);
 
 describe('sniff', () => {

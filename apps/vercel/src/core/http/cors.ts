@@ -8,19 +8,20 @@ import { isAllowedOrigin } from './origin.js';
 
 const MAX_AGE_SECONDS = 86_400;
 
-// 部屋・部屋のアセット・ログイン・アカウントの Origin は apiCors で確かめ済み
+// The Origin for rooms, room assets, login and accounts has already been checked in apiCors.
 const apiHeaders = cors({
   origin: (origin) => origin,
   allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
   allowHeaders: ['Content-Type', 'Authorization', ASSET_NAME_HEADER],
-  // 部屋のアセットを取るときに、置いたときの名前を読ませる
+  // Lets the name an asset was stored with be read when a room asset is fetched.
   exposeHeaders: [ASSET_NAME_HEADER],
   maxAge: MAX_AGE_SECONDS,
 });
 
 /**
- * 部屋・部屋のアセット・ログイン・アカウントのものは、許可した Origin からしか受けない。部屋の WebSocket の接続も同じ。
- * WebSocket の応答（101）にはヘッダーを足せないので、CORS のヘッダーは付けない。
+ * Requests for rooms, room assets, login and accounts are taken only from allowed Origins. The same
+ * goes for connections to a room's WebSocket.
+ * Headers cannot be added to the WebSocket response (101), so it gets no CORS headers.
  */
 export const apiCors = (): MiddlewareHandler<ServerEnv> => async (c, next) => {
   if (!isAllowedOrigin(c.req.header('Origin'), c.var.config.allowedOrigins)) {

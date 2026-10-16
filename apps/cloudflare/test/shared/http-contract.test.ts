@@ -5,7 +5,8 @@ import { callApi, logIn } from './auth-helpers.js';
 import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put, jsonOf, shapeOf } from './helpers.js';
 import { createRoom, prepareAssetRooms } from './room-helpers.js';
 
-// HTTP の返事が、contracts/fixtures/http.json の例と同じ形かを、実際に呼んで確かめる
+// Checks with real calls that the HTTP answers have the same shape as the examples in
+// contracts/fixtures/http.json.
 
 describe('the HTTP contract', () => {
   it('opens a room as the example says', async () => {

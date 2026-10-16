@@ -2,27 +2,29 @@ export type AssetKind = 'image' | 'audio';
 
 export interface SniffedType {
   kind: AssetKind;
-  /** 配信するときの Content-Type */
+  /** The Content-Type it is served with. */
   type: string;
 }
 
 /**
- * 判定に読む先頭のバイト数。SVG は XML 宣言・コメント・DOCTYPE のあとにルート要素が来るので、
- * それらを読み飛ばせるだけの長さを取る
+ * How many bytes from the start are read to decide. In an SVG the root element comes after the XML
+ * declaration, comments and DOCTYPE, so it takes enough to read past them.
  */
 export const SNIFF_BYTES = 4096;
 
 /**
- * SVG の判定で読み飛ばす、ルート要素より前のもの（空白、XML 宣言と処理命令、コメント、DOCTYPE）。
- * 閉じていないものを渡されても先頭から1度なぞるだけで済むよう、隣りあう繰り返しが同じ文字を
- * 取りあわない形にしてある
+ * What comes before the root element and is read past when checking for an SVG (white space, the
+ * XML declaration and processing instructions, comments, DOCTYPE). It is written so that repeats
+ * next to each other never take the same characters, so that even something left unclosed is gone
+ * over only once from the start.
  */
 const XML_PROLOG = /^(?:\s+|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^[>]*(?:\[[\s\S]*?\]\s*)?>)*/;
 
 /**
- * `ftyp` の後ろのブランドのうち、受け付けるもの。
- * 同じ箱が mp4 や mov の動画の先頭にも来るので、ブランドまで読まないと区別できない。
- * 音声は M4A（とオーディオブックの M4B）だけで、動画にも使われる isom や mp42 は受け付けない。
+ * The brands after `ftyp` that are accepted.
+ * The same box also comes at the start of mp4 and mov videos, so they cannot be told apart without
+ * reading as far as the brand.
+ * For sounds only M4A (and M4B for audiobooks) is accepted, not isom or mp42, which videos use too.
  */
 const FTYP_BRANDS: ReadonlyMap<string, SniffedType> = new Map([
   ['avif', { kind: 'image', type: 'image/avif' }],
@@ -39,16 +41,22 @@ const FTYP_BRANDS: ReadonlyMap<string, SniffedType> = new Map([
   ['M4B ', { kind: 'audio', type: 'audio/mp4' }],
 ]);
 
-/** BMP のファイルヘッダーの直後に来る情報ヘッダーの長さ。これ以外は BMP として読めない */
+/**
+ * The lengths of the info header that comes right after a BMP's file header. With any other length
+ * it cannot be read as a BMP.
+ */
 const BMP_INFO_HEADER_SIZES: ReadonlySet<number> = new Set([12, 40, 52, 56, 64, 108, 124]);
 
 /**
- * バイト列の先頭から、受け付ける画像か音声かを判定する。どれでもなければ null。
+ * Decides from the start of the bytes whether they are a picture or a sound that is accepted. Null
+ * when they are neither.
  *
- * 宣言された Content-Type は信じず、形式そのものが先頭に持つ印だけを見る。
- * 印のあとに何が続くかまでは確かめないので、中身が壊れていないことの保証にはならない。
- * 配信する Content-Type を、決まった形式に限るための判定。
- * SVG は中にスクリプトを書けるので、配るときにサンドボックスに入れる（response.ts）。
+ * It does not trust the declared Content-Type and looks only at the marks a format itself carries
+ * at its start.
+ * It does not check what comes after the marks, so it does not promise the contents are unbroken.
+ * It is there to keep the Content-Type served to a fixed set of formats.
+ * Scripts can be written inside an SVG, so an SVG is put in a sandbox when it is served
+ * (response.ts).
  */
 export const sniff = (head: Uint8Array): SniffedType | null => {
   if (head.length < 4) return null;
@@ -74,7 +82,7 @@ export const sniff = (head: Uint8Array): SniffedType | null => {
   if (ascii(4, 4) === 'ftyp') return FTYP_BRANDS.get(ascii(8, 4)) ?? null;
   if (ascii(0, 4) === 'OggS') return { kind: 'audio', type: 'audio/ogg' };
   if (ascii(0, 4) === 'fLaC') return { kind: 'audio', type: 'audio/flac' };
-  // ID3v2 のタグ。続く1バイトが版（2〜4）
+  // An ID3v2 tag. The byte after it is the version (2 to 4).
   if (ascii(0, 3) === 'ID3' && head[3] >= 2 && head[3] <= 4) {
     return { kind: 'audio', type: 'audio/mpeg' };
   }
@@ -85,25 +93,27 @@ export const sniff = (head: Uint8Array): SniffedType | null => {
 };
 
 /**
- * SVG の文書。BOM と、ルート要素より前のものを読み飛ばし、ルート要素が `<svg` で始まるもの。
- * 前置きが判定に読む長さに収まらないものは、SVG と見なさない。
+ * An SVG document: one whose root element starts with `<svg` once the BOM and what comes before
+ * the root element are read past.
+ * One whose prelude does not fit in the length read to decide is not taken as an SVG.
  */
 const isSvg = (head: Uint8Array): boolean => {
   const text = new TextDecoder().decode(head);
   return /^<svg[\s>/]/.test(text.replace(XML_PROLOG, ''));
 };
 
-// ADTS（AAC）と MPEG オーディオのフレームは、どちらも同期ビット（0xFFF、MPEG 2.5 は 0xFFE）で
-// 始まる。2バイト目にあるレイヤーの2ビットが、ADTS では 00、MP3 では 01 になる。
+// ADTS (AAC) and MPEG audio frames both start with the sync bits (0xFFF, or 0xFFE for MPEG 2.5).
+// The two layer bits in the second byte are 00 in ADTS and 01 in MP3.
 
-/** ADTS のヘッダー。サンプリング周波数の番号が 0〜12 のもの */
+/** An ADTS header: one whose sampling frequency index is 0 to 12. */
 const isAdtsHeader = (head: Uint8Array): boolean =>
   head[0] === 0xff && (head[1] & 0xf6) === 0xf0 && ((head[2] >> 2) & 0x0f) <= 12;
 
 /**
- * MP3（MPEG オーディオのレイヤー III）のフレームヘッダー。
- * 版・ビットレート・サンプリング周波数のどれにも予約済みの値を使っていないものだけ。
- * UTF-16LE の BOM（FF FE）のように、たまたま同期ビットで始まるだけのものを除く。
+ * An MP3 (MPEG audio layer III) frame header.
+ * Only one that uses no reserved value for the version, the bitrate or the sampling frequency.
+ * This leaves out what merely happens to start with the sync bits, such as the UTF-16LE BOM
+ * (FF FE).
  */
 const isMp3FrameHeader = (head: Uint8Array): boolean => {
   if (head[0] !== 0xff || (head[1] & 0xe0) !== 0xe0) return false;

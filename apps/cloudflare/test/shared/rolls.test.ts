@@ -8,12 +8,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 頼むときの時刻。サーバーは、今より大きく前の時刻を今のそばへ寄せる */
+/** The time of a request. The server moves a time far before now up close to now. */
 const STAMP = Date.now();
 
 /**
- * Axe が自分で振るときと同じ形で用意した、結果の発言。発言は ObjectNode なので、
- * 文面は syncData.value、SyncVar は syncData.attributes に入る
+ * A result message, prepared in the same shape as when Axe rolls by itself. A message is an ObjectNode,
+ * so its text goes in syncData.value and its SyncVars in syncData.attributes.
  */
 const prepared = (identifier: string, tab = 'main') =>
   contextOf(
@@ -22,7 +22,8 @@ const prepared = (identifier: string, tab = 'main') =>
     0.5,
     {
       parentIdentifier: tab,
-      // Axe は並びの位置を、発言の attributes ではなく syncData の直下に置く。発言の majorIndex は 0
+      // Axe puts the place in the order right under syncData, not in the message's attributes. A
+      // message's majorIndex is 0.
       majorIndex: 0,
       minorIndex: 0.25,
       value: '',
@@ -49,8 +50,8 @@ const tabOf = (identifier: string, guestCanSpeak: boolean) =>
   listedTabOf(identifier, { plCanView: true, guestCanView: true, guestCanSpeak });
 
 /**
- * PL の alice と bob、見学者の carol がいる部屋。タブ main は見学者も話せる。creator を
- * 指定すれば、その人が GM になる
+ * A room with the players alice and bob and the guest carol. Guests can speak in the tab main too.
+ * Given a creator, that person becomes the GM.
  */
 const room = async (creator?: string) => {
   const roomKey = await createRoom({}, creator);
@@ -154,7 +155,8 @@ describe('rolling on the server', () => {
 
     const [event] = await bob.events();
     expect((event.data as { identifier: string }).identifier).toBe('marker');
-    // 振らなかったものは、頼んだ人に理由を返す。もう届いているものには何も返さない
+    // For what was not rolled, the reason goes back to whoever asked. Nothing goes back for what has
+    // already arrived.
     const told: unknown[] = [];
     for (;;) {
       const [answer] = await alice.events();
@@ -294,7 +296,7 @@ describe('rolling on the server', () => {
 });
 
 describe('a rolled result', () => {
-  /** alice が振り、全員に届いた結果 */
+  /** A result alice rolled, once it has reached everyone. */
   const rolledIn = async (clients: Awaited<ReturnType<typeof room>>) => {
     clients.alice.emit([rollRequest('rolled', '1d1')]);
     const [{ data }] = await clients.alice.events();
@@ -302,7 +304,7 @@ describe('a rolled result', () => {
     return data as Message;
   };
 
-  /** 結果を書き換えて送る（版を上げ、value と attributes を替える） */
+  /** Sends a rewritten result (with the version raised, and value and attributes changed). */
   const edited = (original: Message, value: unknown, changes: Record<string, unknown>) => ({
     ...original,
     majorVersion: 2,
@@ -344,7 +346,7 @@ describe('a rolled result', () => {
     const clients = await room();
     const original = await rolledIn(clients);
 
-    // 自分だけに宛て直し、時刻を戻し、ほかのタブへ移そうとする
+    // Tries to address it again to alice alone, turn its time back, and move it to another tab.
     const moved = edited(original, original.syncData.value, { to: 'user-alice', timestamp: 0 });
     clients.alice.emit([
       {
@@ -583,7 +585,7 @@ describe('a rolled result', () => {
   it('is not taken away with its tab by anyone but the GM', async () => {
     const clients = await room();
     const original = await rolledIn(clients);
-    // alice に見えない秘話は、返すものに入れない
+    // A whisper alice cannot see is left out of what goes back.
     clients.bob.emit([
       {
         eventName: SyncEvent.UPDATE,
@@ -617,7 +619,7 @@ describe('a rolled result', () => {
 
   it('keeps the lines of a tab it would not let go, though they are deleted one by one after it', async () => {
     const clients = await room();
-    // bob が carol にだけ宛てて振った結果は、alice には見えない
+    // A result bob rolled for carol alone cannot be seen by alice.
     const whisper = rollRequest('whispered', '1d1');
     clients.bob.emit([
       {
@@ -645,7 +647,7 @@ describe('a rolled result', () => {
     await clients.bob.events();
     await clients.carol.events();
 
-    // Axe はタブに続けて、中の行を1つずつ消す。行は別の束で来ることもある
+    // Axe deletes a tab and then the lines in it one by one. The lines may come in another batch.
     clients.alice.emit([
       { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
       { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'plain' } },
@@ -679,7 +681,7 @@ describe('a rolled result', () => {
     ]);
     await clients.bob.events();
 
-    // 2つのタブを続けて消そうとする。どちらも中の行ごと消させない
+    // Tries to delete two tabs in a row. Neither is let go along with its lines.
     clients.alice.emit([
       { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } },
       { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'players' } },
@@ -738,7 +740,7 @@ describe('a rolled result', () => {
     await rolledIn(clients);
     await clients.carol.events();
 
-    // 見学者が、見学者の話せないタブで、同じ識別子を頼み直す
+    // A guest asks again with the same identifier, in a tab where guests cannot speak.
     clients.carol.emit([rollRequest('rolled', '1d1', {}, 'players')], AUTHORITY_PEER_ID);
 
     await clients.carol.expectQuiet();
@@ -762,7 +764,7 @@ describe('a rolled result', () => {
       AuthorityEvent.AUTHORITATIVE,
     ]);
     expect(attributes(refused[0].data).pseudoDeletedAt).toBeUndefined();
-    // 直した中身は受けるので、ほかの人には印の無いまま届き、消されはしない
+    // The corrected contents are taken, so they reach the others without the mark and are not deleted.
     const corrected = await clients.carol.events();
     expect(corrected.map((event) => event.eventName)).toEqual([SyncEvent.UPDATE]);
     expect(attributes(corrected[0].data).pseudoDeletedAt).toBeUndefined();
@@ -797,7 +799,7 @@ describe('a rolled result', () => {
     await clients.bob.expectQuiet();
   });
 
-  /** alice がシークレットで振り、全員に届いた結果（alice には中身ごと） */
+  /** A result alice rolled in secret, once it has reached everyone (alice gets it with its contents). */
   const secretIn = async (clients: Awaited<ReturnType<typeof room>>) => {
     clients.alice.emit([rollRequest('rolled', 's1d1')]);
     const [{ data }] = await clients.alice.events();
@@ -835,7 +837,7 @@ describe('a rolled result', () => {
   it('cannot be disclosed by anyone else, nor have its tag changed in any other way', async () => {
     const clients = await room();
     const secret = await secretIn(clients);
-    // bob の手元にあるのは伏せた形。振っていない人の公開は、まるごと断る
+    // What bob holds is the masked form. A disclosure by someone who did not roll is refused whole.
     clients.bob.emit([{ eventName: SyncEvent.UPDATE, data: edited(secret, '', { tag: 'system', dicebot: '' }) }]);
     expect((await clients.bob.events())[0]).toMatchObject({
       eventName: AuthorityEvent.AUTHORITATIVE,

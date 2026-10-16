@@ -85,43 +85,47 @@ import type { Lookup, ViewKind, Viewer } from './visibility.js';
 
 type Reply = (eventName: string, data: unknown) => void;
 
-/** 受け取る人ごとの束に、イベントを1つ足す */
+/** Adds one event to the bundle for one receiver. */
 type Push<C> = (conn: C, event: EventContext) => void;
 
 /**
- * 1つの部屋の中継と同期。部屋にいる人の接続から届いたものを読み、部屋の状態に当て、見てよい人へ
- * 見てよい形で配る。
+ * Relay and sync for one room. It reads what comes in on the connections of those in the room,
+ * applies it to the room's state, and sends it out to those who may see it, in the form they may
+ * see.
  *
- * クライアントからは、全部を持っている特別なピア（AUTHORITY_PEER_ID）に見える。カタログの交換は
- * このピアとだけ行い、UPDATE と DELETE はここで LWW に当ててから配る。
+ * To the clients it looks like a special peer that holds everything (AUTHORITY_PEER_ID). Catalogs
+ * are traded with this peer alone, and UPDATE and DELETE are put through LWW here before they are
+ * sent out.
  *
- * 接続・席・部屋の行・役割・置き場所は RoomHost が持つ。どの部屋のサーバー（Cloudflare の Durable Object、
- * Vercel の部屋の持ち主）でも同じに動くよう、ここは1つの部屋の1つの流れの中で、同期で動く。確かめてから
- * 書くまでのあいだに await を挟まない。メモリに置くのは、消えても困らないもの（送りすぎの数、振るのを
- * 待っている数、しばらく消させないもの）だけ。
+ * The connections, seats, the room's row, roles and the store belong to RoomHost. So that it works
+ * the same on every room server (Cloudflare's Durable Object, the room's owner on Vercel), this
+ * runs synchronously, within one flow of one room. No await comes between checking and writing.
+ * Only what does no harm when lost is kept in memory (the counts for sending too much, how many
+ * rolls are waiting, and what may not be deleted for a while).
  */
 export class RoomEngine<C extends object> {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  /** まだ記録していない、書いた変更の数と、数え始めた時刻 */
+  /** How many written changes are not logged yet, and when counting began. */
   private flushTally = { count: 0, since: 0 };
-  /** 頼まれた順に振る。システムを初めて読み込むときだけ待つ */
+  /** Rolls go in the order they were asked for. It waits only when a system is loaded the first time. */
   private rollQueue: Promise<void> = Promise.resolve();
-  /** 送ってきたフレーム・イベント・ダイスの数。窓の始まりと、そこからの数 */
+  /** The frames, events and dice each connection has sent: when the window began, and the counts since. */
   private readonly rates = new WeakMap<C, { start: number; count: number; events: number; rolls: number }>();
-  /** 切れたと知らされたもの */
+  /** The connections reported as dropped. */
   private readonly gone = new WeakSet<C>();
-  /** 断って閉じたもの。hello の前に断ったものは席が無いので、ここで覚える */
+  /** The connections refused and closed. One refused before its hello has no seat, so it is remembered here. */
   private readonly refused = new WeakSet<C>();
-  /** hello の前の接続を受けた時刻。消えていたら、待ちすぎたものとみなす */
+  /** When a connection before its hello was taken in. One with no time here counts as having waited too long. */
   private readonly connectedAt = new WeakMap<C, number>();
-  /** 振るのを待っているダイスの数 */
+  /** How many dice are waiting to be rolled. */
   private pendingRolls = 0;
   /**
-   * ユーザー ID ごとに、親を待っているあいだにカタログで外させたもの。書いた本人でも、もう持っていないので、
-   * 親が来て見えるようになったら渡す。つなぎ直しても同じ人なので、接続ではなくユーザー ID で持つ
+   * For each user id, what a catalog had taken back while it waited for its parent. Even the one who
+   * wrote it no longer has it, so it is handed over once the parent comes and it can be seen. A
+   * reconnected seat is the same person, so this is kept by user id, not by connection.
    */
   private withdrawnPending = new Map<string, Set<string>>();
-  /** 席ごとに、消させなかったものとその子孫と、それをいつまで消させないか */
+  /** For each seat, what it was kept from deleting along with the descendants, and until when that lasts. */
   private keptFromDeleting = new Map<string, { ids: Set<string>; until: number }>();
 
   constructor(private readonly host: RoomHost<C>) {}
@@ -131,8 +135,9 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 接続を受ける。部屋が無いときと満員のときも、受けてから理由を送って閉じる。受ける前に HTTP で断ると、
-   * ブラウザには理由が読めず、つながらなかったことしかわからない
+   * Accepts a connection. Even when there is no room or it is full, the connection is accepted, then
+   * sent the reason and closed. Refused over HTTP before it is accepted, the browser cannot read the
+   * reason and learns only that it did not connect.
    */
   accept(conn: C): void {
     const missing = this.host.wiping() || !this.host.room();
@@ -147,8 +152,8 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 部屋を削除したので、入っている人に room-deleted を送ってから閉じる。出たことにはしない
-   * （知らせる相手も、書き残す部屋も無くなる）
+   * The room has been deleted, so sends room-deleted to those in it and then closes them. They are
+   * not treated as having left (there is nobody left to tell, and no room left to write it in).
    */
   closeAll(): void {
     for (const conn of this.host.connections()) {
@@ -161,24 +166,28 @@ export class RoomEngine<C extends object> {
     }
   }
 
-  /** 部屋にいない人のカーソルを消し、持っている人に消させる。部屋のサーバーが落ちたあとの片付け */
+  /**
+   * Deletes the cursors of those not in the room, and has those who hold them delete them too. It
+   * cleans up after the room server has gone down.
+   */
   dropStrayCursors(): void {
     this.dropCursors(this.removeStrayCursors());
   }
 
-  /** まとめて書くのをやめる。部屋を消すときに */
+  /** Stops writing changes in batches. It is for when the room is deleted. */
   stopFlushing(): void {
     if (this.flushTimer !== null) clearTimeout(this.flushTimer);
     this.flushTimer = null;
   }
 
   /**
-   * アセットを置こうとしている人が、いまもこの部屋で置ける役割（GM か PL）か。アセットの PUT から尋ねる。
-   * トークンは15分使えるので、そのあいだに部屋が消えたり、見学に変えられたりしていれば断る
+   * Whether someone putting an asset still has a role in this room that may put one (GM or player).
+   * The asset PUT asks it. A token lasts 15 minutes, so it is refused if the room has gone or the
+   * seat has been made a guest in that time.
    */
   canUpload(userId: string): 'ok' | 'room-not-found' | 'not-a-player' {
     if (this.host.wiping() || !this.host.room()) return 'room-not-found';
-    // 席に着いているあいだだけ。抜けた人は、トークンが残っていても置けない
+    // Only while seated. Someone who has left cannot put one, even with a token still left.
     const seated = this.seats().some(
       ({ seat }) => seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl')
     );
@@ -186,8 +195,8 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * hello を送らないまま HELLO_TIMEOUT_MS を過ぎた接続を閉じる。閉じないと、hello を送らない接続で
-   * 部屋を満員にできてしまう
+   * Closes the connections that have gone past HELLO_TIMEOUT_MS without sending a hello. Left open,
+   * connections that never send a hello could fill the room.
    */
   private closeSilentSockets(except: C): void {
     const now = Date.now();
@@ -199,8 +208,9 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * アクセストークンが切れてから TOKEN_GRACE_MS を過ぎても新しいトークンが届かない席を外す。
-   * ログアウトしたり、アカウントを消したりした人が、つながったまま見続けないように
+   * Removes the seats whose access token ran out more than TOKEN_GRACE_MS ago with no new token
+   * since. This is so that someone who logged out or deleted their account does not stay connected
+   * and keep watching.
    */
   expireSeats(): void {
     const now = Date.now();
@@ -211,15 +221,16 @@ export class RoomEngine<C extends object> {
     }
   }
 
-  /** 接続から届いたものを受ける */
+  /** Takes in what came on a connection. */
   receive(conn: C, message: string | ArrayBuffer | Uint8Array): void {
-    // PING には部屋のサーバーが答えるので、ここに来るテキストは使わない。黙って捨てると、数えられないまま
-    // 部屋を起こし続けられるので、断って閉じる
+    // The room server answers PING itself, so text that reaches here is of no use. Dropped silently,
+    // it could keep waking the room without being counted, so it is refused and closed.
     if (typeof message === 'string') return this.refuse(conn, 'bad-message');
     this.expireSeats();
     const seat = this.host.seatOf(conn);
     if (seat?.closed || this.refused.has(conn)) return;
-    // 消しているあいだに届いたものは受けない（席を作らせず、トークンも渡し直さない）
+    // Nothing that comes while the room is being deleted is taken in (no seat is made, and no token
+    // is handed out again).
     if (this.host.wiping()) return this.refuse(conn, seat ? 'room-deleted' : 'room-not-found');
     if (!this.withinRate(conn)) return this.refuse(conn, 'too-many-messages');
 
@@ -250,10 +261,10 @@ export class RoomEngine<C extends object> {
         role: seat.role,
       });
     }
-    // 入ったあとの hello は何もしない
+    // A hello after coming in does nothing.
   }
 
-  // ---- 入退室 ----
+  // ---- Coming in and leaving ----
 
   private greet(conn: C, decoded: unknown): void {
     if (!isHello(decoded)) return this.refuse(conn, 'hello-required');
@@ -268,7 +279,7 @@ export class RoomEngine<C extends object> {
       return this.refuse(conn, 'wrong-password');
     }
 
-    // ログインしていなければ見学。ログインしていれば、トークンの人と userId が同じでなければならない
+    // Not logged in, it is a guest. Logged in, the userId must be that of the one the token is for.
     const seat: Seat = {
       peerId: hello.peerId,
       userId: hello.userId,
@@ -281,14 +292,17 @@ export class RoomEngine<C extends object> {
       !hello.accessToken &&
       (hello.userId.startsWith(ACCOUNT_USER_ID_PREFIX) || this.host.roles.roleOf(hello.userId) !== null)
     ) {
-      // ログインした人のユーザー ID は、トークン無しには名乗らせない（その人に見えるものが見えてしまう）。
-      // 頭の付かない前の形のアカウントもあるので、この部屋に入ったことのあるアカウントも見る
+      // A logged-in person's user id may not be claimed without a token (it would show what that
+      // person can see). There are accounts of the older shape, without the prefix, so accounts that
+      // have been in this room are checked too.
       return this.refuse(conn, 'unauthorized');
     }
-    // 発言の送り主に使う名前（ダイスボットなど）は名乗らせない。サーバーが振った発言の送り主と
-    // みなされ、シークレットや秘話が見えてしまう
+    // The names used as the sender of messages (the dice bot and others) may not be claimed. Such a
+    // seat would be taken for the sender of the messages the server rolled, and see secrets and
+    // whispers.
     if (RESERVED_USER_IDS.has(hello.userId)) return this.refuse(conn, 'bad-message');
-    // ほかの人のピア ID を名乗らせない。名乗れると、その人が抜けたすきに席を取り、戻ってきた本人を締め出せる
+    // Nobody may claim someone else's peer id. If they could, they could take the seat while that
+    // person was away and lock them out when they came back.
     if (!mayClaimPeerId(hello.userId, hello.peerId)) return this.refuse(conn, 'bad-message');
     if (hello.accessToken) {
       const secret = this.host.sessionSecret();
@@ -298,7 +312,8 @@ export class RoomEngine<C extends object> {
       seat.role = role;
       seat.account = true;
       seat.expiresAt = claims.exp * 1000;
-      // 役割を覚えるのは、席に着けたときだけ。断られた人の招待は、次に入るときにも効く
+      // The role is remembered only when the seat is taken. The invite of someone refused still works
+      // the next time they come in.
       if (this.seat(conn, seat) && !known) {
         this.host.roles.add(hello.userId, role);
       }
@@ -308,10 +323,12 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * ログインした人の役割。前に入ったことがあればそのときの役割、初めてなら招待の役割、
-   * 招待が無いか、この部屋のものでなければ PL。known は、前に入ったことがあるか。
-   * GM の招待は、出した人がもう GM でなければ無いものとみなす。GM を外された人が前に出した招待で、
-   * GM を増やさせない。アカウントを消した人の席の行は部屋に残るので、その人の招待は GM のまま効く
+   * The role of someone logged in: the role they had if they have been in before, the invite's role
+   * on a first visit, and player when there is no invite or it is not for this room. known says
+   * whether they have been in before.
+   * A GM invite counts as none when whoever gave it is no longer GM. An invite given earlier by
+   * someone who has since been removed as GM may not add GMs. The seat row of someone who deleted
+   * their account stays in the room, so their invite still works as a GM's.
    */
   private roleOf(
     userId: string,
@@ -330,10 +347,14 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * この部屋のアセットを読み書きするトークンと、それが切れる時刻（Unix ミリ秒）。時刻は expiresAt の名前で
-   * 返す（welcome と asset-token で名前が違う）。役割を入れておき、置けるのは GM と PL だけにする
+   * A token to read and write this room's assets, and when it runs out (Unix milliseconds). The time
+   * comes back under the name in expiresAt (welcome and asset-token name it differently). The role
+   * goes in the token, so that only the GM and players can put assets.
    */
-  /** アセットの置き方。PUT だけで置ける部屋のサーバー（Cloudflare 版）は、welcome に付けない */
+  /**
+   * How assets are put. A room server that takes them with a PUT alone (the Cloudflare version)
+   * leaves it out of welcome.
+   */
   private uploadPolicy(): { assetUpload?: AssetUploadPolicy } {
     const policy = this.host.assetUploadPolicy();
     return policy ? { assetUpload: policy } : {};
@@ -341,7 +362,8 @@ export class RoomEngine<C extends object> {
 
   private assetTokenFor<K extends string>(seat: Seat, expiresAt: K): { assetToken: string } & Record<K, number> {
     const secret = this.host.sessionSecret();
-    // ログインを外した部屋のサーバーでは、アセットの経路もトークンを受けないので、空にしておく
+    // On a room server running without login, the asset routes take no token either, so it is left
+    // empty.
     if (!secret) return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
     const assetToken = signToken<'asset'>(
       { aud: 'asset', room: seat.roomKey, role: seat.role, uid: seat.userId },
@@ -353,7 +375,10 @@ export class RoomEngine<C extends object> {
     } & Record<K, number>;
   }
 
-  /** GM に頼まれて、招待を作る。GM でないか、ログインを外した部屋のサーバーなら invite を null にして返す */
+  /**
+   * Makes an invite when a GM asks for one. For someone who is not GM, or on a room server running
+   * without login, it answers with a null invite.
+   */
   private invite(conn: C, seat: Seat, role: PeerRole): void {
     const secret = this.host.sessionSecret();
     if (seat.role !== 'gm' || !secret) {
@@ -374,8 +399,9 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * つながったまま、新しいアクセストークンを受ける。同じ人のものなら席の期限を延ばし、そうでなければ
-   * 外す。見学の席には期限が無いので、受けても何もしない
+   * Takes a new access token while the connection stays open. When it is the same person's, the
+   * seat's expiry is pushed back; otherwise the seat is removed. A guest's seat has no expiry, so
+   * taking one does nothing.
    */
   private renew(conn: C, seat: Seat, accessToken: string): void {
     if (!seat.account) return;
@@ -384,14 +410,15 @@ export class RoomEngine<C extends object> {
     this.host.setSeat(conn, { ...seat, expiresAt: claims.exp * 1000 });
   }
 
-  /** 席に着ける。着けたら true、断ったら false */
+  /** Seats a connection. True when it is seated, false when it is refused. */
   private seat(conn: C, seat: Seat): boolean {
     let others = this.seats(conn);
     let previous = others.find((other) => other.seat.peerId === seat.peerId);
     if (previous && !isSamePerson(previous.seat, seat)) {
-      // ほかの人のピア ID を名乗るものは入れない。入れると、その人を追い出して成り代われてしまう。
-      // ただし、ログインした人のピア ID を見学が先に取っていたら、見学のほうを外す。ピア ID は
-      // ユーザー ID から作るので、ログインした人のピア ID を持てるのはその人だけ
+      // One claiming someone else's peer id is not let in. Let in, it could push that person out and
+      // take their place. But when a guest got a logged-in person's peer id first, the guest is the
+      // one removed. A peer id is made from the user id, so only the logged-in person can have their
+      // peer id.
       if (previous.seat.account || !seat.account) {
         this.refuse(conn, 'bad-message');
         return false;
@@ -401,8 +428,9 @@ export class RoomEngine<C extends object> {
       previous = undefined;
     }
     if (seat.account) {
-      // ログインした人のユーザー ID を、トークン無しで名乗っていた見学は外す。見え方はユーザー ID で
-      // 決まるので、残せばその人の手札や秘話がその見学にも届く
+      // A guest that claimed the logged-in person's user id without a token is removed. The view
+      // follows the user id, so if the guest stayed, that person's hand and whispers would reach it
+      // too.
       for (const other of others) {
         if (!other.seat.account && other.seat.userId === seat.userId) {
           this.refuse(other.conn, 'unauthorized');
@@ -416,14 +444,16 @@ export class RoomEngine<C extends object> {
       return false;
     }
     if (previous) {
-      // 同じ人がつなぎ直した。古い方は、もう切れているのに残っているもの。読み直したページの
-      // カーソルは別の識別子になるので、古い方のカーソルは消してほかの人にも消させる
+      // The same person has reconnected. The old connection is one already cut that still lingers. A
+      // reloaded page's cursor has another identifier, so the old cursor is deleted, and the others
+      // are made to delete it too.
       this.refuse(previous.conn, 'replaced');
       this.dropCursors(this.store.removeOwnedBy(seat.peerId), conn);
     }
 
     this.host.setSeat(conn, seat);
-    // 部屋のサーバーが落ちて、出ていく知らせの来なかった人のカーソルが残っていれば、ここで片付ける
+    // Cursors still left by those whose leaving never came through because the room server went
+    // down are cleaned up here.
     this.dropCursors(this.removeStrayCursors(), conn);
     this.post(conn, {
       type: 'welcome',
@@ -437,7 +467,7 @@ export class RoomEngine<C extends object> {
       ...this.uploadPolicy(),
     });
     this.post(conn, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents(seat) });
-    // 人がいるあいだは消さずに見回る
+    // While someone is in, the room is checked on rather than deleted.
     this.host.occupied(this.nextCheckAt());
     if (previous) return true;
     this.broadcast(conn, { type: 'join', member: memberOf(seat) });
@@ -447,8 +477,9 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 次に見回る時刻。ふだんは OCCUPIED_CHECK_MS ごと。ログインした席のトークンがそれより先に切れるなら、
-   * 切れて TOKEN_GRACE_MS を過ぎたころにも見る。だれも何も送らない部屋でも、切れた席を外すため
+   * When the next check comes. Usually it is every OCCUPIED_CHECK_MS. When a logged-in seat's token
+   * runs out sooner, it also looks at about TOKEN_GRACE_MS after the token runs out. This is so that
+   * a seat whose token has run out is removed even in a room where nobody sends anything.
    */
   nextCheckAt(): number {
     const expiries = this.seats().flatMap(({ seat }) =>
@@ -457,7 +488,7 @@ export class RoomEngine<C extends object> {
     return Math.min(Date.now() + OCCUPIED_CHECK_MS, ...expiries);
   }
 
-  /** 部屋にいない人のカーソルを消す。消した識別子を返す */
+  /** Deletes the cursors of those not in the room. Returns the identifiers deleted. */
   private removeStrayCursors(): string[] {
     const here = new Set(this.seats().map(({ seat }) => seat.peerId));
     return this.store
@@ -466,7 +497,7 @@ export class RoomEngine<C extends object> {
       .flatMap((owner) => this.store.removeOwnedBy(owner));
   }
 
-  /** 消したカーソルを、持っている人に消させる。exclude（入ってきたばかりの人）は持っていない */
+  /** Has those who hold the deleted cursors delete them. exclude (someone who has just come in) holds none. */
   private dropCursors(identifiers: string[], exclude?: C): void {
     if (identifiers.length === 0) return;
     this.scheduleFlush();
@@ -483,7 +514,7 @@ export class RoomEngine<C extends object> {
     if (seat && !seat.closed) this.leave(seat);
   }
 
-  /** その人が出た。その人のあいだだけ置いていたものを消し、ほかの人に知らせる */
+  /** The seat has left. Deletes what was kept only while it was there, and tells the others. */
   private leave(seat: Seat): void {
     if (this.store.removeOwnedBy(seat.peerId).length > 0) this.scheduleFlush();
     this.broadcast(undefined, { type: 'leave', peerId: seat.peerId });
@@ -492,7 +523,7 @@ export class RoomEngine<C extends object> {
     this.host.record('leave', seat.role, (Date.now() - seat.joinedAt) / 1000);
   }
 
-  /** 理由を送ってから閉じる。入っていた人なら、出たことにする */
+  /** Sends the reason, then closes. A connection that was in the room is treated as having left. */
   private refuse(conn: C, code: ErrorCode): void {
     const seat = this.host.seatOf(conn);
     this.refused.add(conn);
@@ -505,7 +536,7 @@ export class RoomEngine<C extends object> {
     this.host.close(conn, CLOSE_CODE, code);
   }
 
-  /** 入っている人。exclude を除く */
+  /** Those in the room, leaving out exclude. */
   seats(exclude?: C): { conn: C; seat: Seat }[] {
     return this.host.connections().flatMap((conn) => {
       const seat = this.host.seatOf(conn);
@@ -529,40 +560,43 @@ export class RoomEngine<C extends object> {
     return rate.count <= MAX_FRAMES_PER_WINDOW;
   }
 
-  /** 送ってきたイベントの数が上限のうちか。1つのフレームに詰めたものも1つずつ数える */
+  /** Whether the events sent are within the limit. Events packed into one frame count one by one. */
   private withinEvents(conn: C, count: number): boolean {
     const rate = this.rateOf(conn);
     rate.events += count;
     return rate.events <= MAX_EVENTS_PER_WINDOW;
   }
 
-  /** ダイスを頼める数のうちか */
+  /** Whether the dice asked for are within the number that may be asked for. */
   private withinRolls(conn: C): boolean {
     const rate = this.rateOf(conn);
     rate.rolls += 1;
     return rate.rolls <= MAX_ROLLS_PER_WINDOW;
   }
 
-  // ---- 中継と同期 ----
+  // ---- Relay and sync ----
 
-  /** その人から見た、そのオブジェクトの見え方 */
+  /** The object's view as that seat sees it. */
   private kindOf(identifier: string, seat: Seat, lookup: Lookup = this.store.lookup): ViewKind {
     return viewKind(identifier, seat, lookup);
   }
 
-  /** その人に見せる形。見せないなら null */
+  /** The form shown to that seat, or null when it is not shown. */
   private viewOf(identifier: string, seat: Seat): ObjectContext | null {
     const context = this.store.get(identifier);
     return context && viewFor(context, this.kindOf(identifier, seat));
   }
 
   /**
-   * 送られてきたイベントを、読むものは読んでから宛先へ届ける。送り主には返さない。
+   * Delivers the events sent to their addressees, reading first those the server reads. Nothing goes
+   * back to the sender.
    *
-   * 受け取る人ごとに、送られてきた順のまま並べる。宛先の無いものはほかの全員へ、宛先のあるものは
-   * その人だけへ。UPDATE と DELETE は、サーバーの状態を変えたら宛先にかかわらず、見てよい人へ
-   * 見てよい形で配る。サーバーが差し込むもの（見え方が変わったものの出し入れ、古い版への送り返し、
-   * カタログへの返事）は sendFrom を AUTHORITY_PEER_ID にして、同じ束に入れる。
+   * For each receiver they stay in the order they were sent. Those without an addressee go to
+   * everyone else, and those with one go to that one alone. UPDATE and DELETE, once they change the
+   * server's state, go out to those who may see them, in the form they may see, whatever the
+   * addressee. What the server puts in (handing over and taking back what changed view, replies to
+   * an old version, answers to catalogs) gets AUTHORITY_PEER_ID as sendFrom and goes in the same
+   * bundle.
    */
   private relay(sender: C, seat: Seat, to: string | undefined, events: { eventName: string; data: unknown }[]): void {
     const others = this.seats(sender);
@@ -582,7 +616,7 @@ export class RoomEngine<C extends object> {
         if (to === undefined) for (const other of others) push(other.conn, event);
         else if (target) push(target.conn, event);
       };
-      // サーバーだけが送るものは、クライアントから来ても届けない
+      // What only the server sends is not delivered when it comes from a client.
       if (AUTHORITY_ONLY_EVENTS.includes(eventName)) continue;
       switch (eventName) {
         case SyncEvent.UPDATE:
@@ -624,7 +658,8 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 受け取る人ごとの束を送る。同じ並びのイベントを受け取る人たちには、1度だけ符号にして送る
+   * Sends each receiver's bundle. For receivers who get the same run of events, it is encoded only
+   * once.
    */
   private deliver(outbox: Map<C, EventContext[]>, fromOf: (conn: C) => string): void {
     const ids = new Map<EventContext, number>();
@@ -642,11 +677,13 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * UPDATE を状態に当て、見てよい人へ見てよい形で配る。
+   * Applies an UPDATE to the state and sends it out to those who may see it, in the form they may
+   * see.
    *
-   * 送り主から見えないものには書かせない（WITHDRAW を返す）。伏せた形で持っている人が書き戻して
-   * きたら、伏せたところを置いてある中身に戻す。PeerCursor の役割は、その人の席の役割で上書きする。
-   * 見学者は、自分のカーソルと、見学者も話せるタブへの発言しか書けない。
+   * The sender may not write what it cannot see (WITHDRAW comes back). When someone holding the
+   * masked form writes it back, the masked parts are put back to the stored contents. A
+   * PeerCursor's role is overwritten with the role of that person's seat. A guest can write only its
+   * own cursor and messages in tabs where guests may speak too.
    */
   private update(data: unknown, seat: Seat, sender: C, push: Push<C>): void {
     const parsed = safeParse(objectContextSchema, data);
@@ -655,11 +692,12 @@ export class RoomEngine<C extends object> {
     const { identifier, aliasName } = context;
     const reply: Reply = (eventName, data) => push(sender, fromAuthority(eventName, data));
 
-    // 置いてあるものの種類は変えさせない。カーソルを名乗って、ほかのものを上書きさせないため
+    // The kind of what is stored may not change, so that nothing else can be overwritten by passing
+    // it off as a cursor.
     const existing = this.store.entryOf(identifier);
     if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
-    // 大きすぎる見え方の手がかりは、索引にも置き場所の1行にも置けない。新しいものは数も絞る。版を一度に
-    // 大きく跳ばさせない
+    // A view hint that is too big fits neither in the index nor in one row of the store. New objects
+    // are limited in number too. A version may not jump far at once.
     if (
       !fitsIndex(context) ||
       (!existing && this.store.size >= MAX_OBJECTS) ||
@@ -680,17 +718,17 @@ export class RoomEngine<C extends object> {
       return this.refuseWrite(identifier, seat, reply);
 
     let owner: string | null = null;
-    // 伏せた形で持っている人には、受けたあとも伏せた形（伏せた版）を持たせる。見えるようになったときに
-    // 版の違いで取り直せるように
+    // Someone who holds the masked form keeps the masked form (the masked version) after the write is
+    // taken, so that when it comes into view the difference in version gets it fetched again.
     let corrected = seen === 'masked';
     if (aliasName === PEER_CURSOR_ALIAS) {
-      // カーソルを書けるのは、その人だけ。ほかの人のユーザー ID を書き込めば、その人あての秘話や
-      // 配られるカードが、書いた人に向いてしまう
+      // Only the person a cursor belongs to can write it. Writing someone else's user id into one
+      // would turn the whispers and dealt cards meant for that person toward the writer.
       const named = String(context.syncData.peerId);
       if (existing ? existing.owner !== seat.peerId : named !== seat.peerId) {
         if (existing || this.seats().some((other) => other.seat.peerId === named))
           return this.refuseWrite(identifier, seat, reply);
-        // 出ていった人のカーソルは置かない。クライアントは leave を受けて自分で片付ける
+        // The cursor of someone who has left is not stored. Clients clean it up themselves on leave.
         return;
       }
       owner = seat.peerId;
@@ -715,10 +753,12 @@ export class RoomEngine<C extends object> {
     );
     if (verdict === 'stale') {
       const view = this.viewOf(identifier, seat);
-      // まだ見え方の決まらないもの（親が未着）は、中身を返せないので手元から外させる
+      // What has no view yet (its parent has not come) cannot have its contents sent back, so it is
+      // taken back from the sender.
       if (!view) return this.refuseWrite(identifier, seat, reply);
-      // 伏せた形には本物より小さい版を付けるので、送り主の版より低いことがある。そのときは UPDATE では
-      // 捨てられ、負けた変更がその人の画面にだけ残るので、版にかかわらず置き換えさせる
+      // The masked form carries a version lower than the real one, so it can be lower than the
+      // sender's. An UPDATE would then be thrown away and the losing change would stay on that
+      // person's screen alone, so it is made to replace whatever the version.
       reply(seen === 'masked' ? AuthorityEvent.AUTHORITATIVE : SyncEvent.UPDATE, view);
     } else if (verdict === 'deleted') {
       reply(SyncEvent.DELETE, { aliasName, identifier });
@@ -730,9 +770,10 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 親か名前（データ要素の名前は、カードやメモの下のどこにあるかを決める）を変える書き込みで、
-   * 書いた人自身に、そのものか子孫が今より見えるようになるか。見え方は親と名前の道筋で決まるので、
-   * 名前を変えたり、決まりを持つ親の下から外したりすれば、伏せたものが手に入ってしまう
+   * Whether a write that changes the parent or the name (a data element's name decides where under a
+   * card or note it sits) lets the writer itself see more of the object or its descendants than now.
+   * The view follows the path of parents and names, so renaming, or moving out from under a parent
+   * with rules, would hand over what is masked.
    */
   private uncovers(context: ObjectContext, existing: StoredEntry, seat: Seat): boolean {
     const next = describe(context);
@@ -740,14 +781,16 @@ export class RoomEngine<C extends object> {
       existing.view?.kind === 'data' && next.view?.kind === 'data' && existing.view.name !== next.view.name;
     if (next.parent === existing.parent && !renamed) return false;
     const identifier = context.identifier;
-    // 比べるのは道筋の変化だけ。カードの向きや手札などの状態は mayChangeView が確かめているので、
-    // 前のままにして比べる（山札から引いて自分の手札に入れると、親も変わるのに表は見えて正しい）
+    // Only the change of path is compared. State such as the card's facing and the hand is checked
+    // by mayChangeView, so it is left as before here (drawing from the deck into one's own hand
+    // changes the parent too, yet seeing the face is right).
     const moved = {
       parent: next.parent,
       view: next.view?.kind === 'data' ? next.view : existing.view,
     };
     const after: Lookup = (other) => (other === identifier ? { ...existing, ...moved } : this.store.lookup(other));
-    // まだ無い親の下は、親が来たときにどう見えるかわからない。いちばん見える場合として比べる
+    // Under a parent not there yet, how it will look once the parent comes is unknown. It is compared
+    // as the case that shows the most.
     const eventual = (kind: ViewKind): ViewKind => (kind === 'pending' ? 'full' : kind);
     return [identifier, ...this.store.dependentsOf(identifier)].some((other) =>
       looser(eventual(this.kindOf(other, seat, after)), eventual(this.kindOf(other, seat)))
@@ -755,9 +798,11 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 置いたものを配る。ほかの人には見てよい形で（見えなくなった人には WITHDRAW）、送り主には、
-   * 送ってきたものと見え方や中身が違えば直したものを返す。見え方が変わったら、それで見え方の
-   * 決まるもの（子孫、リアクション）も、見えるようになった人に渡し、見えなくなった人から外させる
+   * Sends out what was stored. The others get it in the form they may see (WITHDRAW for those who
+   * can no longer see it), and the sender gets the corrected one back when its view or contents
+   * differ from what it sent. When the view changes, what that view decides the view of
+   * (descendants, reactions) is also handed to those who can now see it and taken back from those
+   * who no longer can.
    */
   private spread(
     context: ObjectContext,
@@ -782,15 +827,15 @@ export class RoomEngine<C extends object> {
         push(conn, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
       }
     }
-    // 親がまだ届いていないもの（pending）は、送り主の手元にあるままにする
+    // What still waits for its parent (pending) stays as it is on the sender's side.
     const mine = this.kindOf(identifier, seat);
     if (mine === 'hidden') push(sender, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
     else if (corrected && delivered(mine)) {
       push(sender, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, mine)));
     }
 
-    // 見え方の手がかりか親が変わったか、初めて届いたもの（その子が親を待っていたかもしれない）なら、
-    // 子孫の見え方を比べ直す
+    // When the view hint or the parent changed, or it is the first time it has come (its children
+    // may have been waiting for it), the descendants' views are compared again.
     const after = this.store.lookup(identifier) as StoredEntry;
     if (!before || before.parent !== after.parent || JSON.stringify(before.view) !== JSON.stringify(after.view)) {
       this.revisit(this.store.dependentsOf(identifier), this.seats(), was, push, sender);
@@ -798,12 +843,14 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 見え方の決まるもとが変わったので、そのものの見え方を人ごとに比べ直す。見えるようになった人には
-   * AUTHORITATIVE_OBJECT で渡し（版が同じでも置き換わる）、見えなくなった人には WITHDRAW で外させる。
+   * What decides their view has changed, so compares the view of each one again, seat by seat.
+   * Those who can now see it get it in AUTHORITATIVE_OBJECT (which replaces it even at the same
+   * version), and those who no longer can are made to take it back with WITHDRAW.
    *
-   * 親を待っていたもの（pending）が見えるようになったとき、writer には渡さない。親を待つ子を作れるのは、
-   * その親を持っている人（親を送ってきた本人）だけなので、writer はもう持っている。ただし、親を待つ
-   * あいだにカタログで外させたものは、writer にも渡す
+   * When something that waited for its parent (pending) comes into view, it is not handed to writer.
+   * Only someone who has the parent (the one who sent the parent) can make a child that waits for
+   * it, so writer has it already. But what a catalog had taken back while it waited for its parent
+   * is handed to writer too.
    */
   private revisit(
     identifiers: string[],
@@ -819,13 +866,17 @@ export class RoomEngine<C extends object> {
         const withdrawn = then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
         if (conn === writer && then === 'pending' && !withdrawn) continue;
         this.resend(conn, identifier, then, now, push);
-        // 親がもう1段届いていないうちは、まだ渡していないので覚えておく
+        // While a parent one step further up has still not come, it has not been handed over yet, so
+        // it stays remembered.
         if (withdrawn && now !== 'pending') this.withdrawnPending.get(seat.userId)?.delete(identifier);
       }
     }
   }
 
-  /** 見え方が then から now に変わったものを、その人に渡すか外させる。変わらなければ何もしない */
+  /**
+   * Hands what changed view from then to now to that seat, or takes it back. Does nothing when the
+   * view did not change.
+   */
   private resend(conn: C, identifier: string, then: ViewKind, now: ViewKind, push: Push<C>): void {
     if (then === now) return;
     if (!delivered(now)) {
@@ -837,8 +888,9 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 見学者が書いてよいもの。見学者も話せるタブ（guestCanSpeak）への新しい発言と、自分の発言の書き直し。
-   * ダイスの結果のように、発言の from が本人でないものもあるので、新しい発言は from を問わない
+   * What a guest may write: new messages in tabs where guests may speak too (guestCanSpeak), and
+   * rewrites of its own messages. Some messages, such as roll results, have a from that is not the
+   * writer, so a new message may have any from.
    */
   private guestMayWrite(context: ObjectContext, seat: Seat): boolean {
     if (context.aliasName !== CHAT_MESSAGE_ALIAS) return false;
@@ -851,10 +903,11 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * サーバーが振った結果の発言は、結果と名前と送り主を書き換えさせない。ただし振った人と GM は、
-   * シークレットを公開してよい（tag から secret の語を外すことだけ。Axe の discloseMessage と同じ）。
-   * サーバーが振っていない発言には、サーバーが振った印を付けさせない。直したら、直した中身を返す
-   * （直さなければ受けたまま）
+   * In a message with a result the server rolled, the result, the name and the sender may not be
+   * rewritten. But the one who rolled and the GM may disclose a secret (only by taking the word
+   * secret out of tag, as Axe's discloseMessage does). A message the server did not roll may not
+   * carry the mark of one it rolled. When something is corrected, it returns the corrected contents
+   * (and what it took in, as it was, otherwise).
    */
   private keepRolledFields(context: ObjectContext, seat: Seat): ObjectContext {
     const stored = this.store.get(context.identifier);
@@ -872,8 +925,8 @@ export class RoomEngine<C extends object> {
     const original = attributesOf(stored);
     const disclosed =
       (original.originFrom === seat.userId || seat.role === 'gm') && isDisclosureOf(original.tag, attributes.tag);
-    // 公開した行は末尾へ移る（Axe の discloseMessage）。時刻は遠い過去へずらさせず、並びの位置は
-    // 端数だけ受ける
+    // A disclosed line moves to the end (Axe's discloseMessage). Its time may not be pushed far into
+    // the past, and of its place in the order only the fraction is taken.
     const kept = disclosed
       ? {
           ...original,
@@ -894,7 +947,8 @@ export class RoomEngine<C extends object> {
       ROLLED_PLACE.some((field) => context.syncData[field] !== place[field]) ||
       guarded.some((field) => attributes[field] !== kept[field]);
     if (!changed) return context;
-    // 元の発言に無かった項目は、undefined を置かずに外す（MessagePack では null になって届く）
+    // Fields the original message did not have are dropped rather than set to undefined (which
+    // arrives as null through MessagePack).
     const restored = Object.fromEntries(Object.entries(attributes).filter(([field]) => !guarded.includes(field)));
     for (const field of guarded) if (kept[field] !== undefined) restored[field] = kept[field];
     const syncData = Object.fromEntries(
@@ -902,9 +956,9 @@ export class RoomEngine<C extends object> {
         ([field]) => field !== 'parentIdentifier' && !ROLLED_PLACE.includes(field)
       )
     );
-    // 振った結果には、並びの位置をいつも置いてある
+    // A roll result always has its place in the order stored.
     for (const field of ROLLED_PLACE) syncData[field] = place[field];
-    // 振った結果は、タブの一覧の直下のタブにしか置かない
+    // A roll result is kept only in a tab right under the tab list.
     syncData.parentIdentifier = stored.syncData.parentIdentifier;
     return {
       ...context,
@@ -913,9 +967,11 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * ダイスを振り、結果の発言を作って配る。頼まれた順に振り、システムを初めて使うときだけ読み込みを待つ。
-   * コマンドでなければ何もしない。見学者は、自分が発言できるタブでだけ振れる。
-   * 結果は見てよい人へ見てよい形で配る（秘話の宛先、シークレットなら伏せた形）
+   * Rolls the dice, makes the result message and sends it out. Rolls go in the order they were asked
+   * for, and wait for loading only when a system is used for the first time. Does nothing when it is
+   * not a command. A guest can roll only in a tab where it may speak.
+   * The result goes out to those who may see it, in the form they may see (to a whisper's
+   * addressees, and in the masked form for a secret).
    */
   private requestRoll(data: unknown, seat: Seat, sender: C): void {
     const parsed = safeParse(rollRequestSchema, data);
@@ -933,7 +989,8 @@ export class RoomEngine<C extends object> {
     }
     const request = parsed.output;
     const { message } = request;
-    // 同じものを頼み直されたとき（つなぎ直したあとなど）は、もう振ってあるので何も返さない
+    // When the same one is asked for again (after reconnecting and so on), it has been rolled
+    // already, so nothing is sent back.
     if (this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier)) return;
     if (
       message.aliasName !== CHAT_MESSAGE_ALIAS ||
@@ -947,28 +1004,29 @@ export class RoomEngine<C extends object> {
     if (seat.role === 'guest' && !this.guestMayWrite(message, seat)) {
       return reject(message.identifier, 'not-allowed');
     }
-    // 振るのは重いので、頼める数を絞る。超えたものは振らない
+    // Rolling is heavy, so how many may be asked for is limited. Those past the limit are not rolled.
     if (!this.withinRolls(sender)) return reject(message.identifier, 'rate-limited');
     if (this.pendingRolls >= MAX_PENDING_ROLLS) return reject(message.identifier, 'busy');
 
     this.pendingRolls += 1;
     this.rollQueue = this.rollQueue
       .then(async () => {
-        // 1つ振るごとに、ほかのメッセージに順番を譲る
+        // Each roll gives other messages their turn first.
         await new Promise((resolve) => setTimeout(resolve, 0));
         const started = Date.now();
         const rolled = await rollLine(request.gameSystem, request.command);
-        // 振っているあいだに部屋が削除されていたら、置く先が無い
+        // When the room was deleted during the roll, there is nowhere to put the result.
         if (!this.host.room()) return;
         this.host.record('roll', request.gameSystem, Date.now() - started);
-        // 振っているあいだに、同じ識別子のものが置かれていたら作らない
+        // When something with the same identifier was stored during the roll, nothing is made.
         const taken = this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier);
         if (taken) return;
         if (!rolled) return reject(message.identifier, 'not-a-command');
-        // 振っているあいだにタブが消されたり移されたりしていたら、置く先が無い
+        // When the tab was deleted or moved during the roll, there is nowhere to put the result.
         if (!this.isListedTab(String(message.syncData.parentIdentifier))) return reject(message.identifier, 'invalid');
-        // 文面は syncData.value、そのほかは ChatMessage の SyncVar なので attributes に入れる。並びの位置は
-        // 頼まれたタブの中の端数だけ受け、頼んだ人が足した飾りや印は外す
+        // The text goes in syncData.value, and the rest in attributes, since they are SyncVars of
+        // ChatMessage. Of the place in the order only the fraction within the tab asked for is taken,
+        // and the trimmings and marks the one who asked added are removed.
         const result = withAttributes(
           {
             ...message,
@@ -986,7 +1044,8 @@ export class RoomEngine<C extends object> {
             name: rolled.secret ? `<Secret-BCDice：${request.speaker}>` : `<BCDice：${request.speaker}>`,
             from: DICE_BOT_SENDER,
             originFrom: seat.userId,
-            // 頼んだ人の時刻は、遠い過去にずらして並びの奥へ埋めさせない
+            // The time of the one who asked may not be pushed far into the past to bury the line deep
+            // in the order.
             timestamp: notLongAgo(attributesOf(message).timestamp),
             [SERVER_ROLL_FIELD]: true,
           }
@@ -1015,8 +1074,10 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * 書く権限の無い変更を、送り主の手元で戻させる。サーバーが持っていればその人に見せる形に戻し、
-   * 消したものなら消させ、どちらでもなければ（新しく作ろうとしたもの）印を残さずに取り下げさせる
+   * Has the sender undo, on its side, a change it has no right to write. When the server holds the
+   * object, it is put back to the form shown to that seat; when it was deleted, the sender deletes
+   * it; when neither (something the sender tried to make), the sender withdraws it without leaving a
+   * tombstone.
    */
   private refuseWrite(identifier: string, seat: Seat, reply: Reply): void {
     const view = this.viewOf(identifier, seat);
@@ -1026,10 +1087,12 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * DELETE を状態に当てる。見学者が消せるのは自分のカーソルだけ。見えないものは消させない。
+   * Applies a DELETE to the state. A guest can delete only its own cursor. Nothing may be deleted by
+   * someone who cannot see it.
    *
-   * 消したものの子孫も一緒に消す。送り主から見えなかった子孫（裏向きのカードの表など）は、送り主の
-   * 手元に無いので送り主からは消しに来ない。持っている人には、サーバーから DELETE を送る
+   * The descendants of what is deleted are deleted with it. Descendants the sender could not see
+   * (such as the face of a face-down card) are not on the sender's side, so no delete for them comes
+   * from the sender. The server sends a DELETE to those who hold them.
    */
   private remove(event: EventContext, seat: Seat, sender: C, push: Push<C>): void {
     const parsed = safeParse(deleteSchema, event.data);
@@ -1037,19 +1100,21 @@ export class RoomEngine<C extends object> {
     const { aliasName, identifier } = parsed.output;
     const reply: Reply = (eventName, data) => push(sender, fromAuthority(eventName, data));
     const entry = this.store.entryOf(identifier);
-    // 子孫として、もう消してある
+    // Already deleted as a descendant.
     if (!entry && this.store.isDeleted(identifier)) return;
     if (this.kindOf(identifier, seat) === 'hidden') return;
     const owner = entry?.owner ?? null;
-    // その人のあいだだけ置くもの（カーソル）は、その人だけが消せる
+    // What is kept only while its person is there (a cursor) can be deleted only by that person.
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)
       return this.refuseWrite(identifier, seat, reply);
     const kept = this.keptFromDeleting.get(seat.peerId);
-    // 見えないものは上で外れ、残るものは親のそろった子孫なので、送り主に届いている
+    // What cannot be seen has dropped out above, and what is left are descendants with all their
+    // parents there, so they have reached the sender.
     if (kept && kept.until > Date.now() && kept.ids.has(identifier)) return this.refuseWrite(identifier, seat, reply);
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
-    // サーバーが振った結果は、GM のほかには消させない。タブごと消すのも同じ。送り主の手元からは消えて
-    // いるので、見えるものを全部返す。続けて送られてくる中の行も、しばらく消させない
+    // Nobody but the GM may delete a result the server rolled, and the same goes for deleting the
+    // whole tab. It is gone from the sender's side already, so everything it can see is sent back.
+    // The lines inside, whose deletes come next, are also kept from being deleted for a while.
     if (seat.role !== 'gm' && doomed.some((id) => this.isServerRoll(id))) {
       for (const id of doomed) {
         if (delivered(this.kindOf(id, seat))) this.refuseWrite(id, seat, reply);
@@ -1061,8 +1126,9 @@ export class RoomEngine<C extends object> {
     }
     const others = this.seats(sender);
     const seen = new Map(others.map(({ conn, seat: other }) => [conn, doomed.map((id) => this.kindOf(id, other))]));
-    // 印を残すかは、置いてあるものの種類で決める。送られてきた種類を信じると、カーソルを名乗って
-    // 何でも印を残さずに消せ、古い写しを持つ人から戻ってきてしまう
+    // Whether to leave a tombstone is decided by the kind stored. Trusting the kind sent, anything
+    // could be deleted without a tombstone by passing it off as a cursor, and it would come back from
+    // someone holding an old copy.
     const cursor = entry ? entry.alias === PEER_CURSOR_ALIAS : aliasName === PEER_CURSOR_ALIAS;
     for (const id of doomed) this.store.delete(id, !cursor);
     for (const { conn } of others) {
@@ -1073,7 +1139,7 @@ export class RoomEngine<C extends object> {
     }
   }
 
-  /** チャットのタブの一覧の直下にある、みんなのタブか。振った結果はそこにだけ置く */
+  /** Whether it is a tab for everyone, right under the chat tab list. Roll results are kept there alone. */
   private isListedTab(identifier: string): boolean {
     const tab = this.store.entryOf(identifier);
     return tab?.alias === CHAT_TAB_ALIAS && tab.parent === CHAT_TAB_LIST_IDENTIFIER;
@@ -1084,7 +1150,7 @@ export class RoomEngine<C extends object> {
     return stored ? attributesOf(stored)[SERVER_ROLL_FIELD] === true : false;
   }
 
-  /** 見学者からは受けない */
+  /** It is not taken from a guest. */
   private forget(data: unknown, seat: Seat): boolean {
     const parsed = safeParse(forgetSchema, data);
     if (!parsed.success || seat.role === 'guest') return false;
@@ -1093,9 +1159,10 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * GM に頼まれて、部屋にいる人の役割を変える。席の表を直し、その人のカーソルの役割を
-   * 書き換えて版を上げ、全員に配る。役割で見え方が変わるもの（裏向きのカードの表、シークレット、
-   * タブの発言など）は、その人に渡すか外させる。断るときは、頼んだ人に理由を返す
+   * Changes the role of someone in the room when a GM asks. It updates the table of seats, rewrites
+   * the role on that person's cursor, raises its version and sends it out to everyone. What changes
+   * view with the role (the faces of face-down cards, secrets, a tab's messages and so on) is handed
+   * to that person or taken back. When it refuses, it sends the reason back to the one who asked.
    */
   private changeRole(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(roleRequestSchema, data);
@@ -1117,7 +1184,7 @@ export class RoomEngine<C extends object> {
     for (const { conn, seat: other } of this.seats()) {
       if (other.userId !== target.userId) continue;
       this.host.setSeat(conn, { ...other, role });
-      // すべてのものを、前の役割と今の役割で見比べる
+      // Every object is compared between the old role and the new one.
       for (const identifier of this.store.identifiers()) {
         this.resend(
           conn,
@@ -1141,7 +1208,8 @@ export class RoomEngine<C extends object> {
     }
     for (const { conn } of this.seats()) for (const update of updates) push(conn, update);
     this.deliver(outbox, () => AUTHORITY_PEER_ID);
-    // アセットを置けるかは役割で決まるので、新しい役割のトークンに替えさせる
+    // Whether assets may be put depends on the role, so the token is swapped for one with the new
+    // role.
     for (const { conn, seat: other } of this.seats()) {
       if (other.userId !== target.userId) continue;
       this.post(conn, { type: 'asset-token', ...this.assetTokenFor(other, 'expiresAt'), role });
@@ -1149,9 +1217,10 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * クライアントのカタログに答える。サーバーが持っていないか古いものは送ってもらい、
-   * 消したものは消させ、その人から見えないものは手元から外させる。
-   * サーバーの方が新しいものは、クライアントがサーバーのカタログを見て取りに来る
+   * Answers a client's catalog. What the server lacks or holds an older version of, it asks to be
+   * sent; what was deleted, the client is made to delete; and what the seat cannot see, the client is
+   * made to take back.
+   * What is newer on the server, the client comes to get after seeing the server's catalog.
    */
   private answerCatalog(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(catalogSchema, data);
@@ -1161,7 +1230,8 @@ export class RoomEngine<C extends object> {
         reply(SyncEvent.DELETE, { aliasName: '', identifier });
         continue;
       }
-      // 見え方の決まらないもの（親が未着）も、決まるまで外させる。決まって見えるようになれば渡す
+      // What has no view yet (its parent has not come) is taken back too until it has one. Once it has
+      // one and can be seen, it is handed over.
       const kind = this.kindOf(identifier, seat);
       if (kind === 'hidden' || (kind === 'pending' && seat.role !== 'gm')) {
         reply(AuthorityEvent.WITHDRAW, { identifier });
@@ -1178,7 +1248,7 @@ export class RoomEngine<C extends object> {
     }
   }
 
-  /** 頼まれたものを、その人に見せる形で返す。見せないものには何も返さない */
+  /** Sends back what was asked for, in the form shown to that seat. Nothing goes back for what is not shown. */
   private answerRequest(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(requestSchema, data);
     if (!parsed.success) return;
@@ -1192,15 +1262,16 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * その人に見せるカタログ。見せないものは載せない。空でも1件は送り、
-   * カタログを送り終えたことがわかるようにする
+   * The catalog shown to that seat, leaving out what is not shown. At least one is sent even when it
+   * is empty, so that the client can tell the catalog has all been sent.
    */
   private catalogEvents(seat: Seat): EventContext[] {
     const catalog = this.store.catalog().flatMap((item) => {
       const kind = this.kindOf(item.identifier, seat);
       if (!delivered(kind)) return [];
       if (kind === 'full') return [item];
-      // 伏せた形を渡すときと同じ、本物より小さい版を載せる
+      // It carries the version lower than the real one, the same as when the masked form is handed
+      // over.
       const entry = this.store.entryOf(item.identifier) as StoredEntry;
       return [{ ...item, version: entry.majorVersion + maskedMinor(entry.minorVersion) }];
     });
@@ -1211,7 +1282,7 @@ export class RoomEngine<C extends object> {
     return events;
   }
 
-  // ---- 送る ----
+  // ---- Sending ----
 
   private post(conn: C, message: ServerMessage): void {
     this.sendFrame(conn, encodeFrame(message));
@@ -1226,15 +1297,16 @@ export class RoomEngine<C extends object> {
     this.host.send(conn, frame);
   }
 
-  // ---- 置き場所 ----
+  // ---- Store ----
 
   private scheduleFlush(): void {
     this.flushTimer ??= setTimeout(() => this.flushNow(), FLUSH_DELAY_MS);
   }
 
   /**
-   * まとめておいた変更を、待たずに書く。部屋のサーバーが部屋を放す前（Vercel 版で、最後の1人が出たとき）にも
-   * 呼ぶ。書いた数は、間を置いてまとめて記録する
+   * Writes the gathered changes without waiting. It is also called before the room server lets go
+   * of the room (in the Vercel version, when the last one leaves). How many were written is logged
+   * all together, at intervals.
    */
   flushNow(): void {
     this.stopFlushing();

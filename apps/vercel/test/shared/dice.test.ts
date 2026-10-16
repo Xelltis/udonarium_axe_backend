@@ -39,7 +39,8 @@ describe('rollLine', () => {
     const unknown = await rollLine('NoSuchSystem', '1d1');
 
     expect(cthulhu?.text).toMatch(/^Cthulhu7th : /);
-    // 技能値 100 でも 100 の目はファンブル。どれでも、システムが判定したことがわかる
+    // Even with a skill of 100, a roll of 100 is a fumble. Whichever it is, it shows that the system
+    // judged the roll.
     expect(JSON.parse(cthulhu?.dicebot as string).outcome).toMatch(/success|critical|fumble/);
     expect(unknown?.text).toBe('DiceBot : (1D1) → 1');
   });

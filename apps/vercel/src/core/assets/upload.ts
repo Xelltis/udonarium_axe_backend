@@ -1,4 +1,4 @@
-/** ストリームの先頭を、size バイト以上（足りなければ最後まで）読む */
+/** Reads the start of a stream, at least size bytes (or to the end when there are fewer). */
 export const readHead = async (
   reader: ReadableStreamDefaultReader<Uint8Array>,
   size: number
@@ -14,7 +14,7 @@ export const readHead = async (
   return chunks;
 };
 
-/** chunks をつないだもの */
+/** The chunks joined together. */
 export const joinChunks = (chunks: Uint8Array[]): Uint8Array => {
   const joined = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
   let offset = 0;
@@ -25,7 +25,7 @@ export const joinChunks = (chunks: Uint8Array[]): Uint8Array => {
   return joined;
 };
 
-/** 先に読んだ chunks と、reader の残りを1本のストリームに戻す */
+/** Puts the chunks read earlier and the rest of reader back together into one stream. */
 export const rejoin = (
   chunks: Uint8Array[],
   reader: ReadableStreamDefaultReader<Uint8Array>

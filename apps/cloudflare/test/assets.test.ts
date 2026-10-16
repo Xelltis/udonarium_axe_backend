@@ -19,7 +19,7 @@ import { prepareAssetRooms } from './shared/room-helpers';
 
 beforeAll(prepareAssetRooms);
 
-// 部屋のアセットのうち、R2 と Cache API に置くことに限るもの
+// What is particular to keeping a room's assets in R2 and the Cache API.
 
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
@@ -28,7 +28,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** データセンターのキャッシュに残るまで、見学のトークンで1度読む */
+/** Reads once with a guest's token, and waits until the asset is left in the data center's cache. */
 const readOnce = async (id: string) => {
   const ctx = createExecutionContext();
   const first = await app.fetch(
@@ -129,7 +129,8 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     const { file, id } = await freshFile();
     await put(id, file);
     const first = await readOnce(id);
-    // R2 から消しても、データセンターのキャッシュから返る。R2 の読み出しにも数えない
+    // Even after it is deleted from R2, it comes from the data center's cache. It does not count as a
+    // read from R2 either.
     await env.ASSETS.delete(storedKeyOf(id));
     const ip = freshIp();
 

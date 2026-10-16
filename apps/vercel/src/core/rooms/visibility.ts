@@ -2,14 +2,17 @@ import { MASKED_CHAT_ATTRIBUTES } from '../../../contracts/protocol.js';
 import type { ObjectContext, PeerRole } from '../../../contracts/protocol.js';
 import { attributesOf, withAttributes } from './objects.js';
 
-// 見てはいけない情報を、見てはいけない人に届けないための決まり。Axe が手元で見せる・見せないを
-// 決めている決まり（カードの向き、秘話、シークレットダイス、タブの閲覧、公開の範囲）を写したもの。
+// The rules that keep what someone must not see from reaching them. They copy the rules by which
+// Axe decides on its own side what to show and what not to (a card's facing, whispers, secret dice,
+// who may view a tab, disclosure).
 //
-// オブジェクトごとに、見え方を決める小さな手がかり（View）を作っておき、見る人と、親をたどった道筋
-// から、まるごと見せる（full）・一部を伏せて見せる（masked）・見せない（hidden）を決める。
-// 親がまだ届いていないもの（pending）は、決まりをたどりきれないので、親が届くまでだれにも見せない。
+// For each object a small hint that decides its view (View) is made beforehand, and from the viewer
+// and the path up through the parents, it is decided whether to show it whole (full), show it with
+// parts masked (masked) or not show it (hidden).
+// What is still waiting for its parent (pending) cannot have the rules traced all the way, so it is
+// shown to nobody until the parent comes.
 
-/** 見る人 */
+/** Whoever is looking. */
 export interface Viewer {
   userId: string;
   role: PeerRole;
@@ -17,46 +20,46 @@ export interface Viewer {
 
 export type ViewKind = 'full' | 'masked' | 'pending' | 'hidden';
 
-/** その見え方なら、その人に届けるか（まるごとか、伏せた形で） */
+/** Whether that view delivers the object to the viewer (whole, or in the masked form). */
 export const delivered = (kind: ViewKind): boolean => kind === 'full' || kind === 'masked';
 
-/** 見え方を決める手がかり。オブジェクトの中身から作り、メモリと SQLite に置く */
+/** The hint that decides the view. It is made from the object's contents and kept in memory and in SQLite. */
 export type View =
-  /** カード。表が見えるのは、表向き・覗いている本人・手札の持ち主 */
+  /** A card. Its face is seen when it is face up, by the one peeking, and by the owner of the hand. */
   | { kind: 'card'; front: boolean; owner: string; hand: string }
-  /** 公開の範囲を絞れるメモ（disclosureMode） */
+  /** A note whose disclosure can be narrowed (disclosureMode). */
   | { kind: 'note'; mode: string; users: string[]; owner: string }
-  /** 持ち主のいるダイス。出目が見えるのは持ち主 */
+  /** A die with an owner. The owner is the one who sees its number. */
   | { kind: 'die'; owner: string }
-  /** チャットの発言。秘話は宛先と送り主だけ、シークレットは送り主だけが中身を読める */
+  /** A chat message. Only the addressees and the sender can read a whisper, and only the sender a secret. */
   | { kind: 'chat'; to: string[]; from: string; originFrom: string; secret: boolean }
-  /** チャットのタブ。PL と見学者が見てよいか */
+  /** A chat tab: whether players and guests may see it. */
   | { kind: 'tab'; pl: boolean; guest: boolean }
-  /** データ要素（カードの表、メモの本文など）。名前で、どこにあるものかがわかる */
+  /** A data element (a card's face, a note's text and so on). Its name tells where it belongs. */
   | { kind: 'data'; name: string }
-  /** 発言へのリアクション。その発言が見えない人には見せない */
+  /** A reaction to a message. It is not shown to those who cannot see the message. */
   | { kind: 'reaction'; message: string };
 
-/** 索引の1行のうち、見え方に要るところ */
+/** The part of an index row that the view needs. */
 export interface ViewEntry {
   parent: string;
   view: View | null;
 }
 
-/** 識別子から索引の1行を引く */
+/** Looks up an index row by identifier. */
 export type Lookup = (identifier: string) => ViewEntry | null;
 
-/** いつもすべての役割から見えるタブ（Axe の SYSTEM_CHAT_TAB_IDENTIFIER） */
+/** The tab every role can always see (Axe's SYSTEM_CHAT_TAB_IDENTIFIER). */
 const SYSTEM_TAB = 'SystemTab';
 
 const HAND_PREFIX = 'hand:';
 
-/** 親をたどる深さの上限。親が輪になっているものでも止まる */
+/** The limit on how far up parents are followed. It stops even where the parents go round in a loop. */
 const MAX_DEPTH = 64;
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
-/** オブジェクトの中身から、親と見え方の手がかりを作る */
+/** Makes the parent and the view hint from an object's contents. */
 export const describe = (context: ObjectContext): ViewEntry => {
   const { syncData } = context;
   const attributes = attributesOf(context);
@@ -122,20 +125,24 @@ export const describe = (context: ObjectContext): ViewEntry => {
 const isGameMaster = (viewer: Viewer) => viewer.role === 'gm';
 
 /**
- * 発言を送ったのがその人か。ダイスの結果は、振った人（originFrom）が送ったものとして扱う。
- * 空の送り主は、だれの発言でもない（originFrom の無い発言と、空のユーザー ID を一致させない）
+ * Whether the viewer sent the message. A roll result counts as sent by the one who rolled
+ * (originFrom). A message with an empty sender is nobody's (a message without originFrom is not
+ * matched with an empty user id).
  */
 const sentBy = (view: { from: string; originFrom: string }, viewer: Viewer) =>
   viewer.userId !== '' && (view.from === viewer.userId || view.originFrom === viewer.userId);
 
-/** カードの表が見えるか。GM はいつも見える（Axe の GM 用の一覧は、裏向きのカードの表も出す） */
+/**
+ * Whether the card's face can be seen. The GM always sees it (Axe's list for the GM shows the faces
+ * of face-down cards too).
+ */
 const seesFace = (view: { front: boolean; owner: string; hand: string }, viewer: Viewer) =>
   isGameMaster(viewer) ||
   view.front ||
   (view.owner !== '' && view.owner === viewer.userId) ||
   (view.hand !== '' && view.hand === viewer.userId);
 
-/** 公開の範囲（Axe の canViewDisclosable）。GM と持ち主はいつも見える */
+/** Disclosure (Axe's canViewDisclosable). The GM and the owner always see it. */
 export const seesDisclosed = (view: { mode: string; users: string[]; owner: string }, viewer: Viewer) => {
   if (isGameMaster(viewer)) return true;
   if (view.owner !== '' && view.owner === viewer.userId) return true;
@@ -144,14 +151,16 @@ export const seesDisclosed = (view: { mode: string; users: string[]; owner: stri
   return true;
 };
 
-/** そのオブジェクト自身の見え方 */
+/** The object's own view. */
 const ownKind = (view: View | null, viewer: Viewer): ViewKind => {
   if (view?.kind === 'chat') {
-    // 秘話は宛先と送り主だけ。GM にも見せない（Axe も GM に秘話を見せない）
+    // A whisper is for its addressees and its sender only, and is kept from the GM too (Axe does not
+    // show the GM whispers either).
     if (view.to.length > 0 && !view.to.includes(viewer.userId) && !sentBy(view, viewer)) {
       return 'hidden';
     }
-    // シークレットは、送り主と GM のほかには中身を伏せる（行そのものは届き、「シークレットダイス」と出る）
+    // A secret has its contents masked for all but the sender and the GM (the line itself is
+    // delivered, and shows as "secret dice").
     return view.secret && !sentBy(view, viewer) && !isGameMaster(viewer) ? 'masked' : 'full';
   }
   if (view?.kind === 'die') {
@@ -161,8 +170,9 @@ const ownKind = (view: View | null, viewer: Viewer): ViewKind => {
 };
 
 /**
- * カードの下で、表が見えない人には見せないデータ要素。表の絵、名前、表の文字、詳細。
- * 裏の絵、大きさ、文字の大きさと色、入れ物は見せる（裏で描けるように）
+ * The data elements under a card that are not shown to those who cannot see its face: the face
+ * picture, the name, the face text and the details. The back picture, the size, the text size and
+ * colour, and the containers are shown (so that the back can be drawn).
  */
 const hiddenUnderCard = (path: string[]) =>
   (path[0] === 'image' && path[1] === 'front') ||
@@ -170,13 +180,14 @@ const hiddenUnderCard = (path: string[]) =>
   (path[0] === 'detail' && path.length > 1);
 
 /**
- * 持ち主のいるダイスの下で、出目の見えない人には見せないデータ要素。名前（Axe はラベルごと描かない）
+ * The data elements under a die with an owner that are not shown to those who cannot see its
+ * number: the name (Axe does not draw the label at all).
  */
 const hiddenUnderDie = (path: string[]) => path[0] === 'common' && path[1] === 'name';
 
 /**
- * 公開の範囲の外の人に、メモの下で伏せるもの。題と本文は文字を █ にして見せ（Axe が描くのと同じ形）、
- * 詳細は見せない
+ * What is masked under a note for those outside its disclosure. The title and the text are shown
+ * with their characters turned to █ (the same form Axe draws), and the details are not shown.
  */
 const kindUnderNote = (path: string[]): ViewKind =>
   path[0] === 'common' && (path[1] === 'title' || path[1] === 'text')
@@ -185,35 +196,36 @@ const kindUnderNote = (path: string[]): ViewKind =>
       ? 'hidden'
       : 'full';
 
-/** 伏せる強さの順。後ろほど強い */
+/** The order of how strongly each one hides. The later, the stronger. */
 const STRICTNESS: readonly ViewKind[] = ['full', 'masked', 'pending', 'hidden'];
 
-/** now の方が then より多く見せるか */
+/** Whether now shows more than then. */
 export const looser = (now: ViewKind, then: ViewKind): boolean => STRICTNESS.indexOf(now) < STRICTNESS.indexOf(then);
 
-/** 2つの見え方のうち、より伏せる方 */
+/** Of two views, the one that hides more. */
 const stricter = (a: ViewKind, b: ViewKind): ViewKind => (STRICTNESS.indexOf(a) >= STRICTNESS.indexOf(b) ? a : b);
 
 /**
- * その人に、そのオブジェクトをどう見せるか。親をたどり、カード・メモ・タブの決まりを当てる。
- * 索引に無いもの（まだ置いていないもの）は full。
+ * How the object is shown to the viewer. It follows the parents up and applies the rules of cards,
+ * notes and tabs. What is not in the index (not stored yet) is full.
  *
- * 親がまだ届いていなければ pending。親より先に子が届くことがあり（部屋の読み込みや複製では、
- * 送る順が入れ替わる）、そのまま full とみなすと、裏向きのカードの表や GM だけのメモが、決まりを
- * 当てる前に配られてしまう。親が届いたら、見え方を比べ直して渡す
+ * When a parent has not come yet, it is pending. A child can come before its parent (loading a
+ * room or copying something mixes up the order things are sent in), and taking it as full would
+ * send out the face of a face-down card or a GM-only note before the rules were applied. Once the
+ * parent comes, the views are compared again and it is handed over.
  */
 export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): ViewKind => {
   const entry = lookup(identifier);
   if (!entry) return 'full';
   let kind = ownKind(entry.view, viewer);
   if (entry.view?.kind === 'reaction') {
-    // まだ置いていない（か消えた）発言へのリアクションは、発言の見え方が決まるまで待つ
+    // A reaction to a message not stored yet (or gone) waits until the message's view is settled.
     if (!lookup(entry.view.message)) return 'pending';
     const message = viewKind(entry.view.message, viewer, lookup);
     if (!delivered(message)) return message;
   }
 
-  // データ要素の名前を集めながら、決まりを持つ親までたどる
+  // Follows the parents up to those with rules, gathering the data elements' names on the way.
   const names = entry.view?.kind === 'data' ? [entry.view.name] : [];
   let current = entry;
   for (let depth = 0; depth < MAX_DEPTH && kind !== 'hidden'; depth++) {
@@ -221,7 +233,7 @@ export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): Vi
     const parent = lookup(current.parent);
     if (!parent) return stricter(kind, 'pending');
     const view = parent.view;
-    // 根のデータ要素（名前はオブジェクトの種類）を除いた、根からの道筋
+    // The path from the root, leaving out the root data element (whose name is the kind of object).
     const path = names.slice(0, -1).reverse();
     if (view?.kind === 'tab' && !(isGameMaster(viewer) || (viewer.role === 'guest' ? view.guest : view.pl))) {
       return 'hidden';
@@ -235,13 +247,13 @@ export const viewKind = (identifier: string, viewer: Viewer, lookup: Lookup): Vi
   return kind;
 };
 
-/** 伏せる文字。空白はそのまま残す（Axe のメモが伏せて描く形と同じ） */
+/** Blacks out the characters, leaving spaces as they are (the same form Axe draws a masked note in). */
 const blackOut = (value: unknown) => (typeof value === 'string' ? value.replace(/\S/g, '█') : value);
 
-/** シークレットの発言で伏せるもの */
+/** What is masked in a secret message. */
 const SECRET_ATTRIBUTES = MASKED_CHAT_ATTRIBUTES;
 
-/** 伏せたものを作る。種類ごとに伏せるところが違う */
+/** Makes the masked form. What is masked differs with the kind. */
 export const masked = (context: ObjectContext): ObjectContext => {
   switch (context.aliasName) {
     case 'chat':
@@ -260,8 +272,8 @@ export const masked = (context: ObjectContext): ObjectContext => {
 };
 
 /**
- * 伏せたものを受け取っている人が書き戻してきたとき、伏せたところだけを置いてある中身に戻す。
- * 戻さないと、伏せた中身で本物を上書きされる
+ * When someone who received the masked form writes it back, puts just the masked parts back to the
+ * stored contents. Otherwise the real contents would be overwritten with the masked ones.
  */
 export const unmasked = (incoming: ObjectContext, stored: ObjectContext): ObjectContext => {
   const kept = attributesOf(stored);
@@ -282,12 +294,16 @@ export const unmasked = (incoming: ObjectContext, stored: ObjectContext): Object
 };
 
 /**
- * 伏せた形の版の小数部。本物より小さくしておくと、見えるようになったとき、本物の版の方が新しいと
- * わかり、カタログの交換で取り直せる（同じ版だと、つなぎ直したあとも伏せたまま残る）
+ * The fractional part of the masked form's version. Kept lower than the real one, so that once it
+ * comes into view the real version shows as newer and a catalog trade fetches it again (at the same
+ * version, it would stay masked even after reconnecting).
  */
 export const maskedMinor = (minorVersion: number): number => (minorVersion > 0 ? minorVersion / 2 : -0.5);
 
-/** その人に見せる形。見せないなら null。伏せた形には、本物より小さい版を付ける */
+/**
+ * The form shown to the viewer, or null when it is not shown. The masked form gets a version lower
+ * than the real one.
+ */
 export const viewFor = (context: ObjectContext, kind: ViewKind): ObjectContext | null =>
   !delivered(kind)
     ? null

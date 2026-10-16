@@ -1,6 +1,9 @@
 import { MAX_ASSET_NAME_LENGTH } from '../../../contracts/protocol.js';
 
-/** PUT に付いてきた名前。読めなければ空、長ければ切る。2つで1文字のものを半分で切らない */
+/**
+ * The name that came with a PUT. Empty when it cannot be read, and cut short when it is too long.
+ * A character made of two halves is never cut in the middle.
+ */
 export const assetNameOf = (header: string): string => {
   let name: string;
   try {

@@ -1,6 +1,6 @@
-// scripts/generate-bcdice-importers.mjs が作る。手で直さない
+// Written by scripts/generate-bcdice-importers.mjs. Do not edit it by hand.
 
-/** ゲームシステムのクラス名から、そのシステムを読み込む */
+/** Loads a game system by its class name. */
 export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {
   AFF2e: () => import('bcdice/lib/bcdice/game_system/AFF2e.js'),
   AceKillerGene: () => import('bcdice/lib/bcdice/game_system/AceKillerGene.js'),
@@ -341,7 +341,7 @@ export const GAME_SYSTEM_IMPORTERS: Readonly<Record<string, () => Promise<unknow
   ZombiLine_Korean: () => import('bcdice/lib/bcdice/game_system/ZombiLine_Korean.js'),
 };
 
-/** 「元のクラス名.ロケール」から、その翻訳を読み込む */
+/** Loads a translation by its `base class name.locale`. */
 export const I18N_IMPORTERS: Readonly<Record<string, () => Promise<unknown>>> = {
   'Airgetlamh.ja_jp': () => import('bcdice/lib/bcdice/i18n/Airgetlamh.ja_jp.json', { with: { type: 'json' } }),
   'Airgetlamh.ko_kr': () => import('bcdice/lib/bcdice/i18n/Airgetlamh.ko_kr.json', { with: { type: 'json' } }),

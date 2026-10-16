@@ -1,6 +1,6 @@
 import { assetHeaders } from '../core/assets/headers';
 
-/** R2 に置いたものの、配信のヘッダー */
+/** The headers for serving an object kept in R2. */
 export const objectHeaders = (object: R2Object): Headers =>
   assetHeaders({
     type: object.httpMetadata?.contentType,
@@ -9,9 +9,9 @@ export const objectHeaders = (object: R2Object): Headers =>
     name: object.customMetadata?.name,
   });
 
-/** R2 が切り出した範囲を、206 で返す Content-Range と Content-Length にする */
+/** Turns the range R2 cut out into the Content-Range and Content-Length that a 206 returns. */
 export const setContentRange = (headers: Headers, range: R2Range, size: number): void => {
-  // R2 が返す範囲は、使っていない項目も undefined の値として持っている
+  // The range R2 returns holds even the fields it does not use, as undefined values.
   const { offset, length, suffix } = range as { offset?: number; length?: number; suffix?: number };
   const start = suffix === undefined ? (offset ?? 0) : size - suffix;
   const count = suffix ?? length ?? size - start;

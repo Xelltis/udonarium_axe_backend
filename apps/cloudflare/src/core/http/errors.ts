@@ -2,7 +2,7 @@ import type { Context, ErrorHandler } from 'hono';
 
 import { ConfigError } from '../config/login.js';
 
-/** 本文 `{"error": "<コード>"}` で返すエラー。README の表と揃える */
+/** An error sent back with the body `{"error": "<code>"}`. Kept the same as the table in the README. */
 export type ErrorCode =
   | 'invalid-id'
   | 'invalid-request'
@@ -26,7 +26,7 @@ export type ErrorCode =
   | 'config-invalid'
   | 'internal-error';
 
-/** Hono の文脈の外で作る、エラーの応答 */
+/** An error response made outside a Hono context. */
 export const failure = (status: number, error: ErrorCode): Response => Response.json({ error }, { status });
 
 export const fail = (

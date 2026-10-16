@@ -2,25 +2,25 @@ import type { CatalogItem, ObjectContext } from '../../../contracts/protocol.js'
 import { describe } from './visibility.js';
 import type { ViewEntry } from './visibility.js';
 
-/** 消した印をこれより多くは置かない。超えたら古いものから PRUNED_TOMBSTONES まで減らす */
+/** No more tombstones than this are kept. Past it, the oldest go until PRUNED_TOMBSTONES are left. */
 export const MAX_TOMBSTONES = 100_000;
 export const PRUNED_TOMBSTONES = 80_000;
 
-/** 版・持ち主・親・見え方の手がかりだけの、メモリに置く索引 */
+/** The index kept in memory, holding only the version, the owner, the parent and the view hint. */
 export interface StoredEntry extends ViewEntry {
   alias: string;
   majorVersion: number;
   minorVersion: number;
-  /** 接続しているあいだだけ置くもの（PeerCursor）なら、その人のピア ID。それ以外は null */
+  /** For what is kept only while someone is connected (PeerCursor), that person's peer id. Null otherwise. */
   owner: string | null;
 }
 
-/** まだ書いていない変更。undefined の項目は変えない */
+/** A change not written yet. A field left undefined is not changed. */
 export interface PendingWrite {
-  /** 置く中身。null なら消す */
+  /** The contents to store, or null to delete them. */
   context?: ObjectContext | null;
   owner?: string | null;
-  /** true なら tombstone を置き、false なら消す */
+  /** True stores a tombstone, and false deletes it. */
   tombstone?: boolean;
 }
 
@@ -30,11 +30,12 @@ export interface TombstoneLimits {
 }
 
 /**
- * 部屋のオブジェクトを持つ。置き場所（SQLite や Redis）によらない部分。
+ * Holds the room's objects. This is the part that does not depend on the store (SQLite or Redis).
  *
- * 版と tombstone は初めて要るときに置き場所から読んでメモリに置き、中身は答えるときにだけ読む。
- * 書き込みは識別子ごとにまとめておき、置き場所ごとの flush でまとめて書く。ドラッグのように同じものが
- * 何度も書き換わっても、書くのは1つで済む。
+ * Versions and tombstones are read from the store into memory when they are first needed, and the
+ * contents are read only when answering. Writes are gathered by identifier and written together by
+ * each store's flush. Even when the same object is rewritten many times, as in a drag, only one
+ * write is needed.
  */
 export abstract class ObjectIndex {
   private entries: Map<string, StoredEntry> | null = null;
@@ -48,18 +49,18 @@ export abstract class ObjectIndex {
     }
   ) {}
 
-  /** 置いてあるものすべての索引 */
+  /** The index of everything stored. */
   protected abstract loadEntries(): Iterable<[string, StoredEntry]>;
-  /** 置いてある消した印すべて */
+  /** Every tombstone stored. */
   protected abstract loadTombstones(): Iterable<string>;
-  /** 置いてある中身。索引にあるものについてだけ尋ねる */
+  /** The stored contents. It is asked only about what is in the index. */
   protected abstract readData(identifier: string): unknown;
 
   private get index(): Map<string, StoredEntry> {
     return this.load();
   }
 
-  /** 索引を、初めて要るときに置き場所から読む */
+  /** Reads the index from the store when it is first needed. */
   private load(): Map<string, StoredEntry> {
     if (this.entries) return this.entries;
     this.entries = new Map();
@@ -68,8 +69,10 @@ export abstract class ObjectIndex {
   }
 
   /**
-   * 書けなかったものの索引を、置き場所にあるとおり（entry と、消した印があるか）に戻す。戻さないと、
-   * 索引は新しい版のまま中身は古い（または無い）ので、読むと版と中身が食い違うか、中身が見つからずに止まる
+   * Puts the index of what could not be written back to how the store has it (entry, and whether
+   * there is a tombstone). Otherwise the index would keep the new version while the contents stay
+   * old (or missing), so a read would find the version and the contents at odds, or stop on
+   * contents it cannot find.
    */
   protected resync(identifier: string, entry: StoredEntry | null, tombstone: boolean): void {
     if (entry) {
@@ -82,11 +85,11 @@ export abstract class ObjectIndex {
     else this.deleted.delete(identifier);
   }
 
-  /** 親から子へ、発言からリアクションへの引き */
+  /** The links from parent to child, and from message to reaction. */
   private readonly children = new Map<string, Set<string>>();
   private readonly followers = new Map<string, Set<string>>();
 
-  /** 索引に置き、親子とリアクションの引きもそろえる */
+  /** Puts an entry in the index, and brings the parent and child links and reaction links in line. */
   private remember(identifier: string, entry: StoredEntry): void {
     this.forgetRelations(identifier);
     (this.entries as Map<string, StoredEntry>).set(identifier, entry);
@@ -100,23 +103,23 @@ export abstract class ObjectIndex {
     if (entry?.view?.kind === 'reaction') this.followers.get(entry.view.message)?.delete(identifier);
   }
 
-  /** 見え方を決めるために、識別子から索引の1行を引く */
+  /** Looks up an index row by identifier, to decide the view. */
   readonly lookup = (identifier: string): StoredEntry | null => this.index.get(identifier) ?? null;
 
   /**
-   * そのオブジェクトの見え方で見え方が変わるもの。子孫（カードの表の絵、タブの発言など）と、
-   * 発言へのリアクション
+   * What changes view with the object's view: its descendants (a card's face picture, a tab's
+   * messages and so on) and the reactions to a message.
    */
   dependentsOf(identifier: string): string[] {
     return this.reach(identifier, true);
   }
 
-  /** 子孫。親を消すと一緒に消すもの */
+  /** The descendants: what is deleted along with the parent. */
   descendantsOf(identifier: string): string[] {
     return this.reach(identifier, false);
   }
 
-  /** いま持っているものすべての識別子 */
+  /** The identifiers of everything held now. */
   identifiers(): string[] {
     return [...this.load().keys()];
   }
@@ -145,7 +148,7 @@ export abstract class ObjectIndex {
     return this.tombstones;
   }
 
-  /** 持っているものの数 */
+  /** How many objects are held. */
   get size(): number {
     return this.index.size;
   }
@@ -158,7 +161,7 @@ export abstract class ObjectIndex {
     return this.deleted.has(identifier);
   }
 
-  /** 持っているものすべての識別子と版 */
+  /** The identifier and version of everything held. */
   catalog(): CatalogItem[] {
     return Array.from(this.index, ([identifier, entry]) => ({
       identifier,
@@ -166,7 +169,7 @@ export abstract class ObjectIndex {
     }));
   }
 
-  /** 中身まで揃えたもの。持っていなければ null */
+  /** The object with its contents filled in, or null when it is not held. */
   get(identifier: string): ObjectContext | null {
     const entry = this.index.get(identifier);
     if (!entry) return null;
@@ -193,7 +196,7 @@ export abstract class ObjectIndex {
     this.stage(context.identifier, { context, owner });
   }
 
-  /** 持っているものを消す。tombstone を置けば、同じ識別子をもう受けない */
+  /** Deletes something held. With a tombstone, the same identifier is not taken again. */
   delete(identifier: string, tombstone: boolean): void {
     this.load();
     this.forgetRelations(identifier);
@@ -205,26 +208,26 @@ export abstract class ObjectIndex {
     }
   }
 
-  /** tombstone を外し、同じ識別子をまた受けるようにする */
+  /** Removes the tombstones, so that the same identifiers are taken again. */
   forget(identifiers: readonly string[]): void {
     for (const identifier of identifiers) {
       if (this.deleted.delete(identifier)) this.stage(identifier, { tombstone: false });
     }
   }
 
-  /** その人のあいだだけ置いているもの（その人のカーソル）の識別子 */
+  /** The identifiers of what is kept only while that person is there (their cursor). */
   ownedBy(peerId: string): string[] {
     return [...this.index].filter(([, entry]) => entry.owner === peerId).map(([id]) => id);
   }
 
-  /** その人のあいだだけ置いているものを持っている人のピア ID */
+  /** The peer ids of those who have something kept only while they are there. */
   owners(): string[] {
     const owners = new Set<string>();
     for (const entry of this.index.values()) if (entry.owner !== null) owners.add(entry.owner);
     return [...owners];
   }
 
-  /** その人が出たので、その人のあいだだけ置いていたものを消す。消した識別子を返す */
+  /** The person has left, so deletes what was kept only while they were there. Returns the identifiers deleted. */
   removeOwnedBy(peerId: string): string[] {
     const owned = this.ownedBy(peerId);
     for (const identifier of owned) this.delete(identifier, false);
@@ -240,8 +243,8 @@ export abstract class ObjectIndex {
   }
 
   /**
-   * 消した印が多すぎるとき、減らす数。印はいつまでも残るので、減らさないと、消すたびに増え続ける。
-   * 減らさなくてよければ 0
+   * How many tombstones to cut when there are too many. Tombstones stay forever, so without cutting
+   * they would keep growing with every deletion. It is 0 when none need cutting.
    */
   protected tombstonesOver(): number {
     if (!this.tombstones || this.tombstones.size <= this.tombstoneLimits.most) return 0;

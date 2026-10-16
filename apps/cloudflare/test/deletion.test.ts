@@ -23,13 +23,13 @@ import {
 } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
 
-// GM が部屋を削除するときと、一覧で削除できる部屋に印を付けるとき
+// A GM deleting a room, and the list marking the rooms that can be deleted.
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 部屋を削除する API を呼ぶ。userId が null ならログインせずに */
+/** Calls the API that deletes a room. Without logging in when userId is null. */
 const deleteRoom = (roomKey: string, userId: string | null, ip = freshIp()) =>
   exports.default.fetch(
     new Request(`${ROOMS}/${roomKey}`, {
@@ -42,7 +42,7 @@ const deleteRoom = (roomKey: string, userId: string | null, ip = freshIp()) =>
     })
   );
 
-/** アクセストークンを付けて一覧を取る */
+/** Gets the room list with an access token. */
 const listAs = async (authorization: string): Promise<RoomSummary[]> => {
   const res = await exports.default.fetch(
     new Request(ROOMS, {
@@ -55,7 +55,7 @@ const listFor = (userId: string) => listAs(`Bearer ${accessTokenFor(userId)}`);
 const rowOf = <T extends { roomKey: string }>(rooms: T[], roomKey: string) =>
   rooms.find((room) => room.roomKey === roomKey);
 
-/** 次に届いた error。そこまでに届いたほかのものは読み捨てる */
+/** The next error to arrive. Anything else that arrives before it is read and thrown away. */
 const errorOf = async (client: Client): Promise<ErrorMessage> => {
   for (;;) {
     const { message } = await client.nextRaw();
@@ -63,7 +63,7 @@ const errorOf = async (client: Client): Promise<ErrorMessage> => {
   }
 };
 
-/** 部屋に置いたものが、表ごと残っていないこと */
+/** That none of what the room kept is left, tables and all. */
 const tablesOf = (roomKey: string) =>
   runInDurableObject(stubOf(roomKey), (_instance, state) =>
     state.storage.sql
@@ -165,7 +165,8 @@ describe('deleting a room', () => {
     expect(alarm).toBeGreaterThan(Date.now());
     expect(alarm).toBeLessThanOrEqual(Date.now() + WIPE_RETRY_MS);
 
-    // その時計が先に鳴っても、消している最中なら重ねて消さず、また来る
+    // Even when that alarm goes off first, it does not start a second deletion while one is going, and
+    // comes back.
     expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
     expect(await runInDurableObject(stubOf(roomKey), (_instance, state) => state.storage.getAlarm())).not.toBeNull();
 
@@ -227,7 +228,7 @@ describe('deleting a room', () => {
     await eventually(pending, (count) => count === 1);
 
     expect((await deleteRoom(roomKey, 'user-gm')).status).toBe(204);
-    // 部屋の中で作った約束なので、部屋の中で解く
+    // The promise was made inside the room, so it is resolved inside the room.
     await runInDurableObject(stubOf(roomKey), () => release());
     await eventually(pending, (count) => count === 0);
 
@@ -260,7 +261,7 @@ describe('the room list', () => {
   it('lists the newest rooms first, and always the rooms one may delete', async () => {
     const roomKey = await createRoom({}, 'old-gm');
     const lobby = env.LOBBY.getByName('lobby');
-    // 一覧に入りきらないほど、あとから部屋が作られた
+    // More rooms than the list can hold were made afterwards.
     await runInDurableObject(lobby, (_instance, state) => {
       for (let i = 0; i < 1000; i++) {
         state.storage.sql.exec(
@@ -279,7 +280,7 @@ describe('the room list', () => {
       expect(rowOf(anybody, roomKey)).toBeUndefined();
       expect(anybody[0].roomKey).toBe('newer-999');
       expect(rowOf(mine, roomKey)?.deletable).toBe(true);
-      // 一覧に載らなくても、鍵でなら引ける
+      // Even when it is not in the list, it can be looked up by key.
       const found = await exports.default.fetch(
         new Request(`${ROOMS}/${roomKey}`, {
           headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp() },

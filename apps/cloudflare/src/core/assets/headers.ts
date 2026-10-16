@@ -1,31 +1,34 @@
 import { ASSET_NAME_HEADER } from '../../../contracts/protocol.js';
 
-/** ブラウザや CDN に置いてよい最長の期間（7日） */
+/** The longest a browser or a CDN may keep it (7 days). */
 const MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /**
- * SVG を開いたときに効かせる CSP。中に書かれたスクリプトを動かさず、外へ読みに行かせない。
- * 描くのに要る、埋め込みの画像（data:）と style 属性だけを通す
+ * The CSP that applies when an SVG is opened. It keeps scripts written inside from running and
+ * from fetching anything from outside. It lets through only what drawing needs: embedded pictures
+ * (data:) and the style attribute.
  */
 const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
 
-/** 置いてあるアセットについて、配信のヘッダーに要ること */
+/** What the headers for serving need to know about a stored asset. */
 export interface AssetMeta {
-  /** 置いたときに先頭のバイトで決めた形式。無ければ application/octet-stream */
+  /** The type decided from the first bytes when it was stored; application/octet-stream when none. */
   type: string | undefined;
   size: number;
-  /** 引用符付きの ETag */
+  /** The ETag, in quotes. */
   etag: string;
-  /** 置いたときの名前。無ければ空 */
+  /** The name it was stored with. Empty when there is none. */
   name: string | undefined;
 }
 
 /**
- * 配信する中身のヘッダー。部屋が消えるまで中身は変わらないので、長く置いてよい。
+ * The headers for the contents served. The contents do not change until the room is deleted, so
+ * they may be kept for a long time.
  *
- * 部屋のサーバーのキャッシュ（Cloudflare 版の Cache API）に入れるため public にする。手元に返すときは
- * privately で private に替える。public のまま返すと、前に置いた CDN の規則によっては、トークンを
- * 付けない読み出しにまでキャッシュから返ってしまう
+ * They are public so that the contents go into the room server's cache (the Cache API in the
+ * Cloudflare version). When they are sent back to whoever asked, privately changes them to private.
+ * Sent back as public, depending on the rules of a CDN put in front, the cache would answer even
+ * reads that carry no token.
  */
 export const assetHeaders = (meta: AssetMeta): Headers => {
   const headers = new Headers();
@@ -35,16 +38,18 @@ export const assetHeaders = (meta: AssetMeta): Headers => {
   headers.set('Cache-Control', `public, max-age=${MAX_AGE_SECONDS}, immutable`);
   headers.set('Accept-Ranges', 'bytes');
   headers.set('X-Content-Type-Options', 'nosniff');
-  // SVG は文書として開けばスクリプトが動く。<img> で読むぶんには CSP は効かず、もともと動かない
+  // Scripts in an SVG run when it is opened as a document. Read through <img>, the CSP has no
+  // effect, and they do not run anyway.
   if (meta.type === 'image/svg+xml') {
     headers.set('Content-Security-Policy', SVG_CONTENT_SECURITY_POLICY);
   }
-  // 置いたときの名前。カタログには名前が無いので、取りに来た人はこれで名前を知る
+  // The name it was stored with. The catalog has no names, so whoever fetches it learns the name
+  // from this.
   if (meta.name) headers.set(ASSET_NAME_HEADER, encodeURIComponent(meta.name));
   return headers;
 };
 
-/** 手元に返す応答。ブラウザには置かせても、共有のキャッシュには置かせない */
+/** The response sent back to whoever asked. A browser may keep it, but a shared cache may not. */
 export const privately = (response: Response): Response => {
   const copy = new Response(response.body, response);
   copy.headers.set('Cache-Control', `private, max-age=${MAX_AGE_SECONDS}, immutable`);

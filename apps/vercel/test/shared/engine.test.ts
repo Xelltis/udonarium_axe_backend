@@ -4,7 +4,7 @@ import { CHAT_TAB_LIST_IDENTIFIER, CLOSE_CODE, SyncEvent } from '../../contracts
 import { FLUSH_DELAY_MS } from '../../src/core/rooms/limits.js';
 import { FakeHost } from './fake-host.js';
 
-// 部屋のサーバーから起こしにくいところを、メモリの部屋で確かめる
+// Checks, with the room in memory, what is hard to bring about from the room server.
 
 afterEach(() => {
   vi.useRealTimers();

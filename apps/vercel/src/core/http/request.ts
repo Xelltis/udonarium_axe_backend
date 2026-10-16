@@ -4,21 +4,22 @@ import { readToken } from '../auth/tokens.js';
 import type { Claims } from '../auth/tokens.js';
 import type { LoginConfig } from '../config/login.js';
 
-/** Authorization: Bearer に付いたもの。無ければ null */
+/** What comes with Authorization: Bearer. Null when there is none. */
 const bearerTokenOf = (c: Context): string | null => {
   const header = c.req.header('Authorization') ?? '';
   return header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
 };
 
-/** Authorization: Bearer のアクセストークンを確かめる。無いか無効なら null */
+/** Checks the access token in Authorization: Bearer. Null when it is missing or not valid. */
 export const bearerOf = (c: Context, login: LoginConfig): Claims<'access'> | null => {
   const token = bearerTokenOf(c);
   return token === null ? null : readToken(token, 'access', login.sessionSecret);
 };
 
 /**
- * 部屋のアセットのトークン。Authorization: Bearer に付いたもので、この部屋のために部屋のサーバーが
- * 渡したものだけを受ける。ログインを置いていない部屋のサーバーには部屋が無いので、受けるものも無い
+ * The token for room assets. Only one that comes with Authorization: Bearer and that the room
+ * server handed out for this room is taken. A room server with no login set up has no rooms, so it
+ * has nothing to take either.
  */
 export const assetClaimsOf = (c: Context, login: LoginConfig | null, roomKey: string): Claims<'asset'> | null => {
   const token = bearerTokenOf(c);
@@ -27,7 +28,7 @@ export const assetClaimsOf = (c: Context, login: LoginConfig | null, roomKey: st
   return claims?.room === roomKey ? claims : null;
 };
 
-/** Content-Length の値。無いか、0 以上の整数でなければ null */
+/** The value of Content-Length. Null when it is missing or is not a whole number of 0 or more. */
 export const declaredLengthOf = (c: Context): number | null => {
   const header = c.req.header('Content-Length');
   const length = Number(header);

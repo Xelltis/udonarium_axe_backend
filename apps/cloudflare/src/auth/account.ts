@@ -21,10 +21,11 @@ interface ProfileRow extends Record<string, SqlStorageValue> {
 }
 
 /**
- * ログインした1人ぶんのアカウント。名前は accountKey（`discord:<ID>`）。
+ * The account of one person who logged in. Its name is the accountKey (`discord:<ID>`).
  *
- * 人の情報、ログインから戻ったときの使い捨てのコード、リフレッシュトークンを置く。
- * どれも秘密はハッシュにして置き、そのままは置かない。D1 を使わないので、デプロイで作るものが増えない。
+ * It keeps the person's details, the one-time codes for coming back from a login, and the refresh
+ * tokens. Every secret is kept as a hash, never as it is. It does not use D1, so a deploy has nothing
+ * more to make.
  */
 export class AccountDurableObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -59,8 +60,9 @@ export class AccountDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * ログインした。人の情報を置き直し（ユーザー ID は初めてのときに決めたまま）、
-   * Axe に渡す使い捨てのコードを作る。challenge は、Axe がログインを始めるときに渡した code_challenge
+   * The person logged in. Stores their details again (the user id stays the one set the first time)
+   * and makes the one-time code handed to Axe. challenge is the code_challenge Axe gave when it began
+   * the login.
    */
   async signIn(profile: Profile, challenge: string): Promise<Secret> {
     const sql = this.ctx.storage.sql;
@@ -90,8 +92,9 @@ export class AccountDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * ログインから戻ったときのコードを、リフレッシュトークンに替える。コードは1度しか使えない。
-   * verifier は、code_challenge の元になった code_verifier（SHA-256 の base64url が challenge と合うもの）
+   * Trades the code from coming back from a login for a refresh token. A code works only once.
+   * verifier is the code_verifier the code_challenge was made from (the one whose SHA-256, in base64url,
+   * matches challenge).
    */
   async redeem(code: Secret, verifier: string): Promise<Session | null> {
     const sql = this.ctx.storage.sql;
@@ -111,12 +114,13 @@ export class AccountDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * リフレッシュトークンを使い、同じ系統の新しいものに替える。
-   * もう使ったものがまた来たら、盗まれたとみなして、その系統をすべて無効にする。
+   * Uses a refresh token and trades it for a new one of the same family.
+   * When one already used comes again, it is taken as stolen and its whole family is made invalid.
    *
-   * ハッシュと替えたあとのトークンは先に作り、行を探してから新しいトークンを書くまでのあいだには
-   * await を挟まない。挟むと、同じトークンで同時に来た2つが、どちらもまだ使っていないものとして通るか、
-   * もう1つが系統を無効にしたあとに書いた新しいトークンが生き残ってしまう
+   * The hash and the token to trade for are made first, and there is no await between finding the
+   * row and writing the new token. With one there, two requests that come at once with the same token
+   * could both pass as not yet used, or a new token written after the other made the family invalid
+   * could live on.
    */
   async refresh(token: Secret): Promise<Session | null> {
     const sql = this.ctx.storage.sql;
@@ -132,13 +136,13 @@ export class AccountDurableObject extends DurableObject<Env> {
     return this.startSession(row.family, next);
   }
 
-  /** ログアウトした。そのリフレッシュトークンの系統をすべて無効にする */
+  /** The person logged out. Makes that refresh token's whole family invalid. */
   async signOut(token: Secret): Promise<void> {
     const row = this.findRefreshToken(token, await sha256(token.secret));
     if (row) this.ctx.storage.sql.exec('DELETE FROM refresh_tokens WHERE family = ?', row.family);
   }
 
-  /** ログインしている人の情報。消したあとなら null */
+  /** The details of the person who is logged in. Null after the account is deleted. */
   account(): Account | null {
     const row = this.ctx.storage.sql
       .exec<ProfileRow>('SELECT account_key, user_id, name, avatar_url FROM profile')
@@ -147,8 +151,9 @@ export class AccountDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * アカウントを消す。人の情報もトークンもすべて消える。userId は消すように頼んだトークンの人で、
-   * いまのアカウントと違えば（消したあと同じ人がまたログインして作り直したもの）消さずに false
+   * Deletes the account. The person's details and every token go. userId is the person whose token
+   * asked for the deletion; when it differs from the current account (one the same person made again
+   * by logging in after a deletion), nothing is deleted and it returns false.
    */
   async erase(userId: string): Promise<boolean> {
     if (this.account()?.userId !== userId) return false;
@@ -157,7 +162,7 @@ export class AccountDurableObject extends DurableObject<Env> {
     return true;
   }
 
-  /** hash は token.secret の SHA-256（base64url） */
+  /** hash is the SHA-256 of token.secret (base64url). */
   private findRefreshToken(token: Secret, hash: string): { family: string; used: number } | null {
     const row = this.ctx.storage.sql
       .exec<{ family: string; hash: string; expires_at: number; used: number }>(
@@ -170,8 +175,9 @@ export class AccountDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * 作っておいたリフレッシュトークンを系統に加える。コードやトークンがあるなら、人の情報も必ずある。
-   * 書き込みのあいだに await を挟まない
+   * Adds the refresh token made beforehand to the family. Where there is a code or a token, the
+   * person's details are always there too.
+   * There is no await between the writes.
    */
   private startSession(family: string, next: IssuedToken): Session {
     const profile = this.ctx.storage.sql
@@ -191,7 +197,7 @@ export class AccountDurableObject extends DurableObject<Env> {
     };
   }
 
-  /** 期限を過ぎたコードとトークンを消す */
+  /** Deletes the codes and tokens that are past their expiry. */
   private sweep(): void {
     const now = nowSeconds();
     this.ctx.storage.sql.exec('DELETE FROM login_codes WHERE expires_at <= ?', now);

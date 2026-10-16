@@ -33,7 +33,7 @@ afterEach(() => {
 
 const keysOf = (value: object) => Object.keys(value).sort();
 
-/** 部屋が持っているものの数 */
+/** How many objects the room holds. */
 const heldIn = (roomKey: string) => harness.inside(roomKey, ({ host }) => host.store().size);
 
 describe('POST /v1/rooms', () => {
@@ -208,7 +208,7 @@ describe('joining a room', () => {
 
     const left = await alice.client.next('leave');
     expect(left).toEqual({ type: 'leave', peerId: 'bob' });
-    // 閉じてきた人には閉じ返す
+    // The room closes back to someone who closed.
     expect(await bob.client.closed).toEqual({ code: 1000, reason: 'bye' });
     expect(keysOf(left)).toEqual(keysOf(messages.server.leave));
     const rooms = await eventually(listRooms, (all) => all.some((r) => r.roomKey === roomKey && r.members === 1));
@@ -377,10 +377,10 @@ describe('joining a room', () => {
     const noisy = await join(roomKey, 'noisy');
     await steady.client.next('join');
 
-    // hello と、最後の time も数に入る
+    // The hello and the last time count too.
     for (let i = 0; i < MAX_FRAMES_PER_WINDOW - 2; i++) steady.client.emit([]);
     await steady.client.expectQuiet();
-    /** その人の窓の始まりを動かす */
+    /** Moves the start of that person's window. */
     const moveWindow = (peerId: string, to: (start: number) => number) =>
       harness.inside(roomKey, ({ engine, host }) => {
         const { rates } = engine as unknown as { rates: WeakMap<object, { start: number }> };
@@ -390,7 +390,8 @@ describe('joining a room', () => {
       });
     await moveWindow('steady', (start) => start - RATE_WINDOW_MS);
     await steady.client.expectQuiet();
-    // 混んでいて送り終えるのに窓より長くかかっても、窓が改まらないように、窓の始まりを先へ置く
+    // The window's start is put ahead, so that the window does not start afresh even when a busy machine
+    // takes longer than the window to send them all.
     await moveWindow('noisy', () => Date.now() + RATE_WINDOW_MS);
     for (let i = 0; i < MAX_FRAMES_PER_WINDOW; i++) noisy.client.emit([]);
 
