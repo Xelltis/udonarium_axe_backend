@@ -9,7 +9,10 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 - リポジトリの構成・アプリごとのコマンドと決まり・コミットとフック → [docs/development/index.md](docs/development/index.md)
 - テスト・CI・リリース → [docs/development/ci.md](docs/development/ci.md)
 - ドキュメントの書きかた → [docs/development/docs.md](docs/development/docs.md)
-- 部屋のサーバーとAxeのやりとり → [docs/cloudflare/protocol.md](docs/cloudflare/protocol.md)
+- 部屋のサーバーのHTTPのAPIとエラーのコード → [docs/reference/server-api.md](docs/reference/server-api.md)
+- 部屋のサーバーとAxeのWebSocketのやりとり → [docs/reference/protocol.md](docs/reference/protocol.md)
+- 部屋のサーバーの中の動き（同期・置き場所・ログイン・役割） → [docs/reference/room-server.md](docs/reference/room-server.md)
+- 部屋のサーバーの設定項目 → [docs/server/configuration.md](docs/server/configuration.md)
 
 ## 構成の規範
 
@@ -55,6 +58,7 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 | `apps/php`        | `bin/phpunit` / `bin/phpstan analyse` / `bin/php-cs-fixer fix` | テスト・静的解析・整形（Docker）                |
 | ルート            | `node scripts/sync-shared.mjs`                                 | 共有コードを`apps/vercel`へ写す                 |
 | ルート            | `npm run docs:dev` / `npm run docs:build`                      | 文書（VitePress）                               |
+| ルート            | `npm run docs:check`                                           | 文書の見出しへのリンクが切れていないか          |
 
 ## コミット・フック規約（要点）
 
@@ -82,6 +86,9 @@ README・`docs/`のまとまった日本語は`yomiyasu`スキルを通して書
 詳細は[docs/development/docs.md](docs/development/docs.md)にあり、ここには要点だけを書く。
 
 - 対象は新規執筆と書き直し。1〜2行の追記や表のセル修正はそのまま書いてよい
+- ページは読む人の目的で分ける（`guide`・`skyway`・`server`・`operate`・`reference`・`development`）。置く人のページには手順だけを書き、通信の形や中の動きは`reference`に書く
+- 1つの事実は1ページにだけ書き、ほかからはリンクする。Cloudflare版とVercel版に共通することは「部屋のサーバー」と書き、違うところだけ版の名前を出す
+- 見出しを変えたら、そこへのリンクを直して`npm run docs:check`で確かめる（ビルドは見出しへのリンクを確かめない）
 - 和文と英数字の間に半角空白を入れない。空けてある既存の文書は書き直すときにそろえる
 - Markdownには**Prettierをかけない**（表は手でそろえる）。各アプリの`.prettierignore`も`*.md`を外している
 - **コミットメッセージとCHANGELOGは対象外**。前者は英語で書き、後者はsemantic-releaseが生成する
