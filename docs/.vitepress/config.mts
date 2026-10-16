@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { defineConfig } from 'vitepress';
 
+import { slugify } from './slugify.mjs';
+
 const repo = 'https://github.com/Xelltis/udonarium_axe_backend';
 const base = '/udonarium_axe_backend/';
 
@@ -93,23 +95,8 @@ export default defineConfig({
   },
   head: [['meta', { name: 'theme-color', content: '#8b7cf6' }]],
   markdown: {
-    // A copy of VitePress's own slugify with the result put back into NFC.
-    // Its NFKD pass strips only the combining marks in U+0300..U+036F, which
-    // leaves a Japanese dakuten decomposed: the id holds ハ + U+3099 where a
-    // hand-written link holds バ. The two look the same and never match.
-    anchor: {
-      slugify: (str: string) =>
-        str
-          .normalize('NFKD')
-          .replace(/[̀-ͯ]/g, '')
-          .replace(/[\u0000-\u001f]/g, '')
-          .replace(/[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g, '-')
-          .replace(/-{2,}/g, '-')
-          .replace(/^-+|-+$/g, '')
-          .replace(/^(\d)/, '_$1')
-          .toLowerCase()
-          .normalize('NFC'),
-    },
+    // The same slugify scripts/check-doc-anchors.mjs checks links against (see slugify.mjs).
+    anchor: { slugify },
     config: (md) => {
       // Default VitePress tables are `display: block`, so they shrink to their
       // content and hug the left edge. Wrapping them lets the table fill the
