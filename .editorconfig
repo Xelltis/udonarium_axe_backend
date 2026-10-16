@@ -4,15 +4,20 @@ root = true
 charset = utf-8
 end_of_line = lf
 indent_style = space
-indent_size = 4
+indent_size = 2
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-[*.{yml,yaml}]
+# PHP and the files beside it are indented by four, as PER-CS has it.
+[apps/php/**]
+indent_size = 4
+
+[apps/php/**.{yml,yaml,json}]
 indent_size = 2
 
-[*.{js,json}]
-indent_size = 2
+[*.ts]
+quote_type = single
 
 [*.md]
+max_line_length = off
 trim_trailing_whitespace = false
