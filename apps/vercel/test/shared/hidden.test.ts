@@ -364,24 +364,89 @@ describe('writes that would uncover what is kept back', () => {
     expect(ids(await t.bob.events())).toContainEqual(['UPDATE_GAME_OBJECT', 'd1']);
   });
 
-  it('refuses a player making itself the owner of a card that stays in a deck, which would show it the face', async () => {
+  const owned = { state: 1, owner: 'user-alice', location: { name: 'table' } };
+
+  /**
+   * A deck, the node Axe keeps a deck's cards under, and a face-down card the GM places under the
+   * one named by `holder`.
+   */
+  const deckTable = async (holder = 'deck-root', attributes: Record<string, unknown> = {}) => {
     const t = await table();
     const deck = contextOf('deck', 1, 0.5, { attributes: {} }, 'card-stack');
-    // Axe keeps a deck's cards under a node of the deck's own.
     const root = contextOf('deck-root', 1, 0.5, { parentIdentifier: 'deck', attributes: { name: 'cardRoot' } }, 'node');
-    const { card, elements } = cardTree('d2', { state: 1, location: { name: 'table' } });
-    const stacked = { ...card, syncData: { ...card.syncData, parentIdentifier: 'deck-root' } };
+    const { card, elements } = cardTree('d2', { state: 1, location: { name: 'table' }, ...attributes });
+    const stacked = { ...card, syncData: { ...card.syncData, parentIdentifier: holder } };
     await place(t, [deck, root, stacked, ...elements]);
+    return { ...t, deck, root, stacked };
+  };
+
+  it.each([
+    ['right under the deck', 'deck'],
+    ["under the node Axe keeps a deck's cards under", 'deck-root'],
+  ])(
+    'refuses a player making itself the owner of a card that stays %s, which would show it the face',
+    async (_where, holder) => {
+      const t = await deckTable(holder);
+
+      t.alice.emit([update({ ...t.stacked, majorVersion: 2, syncData: { ...t.stacked.syncData, attributes: owned } })]);
+
+      await expectRefused(t, 'd2');
+    }
+  );
+
+  it('refuses a player putting a card it owns back into the deck it drew it from in the same frame', async () => {
+    const t = await deckTable();
+    const out = { ...t.stacked.syncData, parentIdentifier: '', attributes: owned };
 
     t.alice.emit([
-      update({
-        ...stacked,
-        majorVersion: 2,
-        syncData: { ...stacked.syncData, attributes: { state: 1, owner: 'user-alice', location: { name: 'table' } } },
-      }),
+      update({ ...t.stacked, majorVersion: 2, syncData: out }),
+      update({ ...t.stacked, majorVersion: 3, syncData: { ...t.stacked.syncData, attributes: owned } }),
     ]);
 
-    await expectRefused(t, 'd2');
+    expect(ids(await t.alice.events())).toContainEqual(['AUTHORITATIVE_OBJECT', 'd2']);
+    const seen = (await t.bob.events()).filter((event) => (event.data as ObjectContext).identifier === 'd2');
+    expect((seen.at(-1)?.data as ObjectContext).syncData.parentIdentifier).toBe('');
+  });
+
+  it('refuses a player moving the node of a deck back into it once it owns a card under the node', async () => {
+    const t = await deckTable();
+
+    t.alice.emit([
+      update({ ...t.root, majorVersion: 2, syncData: { ...t.root.syncData, parentIdentifier: '' } }),
+      update({ ...t.stacked, majorVersion: 2, syncData: { ...t.stacked.syncData, attributes: owned } }),
+      update({ ...t.root, majorVersion: 3, syncData: { ...t.root.syncData, parentIdentifier: 'deck' } }),
+    ]);
+
+    expect(ids(await t.alice.events())).toContainEqual(['AUTHORITATIVE_OBJECT', 'deck-root']);
+  });
+
+  it('lets a player rewrite, or move the deck of, a card the GM gave an owner in the deck', async () => {
+    const t = await deckTable('deck-root', { owner: 'user-bob' });
+    await place(t, [contextOf('shelf', 1, 0.5, { attributes: {} }, 'node')]);
+
+    t.alice.emit([
+      update({ ...t.stacked, majorVersion: 2 }),
+      update({ ...t.deck, majorVersion: 2, syncData: { ...t.deck.syncData, parentIdentifier: 'shelf' } }),
+    ]);
+
+    expect(ids(await t.bob.events())).toEqual([
+      ['UPDATE_GAME_OBJECT', 'd2'],
+      ['UPDATE_GAME_OBJECT', 'deck'],
+    ]);
+    await t.alice.expectQuiet();
+  });
+
+  it('does not take a card under parents that go round in a loop for one in a deck', async () => {
+    const t = await table();
+    const a = contextOf('loop-a', 1, 0.5, { parentIdentifier: 'loop-b', attributes: {} }, 'node');
+    const b = contextOf('loop-b', 1, 0.5, { parentIdentifier: 'loop-a', attributes: {} }, 'node');
+    const { card, elements } = cardTree('d4', { state: 1, location: { name: 'table' } });
+    const looped = { ...card, syncData: { ...card.syncData, parentIdentifier: 'loop-a' } };
+    await place(t, [a, b, looped, ...elements]);
+
+    t.alice.emit([update({ ...looped, majorVersion: 2, syncData: { ...looped.syncData, attributes: owned } })]);
+
+    expect(ids(await t.bob.events())).toContainEqual(['UPDATE_GAME_OBJECT', 'd4']);
   });
 
   it('lets a player draw a card from the hand of another into its own, face down', async () => {

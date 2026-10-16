@@ -55,7 +55,7 @@ const SYSTEM_TAB = 'SystemTab';
 const HAND_PREFIX = 'hand:';
 
 /** The limit on how far up parents are followed. It stops even where the parents go round in a loop. */
-const MAX_DEPTH = 64;
+export const MAX_DEPTH = 64;
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 

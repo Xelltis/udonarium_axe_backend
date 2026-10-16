@@ -80,7 +80,7 @@ import {
   neutralRollAttributes,
   notLongAgo,
 } from './rules.js';
-import { delivered, describe, looser, maskedMinor, unmasked, viewFor, viewKind } from './visibility.js';
+import { MAX_DEPTH, delivered, describe, looser, maskedMinor, unmasked, viewFor, viewKind } from './visibility.js';
 import type { Lookup, ViewKind, Viewer } from './visibility.js';
 
 type Reply = (eventName: string, data: unknown) => void;
@@ -774,27 +774,47 @@ export class RoomEngine<C extends object> {
   }
 
   /**
+   * Whether a write leaves a card in a deck with an owner it was not there with before: by giving a
+   * card in the deck an owner, or by moving into the deck a card with one, or what holds such a card.
+   * The owner of a card sees its face, which a deck keeps from everyone, so only the GM may. Axe takes
+   * the owner off a card it puts in a deck, and taking a card out of the deck, as into a hand, is not
+   * this. Writes sent together are taken one by one, so drawing a card as its owner and putting it
+   * back would otherwise go through.
+   */
+  private peeksIntoDeck(context: ObjectContext, existing: StoredEntry): boolean {
+    const identifier = context.identifier;
+    const next = describe(context);
+    const written: StoredEntry = { ...existing, parent: next.parent, view: next.view };
+    const after = (other: string) => (other === identifier ? written : this.store.entryOf(other));
+    const reached = next.parent === existing.parent ? [] : this.store.descendantsOf(identifier);
+    return [identifier, ...reached].some((other) => {
+      const owner = this.ownerInDeck(other, after);
+      return owner !== '' && owner !== this.ownerInDeck(other, this.store.lookup);
+    });
+  }
+
+  /**
+   * The owner of a card in a deck, as the rows `lookup` gives have it: '' for a card with none, for one
+   * in no deck and for anything but a card. Axe keeps a deck's cards under a node of the deck's own, so
+   * every parent up is looked at, as far as parents are followed anywhere.
+   */
+  private ownerInDeck(identifier: string, lookup: (identifier: string) => StoredEntry | null): string {
+    const entry = lookup(identifier);
+    if (entry?.view?.kind !== 'card') return '';
+    let holder = lookup(entry.parent);
+    for (let depth = 0; holder && depth < MAX_DEPTH; depth++) {
+      if (holder.alias === CARD_STACK_ALIAS) return entry.view.owner;
+      holder = lookup(holder.parent);
+    }
+    return '';
+  }
+
+  /**
    * Whether a write that changes the parent or the name (a data element's name decides where under a
    * card or note it sits) lets the writer itself see more of the object or its descendants than now.
    * The view follows the path of parents and names, so renaming, or moving out from under a parent
    * with rules, would hand over what is masked.
    */
-  /**
-   * Whether a write gives a card that stays in a deck an owner it did not have. The owner of a card
-   * sees its face, which a deck keeps from everyone, so only the GM may; taking the card out of the
-   * deck, as into a hand, is not this. Axe keeps a deck's cards under a node of the deck's own, so
-   * the deck is looked for one step further up as well.
-   */
-  private peeksIntoDeck(context: ObjectContext, existing: StoredEntry): boolean {
-    if (existing.view?.kind !== 'card') return false;
-    const next = describe(context);
-    if (next.view?.kind !== 'card' || next.view.owner === '' || next.view.owner === existing.view.owner) return false;
-    const holder = next.parent !== '' ? this.store.entryOf(next.parent) : null;
-    if (!holder) return false;
-    if (holder.alias === CARD_STACK_ALIAS) return true;
-    return holder.parent !== '' && this.store.entryOf(holder.parent)?.alias === CARD_STACK_ALIAS;
-  }
-
   private uncovers(context: ObjectContext, existing: StoredEntry, seat: Seat): boolean {
     const next = describe(context);
     const renamed =
