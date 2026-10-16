@@ -1,65 +1,17 @@
-import { encode } from '@msgpack/msgpack';
-import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 
-import { PROTOCOL_VERSION } from '../../../contracts/protocol.js';
-import type { ServerMessage } from '../../../contracts/protocol.js';
-import { ACCESS_TOKEN_SECONDS, signToken } from '../../../src/core/auth/tokens.js';
-import { decodeFrame } from '../../../src/core/rooms/codec.js';
 import { vercelBackend } from '../../../src/server/backend.js';
 import { RoomRuntime } from '../../../src/server/rooms/runtime.js';
 import { useRedis } from '../redis-helpers.js';
-import { LOGIN, depsOf } from '../server-helpers.js';
+import { depsOf } from '../server-helpers.js';
+import { FakeWs } from './fake-ws.js';
 
 const connection = useRedis();
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-/** 部屋のサーバーが受けた WebSocket の代わり */
-class FakeWs extends EventEmitter {
-  readonly sent: (string | Uint8Array)[] = [];
-  closedWith: { code: number | undefined; reason: string | undefined } | null = null;
-
-  send(data: string | Uint8Array): void {
-    this.sent.push(data);
-  }
-
-  close(code?: number, reason?: string): void {
-    this.closedWith = { code, reason };
-    queueMicrotask(() => this.emit('close', code, Buffer.from(reason ?? '')));
-  }
-
-  /** 届いたもののうち、部屋のメッセージ */
-  messages(): ServerMessage[] {
-    return this.sent.flatMap((data) =>
-      typeof data === 'string' ? [] : [decodeFrame(data) as ServerMessage],
-    );
-  }
-
-  hello(peerId: string): void {
-    const userId = `user-${peerId}`;
-    this.emit(
-      'message',
-      Buffer.from(
-        encode({
-          type: 'hello',
-          protocolVersion: PROTOCOL_VERSION,
-          peerId,
-          userId,
-          accessToken: signToken<'access'>(
-            { aud: 'access', sub: `discord:${peerId}`, uid: userId, name: peerId },
-            ACCESS_TOKEN_SECONDS,
-            LOGIN.SESSION_SECRET,
-          ),
-        }),
-      ),
-      true,
-    );
-  }
-}
 
 /** 部屋を作った部屋のサーバーと、別の設定の runtime */
 const setUp = async (options: { socketSeconds?: number; parkMs?: number } = {}) => {
@@ -152,7 +104,11 @@ describe('the room runtime', () => {
   it('opens a room again when it was let go while being waited for', async () => {
     const { runtime } = await setUp();
     const first = runtime.room('room');
-    void runtime.openRoom('room')?.then((room) => room.release());
+    // 1つめが受け取ったあと、2つめが受け取る前に放す
+    const { rooms } = runtime as unknown as {
+      rooms: Map<string, Promise<{ room: { release(): Promise<void> } }>>;
+    };
+    void rooms.get('room')?.then(({ room }) => room.release());
     const second = runtime.room('room');
 
     const [one, two] = await Promise.all([first, second]);
@@ -172,6 +128,16 @@ describe('the room runtime', () => {
 
     expect(await runtime.openRoom('room')).toBe(newer);
     await newer.release();
+  });
+
+  it('has nothing to let go on closing for a room another instance holds', async () => {
+    const { runtime } = await setUp();
+    const { rooms } = runtime as unknown as { rooms: Map<string, Promise<unknown>> };
+    rooms.set('room', Promise.resolve({ holder: 'there' }));
+
+    await runtime.close();
+
+    expect(await runtime.openRoom('room')).toBeNull();
   });
 
   it('closes back with the code it was closed with when it may, and with 1000 when not', async () => {

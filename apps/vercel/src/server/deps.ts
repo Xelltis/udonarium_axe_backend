@@ -10,6 +10,8 @@ import { LIMITS, redisLimiter } from './limits.js';
 import { redisLobby } from './lobby.js';
 import { connectRedis, keyOf } from './redis.js';
 import type { Redis } from './redis.js';
+import { Relay } from './rooms/relay.js';
+import type { RoomDeps } from './rooms/room.js';
 import { RoomRuntime } from './rooms/runtime.js';
 
 /**
@@ -33,6 +35,8 @@ export interface DepsOptions {
   defer?: (work: Promise<unknown>) => void;
   /** こちらから閉じてつなぎ直させた席を、残しておく時間（ミリ秒）を替える */
   parkMs?: number;
+  /** lease と見回りの間（ミリ秒）を替える */
+  timing?: RoomDeps['timing'];
 }
 
 /** 設定から、インスタンスで1つの部屋のサーバーのものを作る */
@@ -47,25 +51,31 @@ export const createServerDeps = async (
   const lobby = redisLobby(connection, key);
   const defer = options.defer ?? ((work: Promise<unknown>) => void work.catch(() => undefined));
   const assets = vercelAssets(connection, key, options.bucketOf(config), limit);
+  const instance = options.instance ?? crypto.randomUUID();
+  const relay = new Relay(connection, key, instance);
   const runtime = new RoomRuntime(
     {
       redis: connection,
       key,
       lobby,
-      instance: options.instance ?? crypto.randomUUID(),
+      instance,
+      isAlive: (other) => relay.isAlive(other),
       retentionSeconds: config.roomRetentionSeconds,
       sessionSecret: (roomKey) =>
         options.withoutLogin?.has(roomKey) ? null : (config.login?.sessionSecret ?? null),
       deleteAssets: (roomKey) => assets.deleteRoom(roomKey),
       defer,
+      timing: options.timing,
     },
     { socketSeconds: config.roomSocketSeconds, parkMs: options.parkMs },
+    relay,
   );
   return {
     redis: connection,
     key,
     lobby,
     runtime,
+    relay,
     assets,
     limit,
     upgrades,

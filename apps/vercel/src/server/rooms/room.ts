@@ -47,7 +47,12 @@ export interface Conn {
   readonly id: string;
   readonly socket: ConnSocket;
   seat: Seat | null;
+  /** ほかのインスタンスに着いた WebSocket なら、そのインスタンス。このインスタンスのものなら無い */
+  readonly instance?: string;
 }
+
+/** 部屋を開こうとした結果。ほかのインスタンスが持ち主なら、そのインスタンス */
+export type Claim = { room: VercelRoom } | { holder: string };
 
 /** 部屋が使う、インスタンスで1つのもの */
 export interface RoomDeps {
@@ -67,6 +72,8 @@ export interface RoomDeps {
   tombstoneLimits?: TombstoneLimits;
   /** lease と見回りの間（ミリ秒）。テストで短くする */
   timing?: { leaseMs: number; renewMs: number; tickMs: number };
+  /** そのインスタンスが生きているか。生きていなければ、その lease が切れるのを待つ */
+  isAlive?: (instance: string) => Promise<boolean>;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -100,13 +107,14 @@ export class VercelRoom implements RoomHost<Conn> {
   ) {}
 
   /**
-   * 部屋を開く。部屋があれば lease を取り（ほかが持っていれば空くまで待つ）、状態を読む。
+   * 部屋を開く。部屋があれば lease を取り、状態を読む。生きているほかのインスタンスが lease を持って
+   * いれば、そのインスタンスを返す（そちらへ中継する）。持ち主が落ちていれば、lease が切れるのを待つ。
    * 部屋が無ければ、つないできた人を断るだけの部屋を返す
    */
-  static async open(deps: RoomDeps, roomKey: string): Promise<VercelRoom> {
+  static async claim(deps: RoomDeps, roomKey: string): Promise<Claim> {
     const keys = roomKeysOf(deps.key, roomKey);
     const meta = await readRoomMeta(deps.redis, deps.key, roomKey);
-    if (!meta) return new VercelRoom(deps, roomKey, keys, null, '', new Map(), null);
+    if (!meta) return { room: new VercelRoom(deps, roomKey, keys, null, '', new Map(), null) };
     const epoch = await deps.redis.incr(keys.epoch);
     const lease = `${deps.instance}:${epoch}`;
     const leaseMs = deps.timing?.leaseMs ?? LEASE_MS;
@@ -116,6 +124,9 @@ export class VercelRoom implements RoomHost<Conn> {
         expiration: { type: 'PX', value: leaseMs },
       })) === null
     ) {
+      const holder = (await deps.redis.get(keys.lease))?.split(':')[0];
+      // このインスタンスの前の部屋が放すところなら待つ。ほかのインスタンスが生きていれば、そちらの部屋
+      if (holder && holder !== deps.instance && (await deps.isAlive?.(holder))) return { holder };
       await sleep(LEASE_POLL_MS);
     }
     const write = async (ops: Op[]) => {
@@ -135,7 +146,16 @@ export class VercelRoom implements RoomHost<Conn> {
       objects,
     );
     room.start();
-    return room;
+    return { room };
+  }
+
+  /** 部屋を開く。ほかのインスタンスが持ち主なら、放すまで待つ（このインスタンスで動かすとき） */
+  static async open(deps: RoomDeps, roomKey: string): Promise<VercelRoom> {
+    for (;;) {
+      const claim = await VercelRoom.claim(deps, roomKey);
+      if ('room' in claim) return claim.room;
+      await sleep(LEASE_POLL_MS);
+    }
   }
 
   private start(): void {
@@ -163,6 +183,19 @@ export class VercelRoom implements RoomHost<Conn> {
     this.engine.expireSeats();
     this.engine.dropStrayCursors();
     this.lobbyChanged(this.roomKey);
+    this.dropLostInstances().catch((err: unknown) =>
+      console.error('Could not look for lost instances:', err),
+    );
+  }
+
+  /** 落ちたインスタンス（生きている印の切れたもの）に着いていた接続を、出たことにする */
+  private async dropLostInstances(): Promise<void> {
+    const isAlive = this.deps.isAlive;
+    if (!isAlive) return;
+    for (const conn of [...this.conns]) {
+      if (conn.instance && !(await isAlive(conn.instance)) && this.conns.has(conn))
+        this.closed(conn);
+    }
   }
 
   // ---- 接続 ----
@@ -177,11 +210,19 @@ export class VercelRoom implements RoomHost<Conn> {
     this.engine.receive(conn, message);
   }
 
-  /** 接続が切れた。最後の1つなら、部屋を放す */
+  /**
+   * 接続が切れた。このインスタンスの接続が無くなったら、部屋を放す。持ち主は、自分の WebSocket を
+   * 持っているあいだだけ動いている（Vercel は、呼び出しの無いインスタンスを止めてしまう）
+   */
   closed(conn: Conn): void {
     this.engine.closed(conn);
     this.conns.delete(conn);
-    if (this.conns.size === 0) void this.release();
+    if (![...this.conns].some((other) => !other.instance)) this.letGo();
+  }
+
+  /** ほかのインスタンスに着いた接続 */
+  get remotes(): Conn[] {
+    return [...this.conns].filter((conn) => conn.instance);
   }
 
   /** いまの接続の数 */
@@ -207,6 +248,17 @@ export class VercelRoom implements RoomHost<Conn> {
     this.engine.closeAll();
     await this.wipe();
     return 'deleted';
+  }
+
+  /**
+   * ほかのインスタンスで、この部屋の GM が部屋を削除した（そちらで確かめて、消す印も付けてある）。
+   * 入っている人に room-deleted を送ってから閉じ、残りを消す
+   */
+  async deletedElsewhere(): Promise<void> {
+    if (!this.meta || this.deleting) return;
+    this.record('delete', 'gm', this.engine.seats().length);
+    this.engine.closeAll();
+    await this.wipe();
   }
 
   /**
@@ -241,7 +293,12 @@ export class VercelRoom implements RoomHost<Conn> {
   stepDown(): void {
     if (this.released) return;
     for (const conn of this.conns) this.close(conn, 1012, 'moved');
-    void this.release();
+    this.letGo();
+  }
+
+  /** 放す。うまく放せなくても（Redis が落ちた）、lease は切れて、ほかのインスタンスが取る */
+  private letGo(): void {
+    this.release().catch((err: unknown) => console.error('Could not let the room go:', err));
   }
 
   /** まとめておいた変更を書き、書き終えてから lease を返す */

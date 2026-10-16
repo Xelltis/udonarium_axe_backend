@@ -108,6 +108,18 @@ describe('a room held on Vercel', () => {
     expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toBeNull();
   });
 
+  it('waits for a live instance holding the room to let it go, to open the room itself', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis, {
+      isAlive: () => Promise.resolve(true),
+    });
+    await connection.redis.set(roomKeysOf(key, 'room').lease, 'there:1', { PX: 150 });
+
+    const room = await VercelRoom.open(deps, 'room');
+
+    expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toMatch(/^here:/);
+    await room.release();
+  });
+
   it('keeps its lease for as long as it holds the room', async () => {
     const { deps, key } = await roomDepsOf(connection.redis);
     const room = await VercelRoom.open(deps, 'room');
@@ -189,6 +201,22 @@ describe('a room held on Vercel', () => {
     room.tick();
   });
 
+  it('says so when it cannot tell whether another instance is still there', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { deps } = await roomDepsOf(connection.redis, {
+      isAlive: () => Promise.reject(new Error('down')),
+    });
+    const room = await VercelRoom.open(deps, 'room');
+    room.accept({ ...connOf('far'), instance: 'there' });
+
+    room.tick();
+
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Could not look for lost instances:', expect.any(Error)),
+    );
+    await room.release();
+  });
+
   it('still deletes the room when its assets cannot be, and says so', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { deps, key } = await roomDepsOf(connection.redis, {
@@ -229,6 +257,7 @@ describe('a room held on Vercel', () => {
 
     expect(conn.closedWith).toEqual({ code: 4000, reason: 'room-not-found' });
     expect(await room.deleteRoom('user-gm')).toBe('not-found');
+    await room.deletedElsewhere();
     expect(info).not.toHaveBeenCalled();
     room.onRelease();
     await room.release();

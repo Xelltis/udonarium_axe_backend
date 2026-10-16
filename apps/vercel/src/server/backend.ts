@@ -8,6 +8,7 @@ import { redisAccount } from './accounts.js';
 import type { RedisLobby } from './lobby.js';
 import type { KeyOf, Redis } from './redis.js';
 import { createRoom, expiryKeyOf, readRoomMeta, roomKeysOf } from './rooms/keys.js';
+import type { Relay } from './rooms/relay.js';
 import type { RoomRuntime } from './rooms/runtime.js';
 
 /**
@@ -22,6 +23,8 @@ export interface ServerDeps {
   key: KeyOf;
   lobby: RedisLobby;
   runtime: RoomRuntime;
+  /** ほかのインスタンスとの中継 */
+  relay: Relay;
   assets: AssetBackend;
   limit: (request: Request, kind: LimitKind) => Promise<boolean>;
   upgrades: Upgrades;
@@ -64,7 +67,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
         });
         await lobby.setGameMasters(init.roomKey, [init.creatorUserId]);
       },
-      remove: (roomKey, userId) => runtime.withRoom(roomKey, (room) => room.deleteRoom(userId)),
+      remove: (roomKey, userId) => runtime.deleteRoom(roomKey, userId),
       /**
        * アセットを置こうとしている人が、いまもこの部屋で置ける役割（GM か PL）か。部屋をこのインスタンスで
        * 開いていればその席で、そうでなければ持ち主が Redis に書いた席の写しで答える
