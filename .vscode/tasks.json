@@ -4,7 +4,7 @@
         {
             "label": "phpstan: analyse",
             "type": "shell",
-            "command": "docker run --rm -v \"${workspaceFolder}:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpstan analyse",
+            "command": "docker run --rm -v \"${workspaceFolder}/apps/php:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpstan analyse",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -13,7 +13,7 @@
             },
             "problemMatcher": {
                 "owner": "phpstan",
-                "fileLocation": ["relative", "${workspaceFolder}"],
+                "fileLocation": ["relative", "${workspaceFolder}/apps/php"],
                 "pattern": {
                     "regexp": "^\\s*(\\S.*?):(\\d+):\\s+(.*)$",
                     "file": 1,
@@ -25,7 +25,7 @@
         {
             "label": "phpunit: test",
             "type": "shell",
-            "command": "docker run --rm -v \"${workspaceFolder}:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpunit",
+            "command": "docker run --rm -v \"${workspaceFolder}/apps/php:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpunit",
             "group": {
                 "kind": "test",
                 "isDefault": true
@@ -40,7 +40,7 @@
         {
             "label": "php-cs-fixer: check",
             "type": "shell",
-            "command": "docker run --rm -v \"${workspaceFolder}:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer check --diff",
+            "command": "docker run --rm -v \"${workspaceFolder}/apps/php:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer check --diff",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -52,7 +52,7 @@
         {
             "label": "php-cs-fixer: fix",
             "type": "shell",
-            "command": "docker run --rm -v \"${workspaceFolder}:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer fix",
+            "command": "docker run --rm -v \"${workspaceFolder}/apps/php:/var/www/html\" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer fix",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -64,7 +64,7 @@
         {
             "label": "composer: install",
             "type": "shell",
-            "command": "docker run --rm -v \"${workspaceFolder}:/var/www/html\" -w /var/www/html udonarium-axe-backend-app composer install --no-interaction",
+            "command": "docker run --rm -v \"${workspaceFolder}/apps/php:/var/www/html\" -w /var/www/html udonarium-axe-backend-app composer install --no-interaction",
             "group": "build",
             "presentation": {
                 "reveal": "always",

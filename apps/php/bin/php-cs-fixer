@@ -1,0 +1,34 @@
+#!/bin/bash
+# A wrapper script that runs php-cs-fixer inside a Docker container.
+# The VS Code php-cs-fixer extension (junstyle.php-cs-fixer) calls
+# this script.
+#
+# Usage:
+#   bin/php-cs-fixer [php-cs-fixer arguments...]
+#
+# The arguments go to vendor/bin/php-cs-fixer as they are.
+# The project root is fixed as the mount point, so that paths
+# inside the container match paths on the host.
+
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# shellcheck source=bin/.config
+. "$(dirname "$0")/.config"
+
+# The VS Code extension passes absolute paths on the host as arguments.
+# The same paths do not exist inside the container, so the host's project root
+# in every argument is replaced with the mount point inside the container.
+args=()
+for arg in "$@"; do
+    args+=("${arg//${PROJECT_ROOT}/${DOCKER_CONTAINER_ROOT}}")
+done
+
+exec docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "${PROJECT_ROOT}:${DOCKER_CONTAINER_ROOT}" \
+  -v "/tmp:/tmp" \
+  -w "${DOCKER_CONTAINER_ROOT}" \
+  "${DOCKER_IMAGE}" \
+  vendor/bin/php-cs-fixer "${args[@]}"

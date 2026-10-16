@@ -1,14 +1,49 @@
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx --no -- commitlint --edit {1}
+
 pre-commit:
   parallel: true
-  commands:
-    php-cs-fixer:
-      glob: "*.php"
+  jobs:
+    - name: php-cs-fixer
+      root: 'apps/php/'
+      glob: '*.php'
       run: docker run --rm -v "$PWD:/var/www/html" -w /var/www/html udonarium-axe-backend-app vendor/bin/php-cs-fixer check --diff --config=.php-cs-fixer.php {staged_files}
-    phpstan:
-      glob: "*.php"
+
+    - name: phpstan
+      root: 'apps/php/'
+      glob: '*.php'
       run: docker run --rm -v "$PWD:/var/www/html" -w /var/www/html udonarium-axe-backend-app vendor/bin/phpstan analyse --memory-limit=256M
 
-commit-msg:
-  commands:
-    commitlint:
-      run: npx --no -- commitlint --edit {1}
+    - name: lint (cloudflare)
+      root: 'apps/cloudflare/'
+      glob: '*.{ts,mts,js,mjs}'
+      run: npx eslint {staged_files}
+
+    - name: lint (vercel)
+      root: 'apps/vercel/'
+      glob: '*.{ts,mts,js,mjs}'
+      run: npx eslint {staged_files}
+
+    # The shared code is changed in apps/cloudflare and copied to apps/vercel; a copy left behind fails CI.
+    - name: shared code in step
+      glob:
+        - 'apps/{cloudflare,vercel}/src/core/**'
+        - 'apps/{cloudflare,vercel}/contracts/**'
+        - 'apps/{cloudflare,vercel}/test/shared/**'
+        - 'apps/{cloudflare,vercel}/package.json'
+      run: node scripts/sync-shared.mjs --check
+
+pre-push:
+  jobs:
+    # Each runs only when the push changes something in its app.
+    - name: test (cloudflare)
+      root: 'apps/cloudflare/'
+      glob: '*'
+      run: npm run typecheck && npm test
+
+    - name: test (vercel)
+      root: 'apps/vercel/'
+      glob: '*'
+      run: npm run typecheck && npm run check:esm && npm test

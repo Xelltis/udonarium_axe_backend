@@ -1,0 +1,4 @@
+This API serves no static assets.
+This directory being empty is what keeps Vercel's zero-config static build
+from publishing the whole repository (src/, tsconfig.json and the rest).
+vercel.json's outputDirectory points here, so do not delete it.

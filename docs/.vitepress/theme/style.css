@@ -1,0 +1,51 @@
+/**
+ * The palette follows the Udonarium Axe user guide (#8b7cf6), so the two sites
+ * read as one product.
+ */
+:root {
+  --vp-c-brand-1: #6b4fd8;
+  --vp-c-brand-2: #7c62e0;
+  --vp-c-brand-3: #8b7cf6;
+  --vp-c-brand-soft: rgb(139 124 246 / 0.14);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #8b7cf6 30%, #41b6e6);
+}
+
+.dark {
+  --vp-c-brand-1: #a897fb;
+  --vp-c-brand-2: #8b7cf6;
+  --vp-c-brand-3: #7c62e0;
+  --vp-c-brand-soft: rgb(139 124 246 / 0.22);
+}
+
+/* ---------------------------------------------------------------- tables */
+
+.vp-doc .table-wrap {
+  overflow-x: auto;
+  margin: 22px 0;
+}
+
+.vp-doc .table-wrap > table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+}
+
+/*
+ * Japanese breaks between any two characters, so a heading or a label cell can
+ * be squeezed down to one character per line. `keep-all` keeps each word whole
+ * while still allowing a break at spaces and slashes.
+ */
+.vp-doc .table-wrap > table th,
+.vp-doc .table-wrap > table td:first-child {
+  word-break: keep-all;
+}
+
+/* ------------------------------------------------------------- diagrams */
+
+/* Box-drawing diagrams line up only when every glyph is the same width. */
+.vp-doc div[class*='language-text'] pre {
+  line-height: 1.5;
+}

@@ -1,0 +1,27 @@
+# Blocks direct access to secret files and files for development.
+
+<FilesMatch "^(\..+|Dockerfile(\..+)?|docker-compose(\..+)?|compose\.yml|composer\.(json|lock)|package(-lock)?\.json|.+\.lock|phpunit\.xml|phpstan\.neon)$">
+Require all denied
+</FilesMatch>
+
+RewriteEngine On
+
+# Blocks access to directories and files whose names start with a dot
+# (.git, .github, .vscode, .env and so on. The FilesMatch above looks only at file names, so
+#  files under a dot directory, such as .git/config, are blocked here).
+# Only .well-known/, which ACME and the like use, is let through, as an exception.
+
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+# Blocks access to directories such as vendor/ (handled before the check for files that exist).
+
+RewriteRule ^(vendor|tests|bin|docs|coverage-report|node_modules|stubs)(/|$) - [F,L]
+
+# Lets requests for files that exist straight through (static files and so on).
+
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Routes everything else to index.php.
+
+RewriteRule ^ index.php [QSA,L]

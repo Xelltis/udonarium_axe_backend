@@ -14,6 +14,9 @@ jobs:
       fail-fast: false
       matrix:
         php: ["8.3", "8.4", "8.5"]
+    defaults:
+      run:
+        working-directory: apps/php
 
     steps:
       - uses: actions/checkout@v7
@@ -43,27 +46,220 @@ jobs:
         uses: codecov/codecov-action@v7
         if: matrix.php == '8.5'
         with:
-          files: coverage.xml
+          files: apps/php/coverage.xml
+          flags: php
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      # テストが落ちたときこそ結果を送りたいので、失敗後も実行する。
-      # 先行ステップの失敗で junit.xml が無い場合はエラー扱いにしない。
+      # Runs even after a failure, since the results matter most when a test fails.
+      # A missing junit.xml, after an earlier step failed, is not taken as an error.
       - name: Upload test results to Codecov
         uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           report_type: test_results
-          files: junit.xml
+          files: apps/php/junit.xml
           disable_search: true
           handle_no_reports_found: true
           flags: php${{ matrix.php }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  vercel:
+    name: Vercel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/vercel
+    # For the tests that use the room server's store (Redis).
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/vercel/package.json
+          cache: npm
+          cache-dependency-path: apps/vercel/package-lock.json
+
+      - run: npm ci
+
+      # src/core, contracts and test/shared are copied from apps/cloudflare. A stale copy fails here.
+      - name: Check that the code shared with the Cloudflare app is in step
+        run: node ../../scripts/sync-shared.mjs --check
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      # Only this step catches a relative import missing its extension.
+      # Vercel transpiles without checking types, so a missing one becomes
+      # ERR_MODULE_NOT_FOUND in production (see b0995cc).
+      - run: npm run typecheck
+
+      # The tests go through Vite, so they miss imports that bare Node cannot read (a JSON import
+      # missing its attribute, say). Reads what tsc puts out with bare Node, and rolls BCDice once.
+      - run: npm run check:esm
+
+      - run: npm test
+
+      # Uploads even when npm test fails on the coverage threshold, so that the lines
+      # that fell short can be traced on Codecov.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: apps/vercel/coverage/lcov.info
+          flags: vercel
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - run: npm run coverage:check
+
+  cloudflare:
+    name: Cloudflare
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cloudflare
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/cloudflare/package.json
+          cache: npm
+          cache-dependency-path: apps/cloudflare/package-lock.json
+
+      - run: npm ci
+
+      # The tests run on the wrangler and workerd that vitest-pool-workers carries. The wrangler for dev
+      # and deploy is kept at the same version, so that nothing runs on a runtime other than the tests'
+      # (upgrading wrangler alone fails here).
+      - name: Check that the tests and wrangler share one workerd
+        run: test "$(npm query '#workerd' | jq '[.[].version] | unique | length')" = 1
+
+      # src/core, contracts and test/shared are copied to apps/vercel. A stale copy fails here.
+      - name: Check that the code shared with the Vercel app is in step
+        run: node ../../scripts/sync-shared.mjs --check
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      - run: npm run typecheck
+
+      # Runs in the Workers runtime (workerd), with R2 and the rate limits stood up locally.
+      # Fails when coverage drops below 100%.
+      - run: npm test
+
+      # Uploads even when npm test fails on the coverage threshold, so that the lines
+      # that fell short can be traced on Codecov.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: apps/cloudflare/coverage/lcov.info
+          flags: cloudflare
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Deploys what reached main to the Workers, once the Cloudflare job passes.
+  # The targets go in the repository Variable CLOUDFLARE_DEPLOY_ENVIRONMENTS, as a JSON array of
+  # GitHub Environment names (for example ["cloudflare-production", "cloudflare-public"]). Without it,
+  # nothing is deployed. Each Environment holds these Secrets:
+  #   - WORKER_NAME (the Worker's name. The first deploy creates the R2 bucket `<this name>-assets`)
+  #   - ACCESS_CONTROL_ALLOW_ORIGIN (the origins that serve the app, comma-separated)
+  #   - CLOUDFLARE_API_TOKEN (Workers Admin and R2 Storage Write and Read the first time, then narrowed
+  #     to Workers Editor for that Worker alone. Keep it in an Environment only main can use)
+  #   - CLOUDFLARE_ACCOUNT_ID (may be a repository Secret instead)
+  #   - DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET (for login and rooms; all three)
+  # ACCESS_CONTROL_ALLOW_ORIGIN and the three for login are put in as Worker secrets again on every
+  # deploy, at the same version as the code.
+  deploy-cloudflare:
+    name: Deploy Cloudflare (${{ matrix.environment }})
+    needs: [cloudflare]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS) }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: deploy-cloudflare-${{ matrix.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloudflare
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/cloudflare/package.json
+          cache: npm
+          cache-dependency-path: apps/cloudflare/package-lock.json
+
+      - run: npm ci
+
+      # The secrets are written as JSON to the runner's temporary directory and sent along with the code
+      # by --secrets-file. The local origin (localhost) in wrangler.jsonc's vars gives way to the secret of
+      # the same name.
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ secrets.WORKER_NAME }}
+          ACCESS_CONTROL_ALLOW_ORIGIN: ${{ secrets.ACCESS_CONTROL_ALLOW_ORIGIN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          for name in WORKER_NAME ACCESS_CONTROL_ALLOW_ORIGIN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured for the $ENVIRONMENT environment"
+              exit 1
+            fi
+          done
+          # The three for login go in together or not at all. With only some, the Worker answers config-invalid.
+          login=0
+          for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET; do
+            [ -n "${!name}" ] && login=$((login + 1))
+          done
+          if [ "$login" -ne 0 ] && [ "$login" -ne 3 ]; then
+            echo "::error::Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET together for the $ENVIRONMENT environment"
+            exit 1
+          fi
+          secrets="$RUNNER_TEMP/worker-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          (umask 077 && jq -n '{ACCESS_CONTROL_ALLOW_ORIGIN: env.ACCESS_CONTROL_ALLOW_ORIGIN}
+            + if (env.SESSION_SECRET // "") != "" then {
+                DISCORD_CLIENT_ID: env.DISCORD_CLIENT_ID,
+                DISCORD_CLIENT_SECRET: env.DISCORD_CLIENT_SECRET,
+                SESSION_SECRET: env.SESSION_SECRET
+              } else {} end' > "$secrets")
+          npx wrangler deploy --name "$WORKER_NAME" --secrets-file "$secrets"
+
   release:
     name: Release
-    needs: test
+    needs: [test, vercel, cloudflare]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -83,14 +279,14 @@ jobs:
       - name: Build release archive
         run: |
           mkdir -p dist
-          zip -r dist/udonarium-axe-backend.zip \
+          # Puts what is in apps/php at the top of the zip, so that where it is unpacked is the document root.
+          (cd apps/php && zip -r ../../dist/udonarium-axe-backend.zip \
             index.php \
             .htaccess \
             .env.example \
-            src/ \
-            docs/ \
+            src/)
+          zip dist/udonarium-axe-backend.zip \
             LICENSE \
-            README.md \
             CHANGELOG.md \
             CONTRIBUTING.md
 
@@ -100,7 +296,7 @@ jobs:
       - name: Release
         run: npx semantic-release
         env:
-          # main の ruleset で PR 必須・必須ステータスチェックを課しているため、
-          # GITHUB_TOKEN では @semantic-release/git のリリースコミットが弾かれる。
-          # bypass 対象である Organization 管理者の PAT を使う。
+          # The main ruleset requires a PR and status checks, so GITHUB_TOKEN cannot push
+          # @semantic-release/git's release commit. Uses the PAT of an organization admin,
+          # who is on the bypass list.
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

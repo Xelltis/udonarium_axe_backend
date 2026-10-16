@@ -3,13 +3,14 @@
 codecov:
   require_ci_to_pass: true
   notify:
-    # coverage.xml をアップロードするのは CI の PHP 8.5 ジョブ 1 つだけ
-    after_n_builds: 1
+    # Three jobs upload coverage: PHP 8.5, Vercel and Cloudflare.
+    after_n_builds: 3
 
 coverage:
   precision: 2
   round: down
-  # src/ は現状 100%。低下が色で分かるよう下限を高めに置く
+  # apps/php/src/, apps/vercel's src/ and api/, and apps/cloudflare/src/ are at 100% today. The
+  # floor is set high, so that a drop shows in color.
   range: "90...100"
   status:
     project:
@@ -23,20 +24,42 @@ coverage:
         threshold: 0%
         only_pulls: true
 
+# Each app has its own flag, so that a PR changing only one keeps the other's numbers.
+flags:
+  php:
+    paths:
+      - apps/php/
+    carryforward: true
+  vercel:
+    paths:
+      - apps/vercel/
+    carryforward: true
+  cloudflare:
+    paths:
+      - apps/cloudflare/
+    carryforward: true
+
 comment:
-  layout: "header, diff, files"
+  layout: "header, diff, flags, files"
   behavior: default
-  # テスト結果はカバレッジコメントに同梱されるため、カバレッジ不変の PR で
-  # コメントを抑制するとテスト失敗も表に出ない。require_changes にテスト失敗の
-  # 条件は無いので false にする。
+  # Test results come inside the coverage comment, so holding the comment back on PRs
+  # that leave coverage as it was would hide failing tests too. require_changes has no
+  # condition for failing tests, so it is set to false.
   require_changes: false
 
-# 計測対象は phpunit.xml の <source> で src/ に限定済み。
-# 将来 <source> を広げたときの保険として除外を明示する。
+# PHP's coverage is limited to src/ by the <source> in apps/php/phpunit.xml.
+# The Vercel and Cloudflare exclusions match coverage.exclude in each vitest.config.ts.
+# Both are spelled out, so that the intent holds even if the reporter or <source> settings change.
 ignore:
-  - "tests/**"
-  - "bin/**"
+  - "apps/php/tests/**"
+  - "apps/php/bin/**"
+  - "apps/php/vendor/**"
+  - "apps/php/index.php"
+  - "apps/vercel/test/**"
+  - "apps/vercel/scripts/**"
+  - "apps/vercel/src/**/types.ts"
+  - "apps/vercel/src/http/context.ts"
+  - "apps/cloudflare/test/**"
+  - "apps/cloudflare/src/**/*.d.ts"
+  - "apps/cloudflare/src/http/context.ts"
   - "stubs/**"
-  - "docs/**"
-  - "vendor/**"
-  - "index.php"

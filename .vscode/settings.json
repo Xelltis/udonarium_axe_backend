@@ -1,38 +1,38 @@
 {
-  // PHPStan 拡張機能 (sanderronde.phpstan-vscode) の設定
-  // bin/phpstan ラッパー経由で Docker コンテナ内の PHPStan を呼び出す
-  "phpstan.binPath": "${workspaceFolder}/bin/phpstan",
-  "phpstan.configFile": "${workspaceFolder}/phpstan.neon",
+  // Settings for the PHPStan extension (sanderronde.phpstan-vscode)
+  // Calls PHPStan in the Docker container through the bin/phpstan wrapper
+  "phpstan.binPath": "${workspaceFolder}/apps/php/bin/phpstan",
+  "phpstan.configFile": "${workspaceFolder}/apps/php/phpstan.neon",
 
-  // ファイル保存時に自動解析を実行する
+  // Analyzes a file when it is saved
   "phpstan.singleFileMode": false,
   "phpstan.enabled": true,
 
-  // vendor/ 内のファイルは解析対象外
+  // Files in vendor/ are not analyzed
   "phpstan.paths": {
-    "/var/www/html": "${workspaceFolder}"
+    "/var/www/html": "${workspaceFolder}/apps/php"
   },
 
-  // php-cs-fixer 拡張機能 (junstyle.php-cs-fixer) の設定
-  // bin/php-cs-fixer ラッパー経由で Docker コンテナ内の php-cs-fixer を呼び出す
-  "php-cs-fixer.executablePath": "${workspaceFolder}/bin/php-cs-fixer",
-  "php-cs-fixer.config": ".php-cs-fixer.php",
+  // Settings for the php-cs-fixer extension (junstyle.php-cs-fixer)
+  // Calls php-cs-fixer in the Docker container through the bin/php-cs-fixer wrapper
+  "php-cs-fixer.executablePath": "${workspaceFolder}/apps/php/bin/php-cs-fixer",
+  "php-cs-fixer.config": "apps/php/.php-cs-fixer.php",
   "php-cs-fixer.onsave": true,
 
-  // PHP ファイルのデフォルトフォーマッターを php-cs-fixer に設定
+  // Makes php-cs-fixer the default formatter for PHP files
   "[php]": {
     "editor.defaultFormatter": "junstyle.php-cs-fixer"
   },
 
-  // ファイル関連付け
+  // File associations
   "files.associations": {
     "*.php": "php"
   },
 
-  // PHPUnit 拡張機能 (recca0120.vscode-phpunit) の設定
-  // 拡張機能は "{php} {phpunit} [args]" の形式でコマンドを組み立てるため
-  // bin/php ラッパーを PHP バイナリとして指定する
-  "phpunit.php": "${workspaceFolder}/bin/php",
+  // Settings for the PHPUnit extension (recca0120.vscode-phpunit)
+  // The extension puts its command together as "{php} {phpunit} [args]",
+  // so the bin/php wrapper is given as the PHP binary
+  "phpunit.php": "${workspaceFolder}/apps/php/bin/php",
   "phpunit.phpunit": "vendor/bin/phpunit",
-  "phpunit.xml": "${workspaceFolder}/phpunit.xml"
+  "phpunit.xml": "${workspaceFolder}/apps/php/phpunit.xml"
 }
