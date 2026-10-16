@@ -29,7 +29,7 @@ features:
   - icon:
       src: /icons/server.svg
     title: サーバー版を置く
-    details: 全員が部屋のサーバーにつながる方式です。卓が残り、見てはいけないものは届かず、GMとPLはDiscordでログインします。CloudflareかVercelに置きます。Axe v1.68.0から使えます。
+    details: 全員が部屋のサーバーにつながる方式です。卓が残り、裏向きのカードや秘話は見てはいけない人に届かず、GMとPLはDiscordでログインします。CloudflareかVercelに置きます。Axe v1.68.0から使えます。
     link: /server/
     linkText: サーバー版へ
   - icon:
