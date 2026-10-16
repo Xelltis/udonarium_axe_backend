@@ -6,7 +6,8 @@
 //   node scripts/sync-shared.mjs          copies (and deletes what only apps/vercel has)
 //   node scripts/sync-shared.mjs --check  checks the copies are the same; exits with 1 if not (CI)
 //
-// The npm packages the shared code uses are given the same version range in both package.json files.
+// The npm packages the shared code uses, and the Prettier that lays it out, are given the same version
+// range in both package.json files.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,8 @@ const SOURCE = join(ROOT, 'apps/cloudflare');
 const TARGET = join(ROOT, 'apps/vercel');
 const SHARED = ['src/core', 'contracts', 'test/shared'];
 const DEPENDENCIES = ['@msgpack/msgpack', 'bcdice', 'hono', 'valibot'];
+// Prettier lays out both copies of the shared code, which have to come out byte for byte the same.
+const DEV_DEPENDENCIES = ['prettier'];
 
 const check = process.argv.includes('--check');
 
@@ -55,15 +58,17 @@ for (const dir of SHARED) {
   }
 }
 
-const dependenciesOf = (app) =>
-  JSON.parse(readFileSync(join(app, 'package.json'), 'utf-8')).dependencies ?? {};
-const sourceDependencies = dependenciesOf(SOURCE);
-const targetDependencies = dependenciesOf(TARGET);
-for (const name of DEPENDENCIES) {
-  if (sourceDependencies[name] !== targetDependencies[name]) {
-    problems.push(
-      `${name} is ${sourceDependencies[name]} in apps/cloudflare but ${targetDependencies[name]} in apps/vercel`,
-    );
+const packageOf = (app) => JSON.parse(readFileSync(join(app, 'package.json'), 'utf-8'));
+const [source, target] = [packageOf(SOURCE), packageOf(TARGET)];
+for (const [field, names] of [
+  ['dependencies', DEPENDENCIES],
+  ['devDependencies', DEV_DEPENDENCIES],
+]) {
+  for (const name of names) {
+    const [inSource, inTarget] = [source[field]?.[name], target[field]?.[name]];
+    if (inSource !== inTarget) {
+      problems.push(`${name} is ${inSource} in apps/cloudflare but ${inTarget} in apps/vercel`);
+    }
   }
 }
 

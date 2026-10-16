@@ -26,6 +26,15 @@ pre-commit:
       glob: '*.{ts,mts,js,mjs}'
       run: npx eslint {staged_files}
 
+    # The shared code is changed in apps/cloudflare and copied to apps/vercel; a copy left behind fails CI.
+    - name: shared code in step
+      glob:
+        - 'apps/{cloudflare,vercel}/src/core/**'
+        - 'apps/{cloudflare,vercel}/contracts/**'
+        - 'apps/{cloudflare,vercel}/test/shared/**'
+        - 'apps/{cloudflare,vercel}/package.json'
+      run: node scripts/sync-shared.mjs --check
+
 pre-push:
   jobs:
     # Each runs only when the push changes something in its app.
