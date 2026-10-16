@@ -4,18 +4,29 @@ import type { MiddlewareHandler } from 'hono';
 
 import { parseServerConfig } from '../config/server.js';
 import type { VercelServerConfig } from '../config/server.js';
+import { sameText } from '../core/auth/secrets.js';
 import type { ServerBackend, ServerEnv } from '../core/http/backend.js';
 import { onError } from '../core/http/errors.js';
 import { serverRoutes } from '../core/http/routes/index.js';
 
-/** 部屋のサーバーの経路（/v1 の下）。SkyWay の経路とは、設定もエラーの形も別 */
-export const SERVER_PATHS = ['/rooms', '/rooms/*', '/auth/*', '/account', '/account/*', '/login/*'];
+/** 部屋のサーバーの経路。SkyWay の経路とは、設定もエラーの形も別 */
+export const SERVER_PATHS = [
+  '/v1/rooms',
+  '/v1/rooms/*',
+  '/v1/auth/*',
+  '/v1/account',
+  '/v1/account/*',
+  '/v1/login/*',
+  '/internal/sweep',
+];
 
 export interface ServerAppOptions {
   /** 環境変数。置かなければ process.env */
   env?: () => Record<string, string | undefined>;
   /** 設定に合う部屋のサーバー */
   backendFor: (config: VercelServerConfig) => Promise<ServerBackend>;
+  /** 消す時刻を過ぎた部屋を消す。消した部屋の数 */
+  sweep: (config: VercelServerConfig) => Promise<number>;
 }
 
 type ServerAppEnv = ServerEnv & { Variables: { config: VercelServerConfig } };
@@ -35,6 +46,15 @@ export const serverApp = (options: ServerAppOptions): Hono<ServerAppEnv> => {
   const app = new Hono<ServerAppEnv>();
   app.onError(onError);
   for (const path of SERVER_PATHS) app.use(path, loader);
-  app.route('/', serverRoutes());
+  app.route('/v1', serverRoutes());
+  // Vercel Cron が呼ぶ掃除。CRON_SECRET を置いていれば、Vercel が付ける Authorization を確かめる
+  app.get('/internal/sweep', async (c) => {
+    const config = c.get('config');
+    const authorization = c.req.header('Authorization') ?? '';
+    if (config.cronSecret && !sameText(authorization, `Bearer ${config.cronSecret}`)) {
+      return c.body(null, 401);
+    }
+    return c.json({ swept: await options.sweep(config) });
+  });
   return app;
 };

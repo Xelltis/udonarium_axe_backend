@@ -10,6 +10,7 @@ import type { KeyOf, Redis } from './redis.js';
 import { createRoom, expiryKeyOf, readRoomMeta, roomKeysOf } from './rooms/keys.js';
 import type { Relay } from './rooms/relay.js';
 import type { RoomRuntime } from './rooms/runtime.js';
+import type { RoomSweeper } from './rooms/sweep.js';
 
 /**
  * WebSocket につなぎ替える要求。Node のサーバーが、upgrade の要求を app に渡す前に置き、
@@ -25,6 +26,8 @@ export interface ServerDeps {
   runtime: RoomRuntime;
   /** ほかのインスタンスとの中継 */
   relay: Relay;
+  /** 消す時刻を過ぎた部屋の掃除 */
+  sweeper: RoomSweeper;
   assets: AssetBackend;
   limit: (request: Request, kind: LimitKind) => Promise<boolean>;
   upgrades: Upgrades;
@@ -33,9 +36,12 @@ export interface ServerDeps {
 
 /** Vercel の部屋のサーバー。部屋・一覧・アカウントは Redis に、部屋のアセットは Blob に置く */
 export const vercelBackend = (deps: ServerDeps): ServerBackend => {
-  const { redis, key, lobby, runtime } = deps;
+  const { redis, key, lobby, runtime, sweeper } = deps;
 
-  /** 保持期間を過ぎた部屋は、消すのが遅れていても一覧に出さない */
+  /**
+   * 消す時刻を過ぎた部屋は、消すのが遅れていても一覧に出さない。時刻の無い部屋は、もう消えた（部屋と
+   * 一緒に時刻も消す）
+   */
   const live = async (rooms: RoomSummary[]): Promise<RoomSummary[]> => {
     if (rooms.length === 0) return rooms;
     const now = Date.now();
@@ -43,13 +49,17 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
       expiryKeyOf(key),
       rooms.map((room) => room.roomKey),
     );
-    return rooms.filter((_, index) => (wipeAt[index] ?? Infinity) > now);
+    return rooms.filter((_, index) => Number(wipeAt[index]) > now);
   };
 
   return {
     limit: deps.limit,
     lobby: {
-      list: async (userId) => live(await lobby.list(userId)),
+      // 部屋の一覧・作る・入るのついでに、消す時刻を過ぎた部屋を掃除する
+      list: async (userId) => {
+        sweeper.soon();
+        return live(await lobby.list(userId));
+      },
       find: async (roomKey, userId) => {
         const room = await lobby.find(roomKey, userId);
         return room && ((await live([room]))[0] ?? null);
@@ -57,6 +67,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
     },
     rooms: {
       create: async (init) => {
+        sweeper.soon();
         const hasPassword = await createRoom(redis, key, init, deps.retentionSeconds);
         await lobby.register({
           roomKey: init.roomKey,
@@ -88,6 +99,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
       connect: async (request, roomKey) => {
         const accept = deps.upgrades.get(request);
         if (!accept) return failure(426, 'upgrade-required');
+        sweeper.soon();
         accept((ws) => runtime.attach(ws, roomKey));
         // WebSocket に替わったので、この応答は使われない
         return new Response(null);

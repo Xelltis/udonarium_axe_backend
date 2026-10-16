@@ -13,7 +13,7 @@ import type { StoreKeys } from './store.js';
 //   r:<鍵>:seats   HASH  接続の ID → 席の JSON（いま入っている人。アセットを置けるかを尋ねるため）
 //   r:<鍵>:lease   STR   部屋の持ち主（インスタンス:epoch）。持ち主が延ばし続ける
 //   r:<鍵>:epoch   STR   持ち主が替わるたびに増やす数
-//   rooms:expiry   ZSET  部屋の鍵 → 消す時刻（だれもいなくなった部屋と、消しきれなかった部屋）
+//   rooms:expiry   ZSET  部屋の鍵 → 消す時刻。人がいるあいだは持ち主が先へ延ばし続ける（sweep.ts が消す）
 
 export interface RoomKeys extends StoreKeys, Fence {
   roles: string;

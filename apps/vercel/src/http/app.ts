@@ -21,7 +21,7 @@ export const createApp = (options: AppOptions = {}): Hono<AppEnv> => {
   const app = new Hono<AppEnv>();
   app.onError(onError);
   app.route('/', rootRoute);
-  if (options.server) app.route('/v1', serverApp(options.server));
+  if (options.server) app.route('/', serverApp(options.server));
   for (const path of SKYWAY_PATHS) app.use(path, configLoader(), createCorsMiddleware());
   app.route('/v1', v1Routes);
   return app;

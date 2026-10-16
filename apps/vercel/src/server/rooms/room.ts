@@ -177,11 +177,15 @@ export class VercelRoom implements RoomHost<Conn> {
     for (const timer of this.timers) timer.unref();
   }
 
-  /** 見回り。トークンの切れた席と、いない人のカーソルを片付け、一覧の人数を合わせる */
+  /**
+   * 見回り。トークンの切れた席と、いない人のカーソルを片付け、一覧の人数を合わせる。人がいれば、消す時刻を
+   * 先へ延ばす
+   */
   tick(): void {
     if (!this.meta || this.released) return;
     this.engine.expireSeats();
     this.engine.dropStrayCursors();
+    if (this.engine.seats().length > 0) this.persist([this.expiry()]);
     this.lobbyChanged(this.roomKey);
     this.dropLostInstances().catch((err: unknown) =>
       console.error('Could not look for lost instances:', err),
@@ -379,25 +383,29 @@ export class VercelRoom implements RoomHost<Conn> {
     return this.deps.sessionSecret(this.roomKey);
   }
 
-  /** 人がいるあいだは消さない */
+  /**
+   * 人がいるあいだは消さない。消す時刻は、見回りのたびに先へ延ばす。持ち主が落ちて延ばす者がいなくなれば、
+   * 最後に見たときから保持期間のあとに消える
+   */
   occupied(): void {
-    this.persist([
-      { command: 'HDEL', key: this.keys.meta, args: ['emptiedAt'] },
-      { command: 'ZREM', key: expiryKeyOf(this.deps.key), args: [this.roomKey] },
-    ]);
+    this.persist([{ command: 'HDEL', key: this.keys.meta, args: ['emptiedAt'] }, this.expiry()]);
   }
 
   /** だれもいなくなった。ここから保持期間を数える */
   emptied(): void {
-    const now = Date.now();
     this.persist([
-      { command: 'HSET', key: this.keys.meta, args: ['emptiedAt', String(now)] },
-      {
-        command: 'ZADD',
-        key: expiryKeyOf(this.deps.key),
-        args: [String(now + this.deps.retentionSeconds * 1000), this.roomKey],
-      },
+      { command: 'HSET', key: this.keys.meta, args: ['emptiedAt', String(Date.now())] },
+      this.expiry(),
     ]);
+  }
+
+  /** 消す時刻を、いまから保持期間のあとにする */
+  private expiry(): Op {
+    return {
+      command: 'ZADD',
+      key: expiryKeyOf(this.deps.key),
+      args: [String(Date.now() + this.deps.retentionSeconds * 1000), this.roomKey],
+    };
   }
 
   /** 一覧の人数と GM を直す。知らせる順に並べる。部屋が消えたあとの知らせは、一覧が受けない */

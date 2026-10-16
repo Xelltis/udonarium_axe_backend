@@ -4,6 +4,7 @@ import { decodeFrame } from '../../src/core/rooms/codec.js';
 import { storelessBackend, vercelBackend } from '../../src/server/backend.js';
 import type { Upgrades } from '../../src/server/backend.js';
 import { expiryKeyOf, roomKeysOf } from '../../src/server/rooms/keys.js';
+import { FakeWs } from './rooms/fake-ws.js';
 import { useRedis } from './redis-helpers.js';
 import { depsOf } from './server-helpers.js';
 
@@ -54,17 +55,36 @@ describe('the Vercel backend', () => {
     expect(await backend.rooms.canUpload('missing', 'user-pl')).toBe('room-not-found');
   });
 
-  it('lists and finds no room past its retention', async () => {
+  it('lists and finds no room past its retention, or already gone', async () => {
     const deps = await depsOf(connection.redis);
     const backend = vercelBackend(deps);
     await backend.rooms.create(init('old'));
+    await backend.rooms.create(init('gone'));
     await backend.rooms.create(init('new'));
     await connection.redis.zAdd(expiryKeyOf(deps.key), { score: Date.now() - 1, value: 'old' });
+    await connection.redis.zRem(expiryKeyOf(deps.key), 'gone');
 
     expect((await backend.lobby.list()).map((room) => room.roomKey)).toEqual(['new']);
     expect(await backend.lobby.find('old')).toBeNull();
+    expect(await backend.lobby.find('gone')).toBeNull();
     expect(await backend.lobby.find('new')).toMatchObject({ roomKey: 'new' });
     expect(await backend.lobby.find('never')).toBeNull();
+  });
+
+  it('sweeps rooms past their time while listing, making and entering rooms', async () => {
+    const deps = await depsOf(connection.redis);
+    const soon = vi.spyOn(deps.sweeper, 'soon');
+    const backend = vercelBackend(deps);
+    const request = upgradeRequest();
+    const ws = new FakeWs();
+    deps.upgrades.set(request, (onSocket) => onSocket(ws as never));
+
+    await backend.lobby.list();
+    await backend.rooms.create(init('made'));
+    await backend.rooms.connect(request, 'missing');
+
+    expect(soon).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() => expect(ws.closedWith).toEqual({ code: 4000, reason: 'room-not-found' }));
   });
 
   it('asks for an upgrade before handing a room a socket', async () => {

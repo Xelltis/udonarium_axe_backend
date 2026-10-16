@@ -41,7 +41,9 @@ const provider = backendProvider({
 });
 
 const appWith = (env: Record<string, string | undefined>) =>
-  createApp({ server: { env: () => env, backendFor: provider.backendFor } });
+  createApp({
+    server: { env: () => env, backendFor: provider.backendFor, sweep: provider.sweep },
+  });
 const app = appWith(ENV);
 const server = createServer(app.fetch, upgrades);
 const port = new Promise<number>((resolve) => {

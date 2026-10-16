@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROTOCOL_VERSION } from '../../../contracts/protocol.js';
 import { ACCESS_TOKEN_SECONDS, signToken } from '../../../src/core/auth/tokens.js';
 import { redisLobby } from '../../../src/server/lobby.js';
-import { createRoom, roomKeysOf } from '../../../src/server/rooms/keys.js';
+import { createRoom, expiryKeyOf, roomKeysOf } from '../../../src/server/rooms/keys.js';
 import { VercelRoom } from '../../../src/server/rooms/room.js';
 import type { Conn, RoomDeps } from '../../../src/server/rooms/room.js';
 import type { Redis } from '../../../src/server/redis.js';
@@ -188,6 +188,20 @@ describe('a room held on Vercel', () => {
       expect(error).toHaveBeenCalledWith('Could not keep the room’s lease:', expect.any(Error)),
     );
     vi.restoreAllMocks();
+    await room.release();
+  });
+
+  it('keeps putting off deleting the room while people are in', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'room');
+    const deleteAt = () => connection.redis.zScore(expiryKeyOf(key), 'room');
+    const created = await deleteAt();
+
+    seat(room, 'alice');
+
+    await vi.waitFor(async () => expect(await deleteAt()).toBeGreaterThan(created as number));
+    const occupied = await deleteAt();
+    await vi.waitFor(async () => expect(await deleteAt()).toBeGreaterThan(occupied as number));
     await room.release();
   });
 

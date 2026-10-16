@@ -48,14 +48,13 @@ describe('the server dependencies', () => {
 
   it('are made once per Redis, without a store when there is none, and again after a failure', async () => {
     const provider = backendProvider({ bucketOf: () => memoryBucket() });
-    const storeless = await provider.backendFor(
-      configOf({
-        REDIS_URL: '',
-        DISCORD_CLIENT_ID: '',
-        DISCORD_CLIENT_SECRET: '',
-        SESSION_SECRET: '',
-      }),
-    );
+    const withoutStore = configOf({
+      REDIS_URL: '',
+      DISCORD_CLIENT_ID: '',
+      DISCORD_CLIENT_SECRET: '',
+      SESSION_SECRET: '',
+    });
+    const storeless = await provider.backendFor(withoutStore);
     const broken = configOf({ REDIS_URL: 'not a url' });
 
     await expect(provider.backendFor(broken)).rejects.toThrow();
@@ -65,6 +64,8 @@ describe('the server dependencies', () => {
     await provider.backendFor(config);
 
     expect(await storeless.lobby.list()).toEqual([]);
+    expect(await provider.sweep(withoutStore)).toBe(0);
+    expect(await provider.sweep(config)).toBe(0);
     expect(provider.depsFor(broken)).toBeUndefined();
     (await provider.depsFor(config))?.redis.destroy();
   });
