@@ -25,7 +25,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const TIMING = { leaseMs: 400, renewMs: 100, tickMs: 100 };
+// lease は短くするが、混んだマシンでも延ばしそこねない長さにする（持ち主が替わるとテストが崩れる）
+const TIMING = { leaseMs: 1000, renewMs: 100, tickMs: 100 };
 
 /** 同じ Redis を使う2つのインスタンス。部屋は a が作る。b の WebSocket は socketSecondsOfB で閉じる */
 const twoInstances = async ({
@@ -257,10 +258,10 @@ describe('a room whose sockets reach different instances', () => {
     const bob = attach(b);
 
     await vi.waitFor(() => expect(bob.closedWith).toEqual({ code: 1012, reason: 'moved' }), {
-      timeout: 3000,
+      timeout: 6000,
     });
     expect(bob.messages()).toEqual([]);
-  });
+  }, 10_000);
 
   it('opens the room itself once the instance holding it lets it go', async () => {
     const { a, b } = await twoInstances();

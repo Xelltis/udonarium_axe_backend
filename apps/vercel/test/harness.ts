@@ -56,10 +56,14 @@ await provider.backendFor(config);
 const deps = async () =>
   provider.depsFor(config) as NonNullable<ReturnType<typeof provider.depsFor>>;
 
+// 終わりかけの仕事（振っているダイスなど）を待ち、部屋を放してから閉じる。テストのあとで書き残させない
 afterAll(async () => {
+  await Promise.all([...deferred]);
+  const { runtime, redis } = await deps();
+  await runtime.close();
   server.close();
   server.closeAllConnections();
-  (await deps()).redis.destroy();
+  redis.destroy();
 });
 
 /** テストは送信元を CF-Connecting-IP に書く。Vercel では x-real-ip に入る */

@@ -205,7 +205,24 @@ describe('a room held on Vercel', () => {
     await room.release();
   });
 
-  it('looks around while people are in, and no longer once it has let go', async () => {
+  it('says so when it could not keep the room, or put it right in the lobby', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { deps, lobby } = await roomDepsOf(connection.redis);
+    const room = await VercelRoom.open(deps, 'room');
+    vi.spyOn(connection.redis, 'eval').mockRejectedValue(new Error('down'));
+    vi.spyOn(lobby, 'setMembers').mockRejectedValue(new Error('down'));
+
+    room.occupied();
+    room.lobbyChanged('room');
+    await room.settle();
+
+    expect(error).toHaveBeenCalledWith('Could not keep the room:', expect.any(Error));
+    expect(error).toHaveBeenCalledWith('Lobby update failed:', expect.any(Error));
+    vi.restoreAllMocks();
+    await room.release();
+  });
+
+    it('looks around while people are in, and no longer once it has let go', async () => {
     const { deps, lobby } = await roomDepsOf(connection.redis);
     const room = await VercelRoom.open(deps, 'room');
     seat(room, 'alice');
