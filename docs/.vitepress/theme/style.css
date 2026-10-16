@@ -321,6 +321,130 @@
   text-align: center;
 }
 
+/* --------------------------------------------------------- option cards */
+
+/*
+ * The choices of a page side by side, each with its pros and cons. They are
+ * written in Markdown (see guide/choose.md), with a class on each paragraph:
+ * name, what, pros, cons, fit and link, in that order. The cards share their
+ * rows, so the pros and the cons of one start level with the other's.
+ */
+.vp-doc .axe-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  column-gap: 20px;
+  margin: 28px 0;
+  word-break: auto-phrase;
+}
+
+.vp-doc .axe-option {
+  display: grid;
+  grid-row: span 8;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  margin-bottom: 20px;
+  padding: 20px 22px 18px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .axe-option > * {
+  margin: 0;
+}
+
+.vp-doc .axe-option-name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .axe-option-what {
+  margin-top: 6px;
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .axe-pros,
+.vp-doc .axe-cons {
+  justify-self: start;
+  align-self: end;
+  margin-top: 18px;
+  padding: 1px 12px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.8;
+}
+
+.vp-doc .axe-pros {
+  background: var(--vp-c-green-soft);
+  color: var(--vp-c-green-1);
+}
+
+.vp-doc .axe-cons {
+  background: var(--vp-c-warning-soft);
+  color: var(--vp-c-warning-1);
+}
+
+.vp-doc .axe-option > ul {
+  margin-top: 10px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.vp-doc .axe-option > ul li {
+  position: relative;
+  margin: 6px 0 0;
+  padding-left: 26px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* A plus before each pro and a minus before each con, drawn in the pill's colour. */
+.vp-doc .axe-option > ul li::before {
+  position: absolute;
+  top: 0.2em;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.vp-doc .axe-pros + ul li::before {
+  content: '+';
+  background: var(--vp-c-green-soft);
+  color: var(--vp-c-green-1);
+}
+
+.vp-doc .axe-cons + ul li::before {
+  content: '−';
+  background: var(--vp-c-warning-soft);
+  color: var(--vp-c-warning-1);
+}
+
+.vp-doc .axe-option-fit {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--vp-c-divider);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.75;
+}
+
+.vp-doc .axe-option-link {
+  margin-top: 8px;
+  font-size: 14.5px;
+}
+
 /* ------------------------------------------------------------ home */
 
 @media (min-width: 960px) {

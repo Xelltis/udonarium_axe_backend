@@ -1,7 +1,6 @@
 import type { Theme } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
 
-import ChooseFlow from './components/ChooseFlow.vue';
 import DeployMap from './components/DeployMap.vue';
 import FtpPanes from './components/FtpPanes.vue';
 import Journey from './components/Journey.vue';
@@ -18,7 +17,6 @@ export default {
   enhanceApp({ app }) {
     // The drawings the pages use, written as components so that they follow the light and dark
     // themes and lay themselves out again on a narrow screen.
-    app.component('ChooseFlow', ChooseFlow);
     app.component('DeployMap', DeployMap);
     app.component('FtpPanes', FtpPanes);
     app.component('Journey', Journey);
