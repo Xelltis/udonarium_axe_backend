@@ -9,11 +9,11 @@ import { serverApp } from './server.js';
 import type { ServerAppOptions } from './server.js';
 import type { AppEnv } from './context.js';
 
-/** SkyWay のトークン発行の経路。設定と CORS とエラーの形は、部屋のサーバーの経路とは別 */
+/** The routes that issue SkyWay tokens. Their settings, CORS and error shape are separate from the room server's. */
 const SKYWAY_PATHS = ['/v1/status', '/v1/skyway/*', '/v1/skyway2023/*'];
 
 export interface AppOptions {
-  /** 部屋のサーバーの経路。置かなければ、SkyWay のトークン発行だけ */
+  /** The room server's routes. Without them, only SkyWay tokens are issued. */
   server?: ServerAppOptions;
 }
 

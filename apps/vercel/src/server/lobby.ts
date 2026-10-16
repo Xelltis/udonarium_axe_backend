@@ -1,17 +1,17 @@
 import type { RoomSummary } from '../../contracts/protocol.js';
 import type { KeyOf, Redis } from './redis.js';
 
-// 部屋の一覧を Redis に置く。Cloudflare 版の LobbyDurableObject と同じことをする。
+// Keeps the room list in Redis. Does the same as the Cloudflare version's LobbyDurableObject.
 //
-//   lobby:rooms       ZSET  部屋の鍵 → 作った時刻（ミリ秒）
-//   lobby:meta        HASH  部屋の鍵 → {roomId, name, hasPassword} の JSON
-//   lobby:members     HASH  部屋の鍵 → 入っている人数
-//   lobby:gms         HASH  部屋の鍵 → GM のユーザー ID の JSON 配列
-//   lobby:gm:<ID>     SET   その人が GM の部屋の鍵
+//   lobby:rooms       ZSET  room key → when the room was made (milliseconds).
+//   lobby:meta        HASH  room key → JSON of {roomId, name, hasPassword}.
+//   lobby:members     HASH  room key → how many people are in.
+//   lobby:gms         HASH  room key → JSON array of the GMs' user ids.
+//   lobby:gm:<ID>     SET   The keys of the rooms where that person is GM.
 //
-// 一覧は、千の部屋でも数回の問い合わせで引けるよう、部屋ごとではなく表ごとに置く
+// The list is kept by table, not by room, so that even a thousand rooms take only a few queries.
 
-/** 一覧で返す部屋の数の上限。超えたら新しいものから返す */
+/** The limit on how many rooms the list returns. When there are more, the newest are returned. */
 export const MAX_LISTED_ROOMS = 1000;
 
 interface Meta {
@@ -20,7 +20,7 @@ interface Meta {
   hasPassword: boolean;
 }
 
-/** 一覧にあるときだけ人数を置く。KEYS は meta・members、ARGV は部屋の鍵・人数 */
+/** Sets the head count only for a listed room. KEYS are meta and members; ARGV the room key and count. */
 const SET_MEMBERS = `
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
 redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
@@ -28,8 +28,10 @@ return 1
 `;
 
 /**
- * GM を置き換える。前の GM の索引からは外し、一覧にあるときだけ新しい GM を置く。
- * KEYS は meta・gms・前の GM の索引…・新しい GM の索引…、ARGV は部屋の鍵・新しい GM の JSON・前の GM の数
+ * Replaces the GMs. Takes the room out of the former GMs' indexes, and sets the new GMs only when
+ * the room is in the list.
+ * KEYS are meta, gms, the former GMs' indexes… and the new GMs' indexes…; ARGV are the room key,
+ * the JSON of the new GMs and the number of former GMs.
  */
 const SET_GAME_MASTERS = `
 local before = tonumber(ARGV[3])
@@ -51,7 +53,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
   const gameMastersOf = async (roomKey: string): Promise<string[]> =>
     JSON.parse((await redis.hGet(GMS, roomKey)) ?? '[]') as string[];
 
-  /** 鍵の並びの要約。一覧に無いもの（消えかけ）は外す */
+  /** The summaries for some room keys. Leaves out the rooms not in the list (being deleted). */
   const summariesOf = async (roomKeys: string[], deletable: Set<string>) => {
     if (roomKeys.length === 0) return [];
     const [metas, members] = await Promise.all([redis.hmGet(META, roomKeys), redis.hmGet(MEMBERS, roomKeys)]);
@@ -92,7 +94,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
       });
     },
 
-    /** 部屋の GM を置き換える。一覧に無い部屋（消えたあとに届いた知らせ）のものは置かない */
+    /** Replaces a room's GMs, but not for a room not in the list (a notice that came after it was gone). */
     async setGameMasters(roomKey: string, userIds: string[]): Promise<void> {
       const before = await gameMastersOf(roomKey);
       await redis.eval(SET_GAME_MASTERS, {
@@ -108,7 +110,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
       await removal.exec();
     },
 
-    /** 渡した鍵のうち、一覧にある部屋のもの。部屋がもう無いアセットを掃除するときに使う */
+    /** The given keys whose rooms are in the list. Used when sweeping assets whose room is gone. */
     async known(roomKeys: string[]): Promise<string[]> {
       if (roomKeys.length === 0) return [];
       const scores = await redis.zmScore(ROOMS, roomKeys);
@@ -116,8 +118,9 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
     },
 
     /**
-     * 新しい順に MAX_LISTED_ROOMS まで。userId を渡せば、その人が GM の部屋に deletable を付け、
-     * その部屋は数に入らなくても必ず入れる（削除できる部屋が一覧から消えないように）
+     * Newest first, up to MAX_LISTED_ROOMS. Given a userId, marks the rooms where that person is
+     * GM with deletable, and always puts them in even past the count (so that a room the person
+     * can delete does not drop out of the list).
      */
     async list(userId?: string): Promise<RoomSummary[]> {
       const [newest, mine] = await Promise.all([
@@ -128,7 +131,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
         }),
         mineOf(userId),
       ]);
-      // 同じ時刻に作った部屋は、鍵の順に並べる（Cloudflare 版と同じ並び）
+      // Rooms made at the same time go in key order (the same order as the Cloudflare version).
       const ordered = newest
         .sort((a, b) => b.score - a.score || Number(a.value > b.value) - Number(a.value < b.value))
         .map(({ value }) => value);
@@ -138,8 +141,8 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
     },
 
     /**
-     * 鍵で引いた1つの部屋。一覧に載らない古い部屋でも引ける。無ければ null。userId を渡せば、その人が GM
-     * なら deletable を付ける
+     * The one room looked up by key. Finds even an old room that does not make the list. Null when
+     * there is none. Given a userId, marks the room with deletable when that person is GM.
      */
     async find(roomKey: string, userId?: string): Promise<RoomSummary | null> {
       const [room] = await summariesOf([roomKey], await mineOf(userId));

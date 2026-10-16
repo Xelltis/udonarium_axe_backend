@@ -1,4 +1,4 @@
-# テストと手元で動かすときの Redis。`docker compose up -d redis` で立てる
+# Redis for the tests and for running locally. Start it with `docker compose up -d redis`.
 services:
   redis:
     image: redis:7.4-alpine

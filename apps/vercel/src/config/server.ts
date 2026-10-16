@@ -6,12 +6,13 @@ import type { ServerConfig } from '../core/http/backend.js';
 
 const HOUR_SECONDS = 60 * 60;
 
-/** 最後の1人が出てから部屋を消すまでの時間の既定（時間） */
+/** The default time from when the last person leaves until the room is deleted (in hours). */
 export const DEFAULT_ROOM_RETENTION_HOURS = 24;
 
 /**
- * 部屋の WebSocket を、こちらから閉じてつなぎ直させるまでの既定（秒）。Vercel の Function は最大実行時間
- * （Hobby では 300 秒）で切れるので、それより前に自分で閉じる
+ * The default time before the server closes a room's WebSocket itself and has it reconnect (in
+ * seconds). A Vercel Function is cut off at its maximum duration (300 seconds on Hobby), so the
+ * server closes it before that.
  */
 export const DEFAULT_ROOM_SOCKET_SECONDS = 280;
 
@@ -41,24 +42,24 @@ const serverSchema = pipe(
   sessionSecretLongEnough()
 );
 
-/** 部屋のアセットを置くところ */
+/** The store for the rooms' assets. */
 export type BlobConfig = { kind: 'vercel' } | { kind: 'local'; dir: string };
 
-/** Vercel 版の部屋のサーバーの設定 */
+/** The settings of the Vercel version's room server. */
 export interface VercelServerConfig extends ServerConfig {
-  /** 部屋から最後の1人が出てから、部屋を消すまでの秒数 */
+  /** Seconds from when the last person leaves a room until the room is deleted. */
   roomRetentionSeconds: number;
-  /** 部屋の WebSocket を、こちらから閉じてつなぎ直させるまでの秒数 */
+  /** Seconds before the server closes a room's WebSocket itself and has it reconnect. */
   roomSocketSeconds: number;
-  /** 部屋・一覧・アカウントを置く Redis。無ければ部屋は無い */
+  /** The Redis that holds the rooms, the room list and the accounts. Without it there are no rooms. */
   redisUrl: string | null;
   redisKeyPrefix: string;
   blob: BlobConfig | null;
-  /** Vercel Cron が掃除を呼ぶときの鍵。置かなければ確かめない */
+  /** The secret Vercel Cron sends when it calls the sweep. When it is not set, it is not checked. */
   cronSecret: string | null;
 }
 
-/** 空の文字列は、置かなかったことにする */
+/** An empty string counts as not set. */
 const given = (value: string | undefined): string | null => (value ? value : null);
 
 const blobOf = (env: {
@@ -69,7 +70,7 @@ const blobOf = (env: {
 }): BlobConfig | null => {
   const local = given(env.BLOB_LOCAL_DIR);
   if (local) {
-    // 手元のディレクトリに置くのは、試すときだけ。Vercel の上では Function のファイルは残らない
+    // A local directory is only for trying things out. On Vercel, a Function's files do not last.
     if (env.VERCEL === '1') throw new ConfigError('BLOB_LOCAL_DIR is for local runs only');
     return { kind: 'local', dir: local };
   }
@@ -77,8 +78,8 @@ const blobOf = (env: {
 };
 
 /**
- * 部屋のサーバーの設定を読む。形が違えば ConfigError。ログインを置くなら、部屋を置く Redis と、
- * 部屋のアセットを置く Blob も要る
+ * Reads the room server's settings. A ConfigError when they are not in the right shape. When login
+ * is set up, the Redis that holds the rooms and the Blob store for the rooms' assets are needed too.
  */
 export const parseServerConfig = (env: unknown): VercelServerConfig => {
   const result = safeParse(serverSchema, env);

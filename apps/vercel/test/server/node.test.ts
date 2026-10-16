@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** サーバーを立て、その番号を返す */
+/** Starts a server and returns its port number. */
 const listen = async (
   fetch: (request: Request) => Response | Promise<Response>,
   upgrades: Upgrades = new WeakMap()
@@ -24,14 +24,14 @@ const listen = async (
   return (server.address() as AddressInfo).port;
 };
 
-/** WebSocket につなぎ、つながったか、HTTP で答えられたかを返す */
+/** Connects a WebSocket, and returns whether it connected or was answered over HTTP. */
 const tryUpgrade = (port: number, headers: Record<string, string> = {}) =>
   new Promise<
     | { open: true; ws: WebSocket; first: Promise<string> }
     | { open: false; status?: number; body?: string; error?: string }
   >((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/rooms/r/ws`, { headers });
-    // つながってすぐに届くものを落とさないよう、先に受けておく
+    // Listens first, so that what comes right after connecting is not lost.
     const first = new Promise<string>((resolveFirst) => ws.once('message', (data) => resolveFirst(String(data))));
     ws.once('open', () => resolve({ open: true, ws, first }));
     ws.once('unexpected-response', (_req, res) => {

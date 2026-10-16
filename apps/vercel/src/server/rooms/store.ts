@@ -10,20 +10,22 @@ import type { View } from '../../core/rooms/visibility.js';
 import type { BinaryRedis, KeyOf } from '../redis.js';
 import type { Op } from './fence.js';
 
-// 部屋のオブジェクトを Redis に置く。
+// Keeps the room's objects in Redis.
 //
-//   r:<鍵>:obj          HASH  識別子 → {alias, major, minor, owner, parent, view, chunks, data} の MessagePack
-//   r:<鍵>:chunk:<ID>   HASH  1MiB を超える中身を分けたもの（番号 → バイト列）
-//   r:<鍵>:chunked      SET   分けて置いたものの識別子（部屋を消すときのため）
-//   r:<鍵>:tomb         ZSET  消した印（識別子 → 消した時刻）
+//   r:<key>:obj          HASH  identifier → MessagePack of {alias, major, minor, owner, parent, view,
+//                              chunks, data}.
+//   r:<key>:chunk:<ID>   HASH  Contents over 1MiB, split up (number → bytes).
+//   r:<key>:chunked      SET   The identifiers of what was kept split up (for when the room is deleted).
+//   r:<key>:tomb         ZSET  The tombstones (identifier → when it was deleted).
 //
-// 部屋の持ち主のインスタンスは、部屋を取ったときに全部を読んでメモリに置き、答えるのはメモリから行う
-// （RoomEngine は待たずに読むため）。書き込みはまとめてから、持ち主のときだけ後ろで書く
+// The instance that owns the room reads everything into memory when it takes the room, and answers
+// from memory (because RoomEngine reads without waiting). Writes are gathered first, then written in
+// the background, only while this instance is the owner.
 
-/** 1つの値に置く中身の上限。超えるものは分けて置く */
+/** The limit on the contents kept in one value. Anything over it is kept split up. */
 export const CHUNK_BYTES = 1024 * 1024;
 
-/** 置いたオブジェクト。data は syncData の MessagePack */
+/** A stored object. data is the MessagePack of syncData. */
 interface Row {
   alias: string;
   major: number;
@@ -34,7 +36,7 @@ interface Row {
   data: Uint8Array;
 }
 
-/** Redis に置く1行。中身を分けたときは chunks に数を入れ、data は置かない */
+/** One row kept in Redis. When the contents are split up, chunks holds how many parts, and data is left out. */
 interface Stored {
   alias: string;
   major: number;
@@ -93,7 +95,8 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
   }
 
   /**
-   * 部屋のオブジェクトをすべて読む。persist は、まとめた書き込みを Redis に書くもの（持ち主のときだけ書く）
+   * Reads all of the room's objects. persist writes the gathered writes to Redis (it writes only
+   * while this instance is the owner).
    */
   static async load(
     redis: BinaryRedis,
@@ -133,8 +136,10 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
   }
 
   /**
-   * まとめておいた変更を、メモリの写しに当ててから後ろで書く。書く操作の数を返す。
-   * 書くのは順に1つずつ。書けなかったものは記録して先へ進む（部屋の持ち主が替われば、次の持ち主が読み直す）
+   * Applies the changes gathered so far to the copy in memory, then writes them in the background.
+   * Returns how many operations it writes.
+   * Writes go one at a time, in order. What cannot be written is logged and passed over (when the
+   * room's owner changes, the next owner reads everything again).
    */
   flush(): number {
     const ops: Op[] = [];
@@ -159,7 +164,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     return ops.length;
   }
 
-  /** 書きかけのものを書き終えるまで待つ */
+  /** Waits until the writes under way are done. */
   settle(): Promise<void> {
     return this.writing;
   }
@@ -220,7 +225,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     return { command: 'ZADD', key: this.keys.tombstones, args: [String(now), identifier] };
   }
 
-  /** 消した印が多すぎれば、古いものから減らす */
+  /** When there are too many tombstones, removes the oldest first. */
   private pruneOps(): Op[] {
     const over = this.tombstonesOver();
     if (over === 0) return [];

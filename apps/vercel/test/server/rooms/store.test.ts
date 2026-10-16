@@ -21,7 +21,7 @@ const contextOf = (
   aliasName = 'character'
 ) => ({ aliasName, identifier, majorVersion, minorVersion: 0.5, syncData });
 
-/** 部屋の持ち主として、lease を取った置き場所を作る */
+/** Makes a store that took the lease, as the room's owner. */
 const room = async (limits?: { most: number; prunedTo: number }) => {
   const key = freshKey();
   const keys = storeKeysOf(key, 'room');

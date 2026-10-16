@@ -11,7 +11,7 @@ export const LOGIN = {
   SESSION_SECRET: 'test-session-secret-0123456789abcdef',
 };
 
-/** テストの部屋のサーバーの設定。ほかのテストと混ぜないよう、Redis の頭は毎回替える */
+/** The test room server's settings. The Redis prefix changes each time, so as not to mix with other tests. */
 export const configOf = (env: Record<string, string> = {}) =>
   parseServerConfig({
     ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example',
@@ -22,7 +22,7 @@ export const configOf = (env: Record<string, string> = {}) =>
     ...env,
   });
 
-/** 部屋のサーバーのものを、渡した Redis の接続で作る */
+/** Makes what the room server uses, with the given Redis connection. */
 export const depsOf = (redis: Redis, options: Partial<DepsOptions> = {}, env?: Record<string, string>) => {
   const bucket = memoryBucket();
   return createServerDeps(configOf(env), { bucketOf: () => bucket, ...options }, redis).then((deps) => ({

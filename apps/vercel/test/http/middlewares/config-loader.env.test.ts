@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 
-// このファイルは hono/adapter を意図的にモックしない。
-// Edge Runtime から Node.js ランタイムへの移行で変わったのは env() の解決先
-// (getRuntimeKey() が 'edge-light' から 'node' になり process.env を読む) であり、
-// 他のテストは全て env をモックしているためそこだけ実物で押さえる。
+// This file does not mock hono/adapter, on purpose.
+// What changed in the move from the Edge Runtime to the Node.js runtime is what env() resolves to
+// (getRuntimeKey() goes from 'edge-light' to 'node', and process.env is read), and every other
+// test mocks env, so this one point is pinned down with the real thing.
 import { onError } from '../../../src/http/errors/handler.js';
 import { configLoader } from '../../../src/http/middlewares/config-loader.js';
 import type { AppEnv } from '../../../src/http/context.js';

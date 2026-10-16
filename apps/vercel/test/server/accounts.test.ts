@@ -17,7 +17,7 @@ const profile = (name = 'Kai', avatarUrl: string | null = 'https://cdn.example/a
   avatarUrl,
 });
 
-/** ログインを始めて、コードとその人の置き場所を返す */
+/** Starts a login, and returns the code and the store for that person's account. */
 const signedIn = async (key: KeyOf = freshKey(), who = profile()) => {
   const account = redisAccount(connection.redis, key, who.accountKey);
   const code = await account.signIn(who, await sha256(VERIFIER));

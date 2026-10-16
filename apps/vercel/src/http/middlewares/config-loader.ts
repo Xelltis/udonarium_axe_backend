@@ -5,10 +5,10 @@ import { parseConfig } from '../../config/index.js';
 import type { AppConfig } from '../../config/types.js';
 import type { AppEnv } from '../context.js';
 
-// Node.js ランタイムでは env(c) は process.env に解決され、インスタンスの
-// 生存期間中は不変。リクエストごとにスキーマ検証を繰り返す必要はないため、
-// ミドルウェア単位のクロージャに保持する。検証に失敗した場合は何も残らないので
-// 次のリクエストで再試行される。
+// On the Node.js runtime, env(c) resolves to process.env, which does not change while the
+// instance lives. There is no need to check the schema again on every request, so the result is
+// kept in a closure for each middleware. When the check fails nothing is kept, so the next
+// request tries again.
 export const configLoader = (): MiddlewareHandler<AppEnv> => {
   let cached: AppConfig | undefined;
 

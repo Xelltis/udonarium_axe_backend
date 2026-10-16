@@ -18,7 +18,7 @@ afterEach(() => {
 
 const SECRET = 'room-test-secret-0123456789abcdefghij';
 
-/** 部屋を作り、その部屋を開くためのものを返す */
+/** Makes a room, and returns what is needed to open it. */
 const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
   const key = freshKey();
   const lobby = redisLobby(redis, key);
@@ -52,14 +52,15 @@ const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
     assetUpload: null,
     deleteAssets: async () => undefined,
     defer: () => undefined,
-    // 混んだマシンでも延ばしそこねない長さ。lease が切れるのを待つテストは、ほかから lease を奪う
+    // Long enough not to fail to be extended even on a busy machine. The tests that wait for the
+    // lease to run out take the lease away from outside.
     timing: { leaseMs: 1000, renewMs: 40, tickMs: 40 },
     ...overrides,
   };
   return { deps, key, lobby };
 };
 
-/** 部屋につないだ人。送られたものと閉じられたものを覚える */
+/** Someone connected to the room. Remembers what was sent to them and how they were closed. */
 const connOf = (id: string): Conn & { closedWith: { code: number; reason: string } | null } => {
   const conn = {
     id,
@@ -75,7 +76,7 @@ const connOf = (id: string): Conn & { closedWith: { code: number; reason: string
   return conn;
 };
 
-/** 部屋に入る */
+/** Joins the room. */
 const seat = (room: VercelRoom, peerId: string) => {
   const conn = connOf(peerId);
   room.accept(conn);

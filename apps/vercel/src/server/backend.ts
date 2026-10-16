@@ -13,22 +13,23 @@ import type { RoomRuntime } from './rooms/runtime.js';
 import type { RoomSweeper } from './rooms/sweep.js';
 
 /**
- * WebSocket につなぎ替える要求。Node のサーバーが、upgrade の要求を app に渡す前に置き、
- * 部屋の経路が確かめ終えたら、ここから WebSocket を受ける
+ * The requests that switch over to a WebSocket. The Node server puts one here before it hands the
+ * upgrade request to the app, and once the room route has made its checks, it takes the WebSocket
+ * from here.
  */
 export type Upgrades = WeakMap<Request, (onSocket: (ws: WebSocket) => void) => void>;
 
-/** 部屋のサーバーが使う、インスタンスで1つのもの */
+/** What the room server uses, one of each per instance. */
 export interface ServerDeps {
   redis: Redis;
   key: KeyOf;
   lobby: RedisLobby;
   runtime: RoomRuntime;
-  /** ほかのインスタンスとの中継 */
+  /** The relay with the other instances. */
   relay: Relay;
-  /** 消す時刻を過ぎた部屋の掃除 */
+  /** The sweep of the rooms past their time to be deleted. */
   sweeper: RoomSweeper;
-  /** 消しそこねたアセットの掃除。Blob を1ページ見て、消した数を返す */
+  /** The sweep of leftover assets. Looks through one page of Blob and returns how many it deleted. */
   orphans: () => Promise<number>;
   assets: AssetBackend;
   limit: (request: Request, kind: LimitKind) => Promise<boolean>;
@@ -36,13 +37,13 @@ export interface ServerDeps {
   retentionSeconds: number;
 }
 
-/** Vercel の部屋のサーバー。部屋・一覧・アカウントは Redis に、部屋のアセットは Blob に置く */
+/** The Vercel room server. Rooms, the room list and accounts are kept in Redis, and rooms' assets in Blob. */
 export const vercelBackend = (deps: ServerDeps): ServerBackend => {
   const { redis, key, lobby, runtime, sweeper } = deps;
 
   /**
-   * 消す時刻を過ぎた部屋は、消すのが遅れていても一覧に出さない。時刻の無い部屋は、もう消えた（部屋と
-   * 一緒に時刻も消す）
+   * A room past its time to be deleted is not listed, even when deleting it is late. A room with no
+   * time is already gone (the time is deleted along with the room).
    */
   const live = async (rooms: RoomSummary[]): Promise<RoomSummary[]> => {
     if (rooms.length === 0) return rooms;
@@ -57,7 +58,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
   return {
     limit: deps.limit,
     lobby: {
-      // 部屋の一覧・作る・入るのついでに、消す時刻を過ぎた部屋を掃除する
+      // Along with listing, making and joining rooms, sweeps the rooms past their time to be deleted.
       list: async (userId) => {
         sweeper.soon();
         return live(await lobby.list(userId));
@@ -82,8 +83,9 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
       },
       remove: (roomKey, userId) => runtime.deleteRoom(roomKey, userId),
       /**
-       * アセットを置こうとしている人が、いまもこの部屋で置ける役割（GM か PL）か。部屋をこのインスタンスで
-       * 開いていればその席で、そうでなければ持ち主が Redis に書いた席の写しで答える
+       * Whether the person about to store an asset still has a role in this room that may store one
+       * (GM or player). When this instance has the room open, its seat answers; otherwise the copy
+       * of the seats the owner wrote to Redis answers.
        */
       canUpload: async (roomKey, userId) => {
         const open = await runtime.openRoom(roomKey);
@@ -101,7 +103,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
         if (!accept) return failure(426, 'upgrade-required');
         sweeper.soon();
         accept((ws) => runtime.attach(ws, roomKey));
-        // WebSocket に替わったので、この応答は使われない
+        // The connection has switched to a WebSocket, so this response is not used.
         return new Response(null);
       },
     },
@@ -111,8 +113,8 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
 };
 
 /**
- * 部屋を置く Redis の無い部屋のサーバー（ログインを置いていないとき）。部屋は無いので、一覧は空で、
- * つないできた人には部屋が無いと伝えて閉じる
+ * A room server with no Redis to hold rooms (when login is not set up). There are no rooms, so the
+ * room list is empty, and a connection is told that there is no room and is closed.
  */
 export const storelessBackend = (upgrades: Upgrades): ServerBackend => {
   const none = (): never => {

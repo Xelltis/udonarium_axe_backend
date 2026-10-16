@@ -11,8 +11,8 @@ import { backendProvider, upgrades } from '../src/server/deps.js';
 import { createServer } from '../src/server/node.js';
 import type { Harness, TestSocket } from './shared/harness-api.js';
 
-// 共有のテストを、Node のサーバーと Redis の上で動かす。テストのファイルごとに、別の頭の Redis と
-// メモリに置くアセットで、部屋のサーバーを1つ立てる
+// Runs the shared tests on the Node server and Redis. Each test file starts one room server, with
+// its own Redis prefix and assets kept in memory.
 
 const ENV: Record<string, string | undefined> = {
   ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example,http://localhost:4200',
@@ -25,14 +25,14 @@ const ENV: Record<string, string | undefined> = {
 };
 
 const config = parseServerConfig(ENV);
-/** 部屋のアセットを置くところ。直接上げる流れのテストが、ブラウザの代わりにここへ上げる */
+/** The store for the rooms' assets. The direct upload tests upload here in place of the browser. */
 export const bucket = memoryBucket();
 const withoutLogin = new Set<string>();
-/** 返したあとに続ける仕事。fetchWith は、これが終わるまで待ってから返す */
+/** Work that goes on after the response. fetchWith waits until it is done before it returns. */
 const deferred = new Set<Promise<unknown>>();
 const provider = backendProvider({
   bucketOf: () => bucket,
-  // テストでは上限を小さくして、429 を数回のリクエストで確かめる
+  // The tests make the limits small, to check 429 in a few requests.
   limits: { upload: 5, read: 5, room: 5, auth: 5 },
   withoutLogin,
   defer: (work) => {
@@ -51,12 +51,14 @@ const port = new Promise<number>((resolve) => {
   server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
 });
 
-// 部屋のサーバーは、テストの設定で先に作っておく。fetchWith がほかの設定で先に作ると、部屋がその設定で動く
+// The room server is made first, with the test settings. If fetchWith made it first with other
+// settings, the rooms would run with those settings.
 await provider.backendFor(config);
 
 const deps = async () => provider.depsFor(config) as NonNullable<ReturnType<typeof provider.depsFor>>;
 
-// 終わりかけの仕事（振っているダイスなど）を待ち、部屋を放してから閉じる。テストのあとで書き残させない
+// Waits for the work still finishing (dice being rolled and so on), and lets the rooms go before
+// closing, so that nothing is written after the tests.
 afterAll(async () => {
   await Promise.all([...deferred]);
   const { runtime, redis } = await deps();
@@ -66,7 +68,7 @@ afterAll(async () => {
   redis.destroy();
 });
 
-/** テストは送信元を CF-Connecting-IP に書く。Vercel では x-real-ip に入る */
+/** The tests write the sender in CF-Connecting-IP. On Vercel it goes in x-real-ip. */
 const vercelHeaders = (headers: Headers): Headers => {
   const moved = new Headers(headers);
   const ip = moved.get('CF-Connecting-IP');
@@ -76,7 +78,7 @@ const vercelHeaders = (headers: Headers): Headers => {
 
 const forVercel = (request: Request): Request => new Request(request, { headers: vercelHeaders(request.headers) });
 
-/** ws のクライアントを、テストの形にする。受ける側が付く前に届いたものは取っておく */
+/** Turns a ws client into the tests' shape. Keeps what comes in before a listener is attached. */
 const socketOf = (ws: WebSocket): TestSocket => {
   const inbox: (ArrayBuffer | string)[] = [];
   let onMessage: ((data: ArrayBuffer | string) => void) | null = null;
@@ -108,7 +110,7 @@ const socketOf = (ws: WebSocket): TestSocket => {
 };
 
 export const harness: Harness = {
-  // Blob は本文の上限を超えるものを直接上げさせられる。メモリの置き場所も同じにしてある
+  // Blob can have anything over the body limit uploaded directly. The memory store is set up the same.
   assetUpload: { maxPutBytes: MAX_PUT_BYTES, directUpload: true },
 
   fetch: async (request) => app.fetch(forVercel(request)),
@@ -121,7 +123,7 @@ export const harness: Harness = {
   },
 
   upgrade: async (request) => {
-    // WebSocket でない要求は、HTTP のまま送る
+    // A request that is not for a WebSocket is sent as plain HTTP.
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       const res = await harness.fetch(request);
       return { status: res.status, socket: null, json: () => res.json() };

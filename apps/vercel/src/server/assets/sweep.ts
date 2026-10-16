@@ -4,19 +4,23 @@ import { roomKeysOf } from '../rooms/keys.js';
 import { assetIndexOf } from './backend.js';
 import type { AssetBucket } from './bucket.js';
 
-// 消しそこねたアセットの掃除。部屋を消すときは索引にあるものを消すので、置いたあとで索引に書けなかった
-// ものや、部屋を消す途中で落ちたものが Blob に残る。直接上げたまま知らせの来なかった仮置きも残る。
-// Blob を少しずつ見て、部屋が無いか索引に無いものと、古い仮置きを消す。置かせない印は消さない
+// The sweep of leftover assets. Deleting a room deletes what is in its index, so what was stored
+// but could not be written to the index, and what was left when the server went down partway
+// through deleting a room, stay in Blob. Temporary uploads that went up directly but whose notice
+// never came also stay. The sweep looks through Blob a little at a time, and deletes what has no
+// room or is not in the index, and old temporary uploads. It does not delete the marks that keep an
+// asset from being stored.
 //
-//   sweep:blob-cursor   STR   次に見るページ。終わりまで見たら消し、また頭から見る
+//   sweep:blob-cursor   STR   The page to look at next. Deleted at the end, to start from the top again.
 
 /**
- * 置いてからこの時間（ミリ秒）より新しいものは消さない。置いている途中か、上げ終えた知らせを待っている
- * かもしれない（上げる先と約束は、これより早く切れる）
+ * What was stored less than this long ago (milliseconds) is not deleted. It may still be being
+ * stored, or waiting for the notice that the upload is done (the target and the ticket run out
+ * sooner than this).
  */
 export const ORPHAN_AGE_MS = 60 * 60 * 1000;
 
-/** Blob の1ページを見て、消しそこねたアセットを消す。消した数を返す */
+/** Looks through one page of Blob and deletes the leftover assets. Returns how many it deleted. */
 export const orphanSweeper = (redis: Redis, key: KeyOf, bucket: AssetBucket) => async (): Promise<number> => {
   const cursorKey = key('sweep', 'blob-cursor');
   const page = await bucket.list('', await redis.get(cursorKey));

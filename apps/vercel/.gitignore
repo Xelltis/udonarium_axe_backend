@@ -36,5 +36,5 @@ coverage/
 # npm run check:esm
 .esm-check/
 
-# BLOB_LOCAL_DIR の置き場所（手元で試すとき）
+# Where BLOB_LOCAL_DIR points (when trying it locally)
 .blob/

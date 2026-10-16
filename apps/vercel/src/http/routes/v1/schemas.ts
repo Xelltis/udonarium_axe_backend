@@ -2,13 +2,13 @@ import { check, maxBytes, minLength, number, object, pipe, regex, string, value 
 
 import { LOBBY_CHANNEL_PREFIX } from '../../../domain/skyway/scopes.js';
 
-/** channelName と peerId の最大バイト数（PHP 版と同じ） */
+/** The most bytes a channelName or peerId may have (the same as the PHP version). */
 const MAX_SCOPE_NAME_BYTES = 200;
 
 /**
- * SkyWay のスコープに入れる名前。SkyWay は name の "*" を任意の文字列に一致するワイルドカード、
- * "\" をその打ち消しとして解釈するので、これらを受け付けると、発行したトークンの権限が
- * 意図した部屋やメンバーを越えて広がる。
+ * A name put in a SkyWay scope. SkyWay reads "*" in a name as a wildcard that matches any string,
+ * and "\" as its escape, so taking them in would widen what the issued token allows past the room
+ * and members it was meant for.
  */
 const scopeName = pipe(string(), minLength(1), maxBytes(MAX_SCOPE_NAME_BYTES), regex(/^[^*\\]*$/));
 

@@ -6,12 +6,12 @@ import { WebSocketServer } from 'ws';
 
 import type { Upgrades } from './backend.js';
 
-/** WebSocket の1つのメッセージの上限。Cloudflare の Durable Object が受ける大きさと同じ */
+/** The limit on one WebSocket message. The same size as a Cloudflare Durable Object takes. */
 export const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
 type Fetch = (request: Request) => Response | Promise<Response>;
 
-/** つないできたソケットの番地を、x-real-ip が無ければ足す（手元のサーバー。Vercel は自分で付ける） */
+/** Adds the connecting socket's address when there is no x-real-ip (the local server; Vercel adds it itself). */
 export const headersOf = (incoming: IncomingMessage): Headers => {
   const headers = new Headers();
   for (const [name, value] of Object.entries(incoming.headers)) {
@@ -24,7 +24,7 @@ export const headersOf = (incoming: IncomingMessage): Headers => {
   return headers;
 };
 
-/** WebSocket に替えなかった要求に、HTTP のまま答えて閉じる */
+/** Answers a request that did not switch to a WebSocket over plain HTTP, and closes it. */
 const answer = async (socket: Duplex, response: Response): Promise<void> => {
   const body = Buffer.from(await response.arrayBuffer());
   const lines = [`HTTP/1.1 ${response.status} ${STATUS_CODES[response.status] ?? ''}`];
@@ -34,8 +34,9 @@ const answer = async (socket: Duplex, response: Response): Promise<void> => {
 };
 
 /**
- * Hono の app を、WebSocket も受ける Node の HTTP サーバーにする。WebSocket につなぎ替える要求も
- * app に通し、部屋の経路が Origin・部屋の鍵・数を確かめてから、upgrades を通して ws に渡す
+ * Makes the Hono app a Node HTTP server that takes WebSockets too. Requests that switch over to a
+ * WebSocket also go through the app, and once the room route has checked the Origin, the room key
+ * and the count, they are handed to ws through upgrades.
  */
 export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
   const server = createAdaptorServer({ fetch }) as Server;
@@ -46,7 +47,7 @@ export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
   });
 
   server.on('upgrade', (incoming: IncomingMessage, socket: Duplex, head: Buffer) => {
-    // Node の HTTP サーバーは、Host の無い要求を受けない
+    // The Node HTTP server does not take a request without a Host.
     const request = new Request(`http://${incoming.headers.host as string}${incoming.url as string}`, {
       headers: headersOf(incoming),
     });

@@ -13,7 +13,7 @@ import type { AddressInfo } from 'node:net';
 import server, { app } from '../../api/index.js';
 
 describe('api entry', () => {
-  // Vercel の Node.js ランタイムは、デフォルトエクスポートの HTTP サーバーに要求を渡す
+  // The Vercel Node.js runtime hands requests to the HTTP server that is the default export.
   it('exposes a Node HTTP server that answers both the SkyWay and the room server routes', async () => {
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;

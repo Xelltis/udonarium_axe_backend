@@ -21,7 +21,7 @@ const init = (roomKey: string) => ({
 
 const upgradeRequest = () => new Request('https://backend.example/v1/rooms/r/ws');
 
-/** WebSocket に替えたことにする。送ったものと閉じたものを覚える */
+/** Acts as if the connection switched to a WebSocket. Remembers what was sent and how it closed. */
 const fakeUpgrade = (upgrades: Upgrades, request: Request) => {
   const socket = {
     sent: [] as unknown[],

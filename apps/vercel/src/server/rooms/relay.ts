@@ -2,37 +2,39 @@ import { decode, encode } from '@msgpack/msgpack';
 
 import type { KeyOf, Redis } from '../redis.js';
 
-// 部屋の WebSocket が、部屋の持ち主でないインスタンスに着いたとき、持ち主との行き来を Redis の
-// pub/sub で運ぶ。
+// When a room's WebSocket lands on an instance that is not the room's owner, Redis pub/sub carries
+// the traffic to and from the owner.
 //
-//   r:<鍵>:in       持ち主が受ける。ほかのインスタンスから、つないだ・届いた・切れた
-//   i:<ID>:out      インスタンスが受ける。持ち主から、送る・閉じる
-//   r:<鍵>:ctl      部屋に WebSocket を持つインスタンスが受ける。持ち主が替わる・部屋を消した
-//   i:<ID>          インスタンスが生きている印。HEARTBEAT_MS ごとに延ばす
+//   r:<key>:in     The owner listens. From other instances: opened, a frame came, closed.
+//   i:<ID>:out     An instance listens. From the owner: send, close.
+//   r:<key>:ctl    The instances with a WebSocket for the room listen. The owner changes, the room
+//                  was deleted.
+//   i:<ID>         The mark that an instance is alive. Extended every HEARTBEAT_MS.
 //
-// 1つのインスタンスからの行き来は1本の接続で順に送るので、1つの WebSocket の中の順は変わらない
+// The traffic from one instance goes in order over one connection, so the order within one
+// WebSocket does not change.
 
-/** インスタンスが生きている印が続く時間と、延ばす間（ミリ秒） */
+/** How long the mark that an instance is alive lasts, and how often it is extended (milliseconds). */
 export const INSTANCE_TTL_MS = 15_000;
 export const HEARTBEAT_MS = 5_000;
 
-/** 1回の publish に載せる量の上限。超えるものは分けて送る */
+/** The limit on how much one publish carries. Anything over it is sent in parts. */
 export const PART_BYTES = 512 * 1024;
 
-/** 持ち主へ */
+/** To the owner. */
 export type Inbound =
   | { t: 'open'; c: string; i: string }
   | { t: 'frame'; c: string; d: Uint8Array | string }
   | { t: 'close'; c: string; rotated: boolean };
 
-/** インスタンスへ */
+/** To an instance. */
 export type Outbound =
   { t: 'frame'; c: string; d: Uint8Array | string } | { t: 'close'; c: string; code: number; reason: string };
 
-/** 部屋の WebSocket を持つインスタンスへ */
+/** To the instances with a WebSocket for the room. */
 export type Control = { t: 'moved' } | { t: 'delete' };
 
-/** 分けたものの1つ。m は送る側がメッセージごとに振る番号 */
+/** One of the parts. m is the number the sender gives each message. */
 interface Part {
   t: 'part';
   m: number;
@@ -47,7 +49,7 @@ export class Relay {
   private subscriber: Redis | null = null;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private sent = 0;
-  /** 分けて届いたものを、そろうまで置いておく。送り手のチャンネルとメッセージごと */
+  /** Holds what comes in parts until all the parts are there. Kept for each sender's channel and message. */
   private readonly parts = new Map<string, Uint8Array[]>();
 
   constructor(
@@ -62,7 +64,7 @@ export class Relay {
   controlOf = (roomKey: string) => this.key('r', roomKey, 'ctl');
   aliveOf = (instance: string) => this.key('i', instance);
 
-  /** 受けるための接続をつなぎ、生きている印を置き始める */
+  /** Opens the connection for listening, and starts putting up the mark that this instance is alive. */
   async start(): Promise<void> {
     if (this.subscriber) return;
     this.subscriber = this.redis.duplicate();
@@ -79,7 +81,7 @@ export class Relay {
     this.heartbeat.unref();
   }
 
-  /** やめる。生きている印も消す */
+  /** Stops. Also deletes the mark that this instance is alive. */
   async stop(): Promise<void> {
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
@@ -89,12 +91,12 @@ export class Relay {
     await this.redis.del(this.aliveOf(this.instance));
   }
 
-  /** そのインスタンスが生きているか */
+  /** Whether that instance is alive. */
   async isAlive(instance: string): Promise<boolean> {
     return (await this.redis.exists(this.aliveOf(instance))) === 1;
   }
 
-  /** 送る。受けたものの数（受け手のインスタンスの数）を返す。分けて送ったときは、最後のものの数 */
+  /** Sends. Returns how many instances got it. When it is sent in parts, the count for the last part. */
   async publish(channel: string, message: Inbound | Outbound | Control): Promise<number> {
     const bytes = Buffer.from(encode(message));
     if (bytes.byteLength <= PART_BYTES) return this.redis.publish(channel, bytes);
@@ -114,7 +116,7 @@ export class Relay {
     return received;
   }
 
-  /** そのチャンネルを受ける。分けて届いたものは、そろってから渡す */
+  /** Listens on that channel. What comes in parts is passed on once all the parts are there. */
   async subscribe<T>(channel: string, listener: Listener<T>): Promise<void> {
     await (this.subscriber as Redis).subscribe(
       channel,
@@ -136,7 +138,7 @@ export class Relay {
     );
   }
 
-  /** そのチャンネルを受けるのをやめる。もうやめていれば（接続を閉じたあとも）何もしない */
+  /** Stops listening on that channel. Does nothing if it already stopped (also once the connection is closed). */
   async unsubscribe(channel: string): Promise<void> {
     await this.subscriber?.unsubscribe(channel).catch(() => undefined);
   }

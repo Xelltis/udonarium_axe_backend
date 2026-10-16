@@ -13,20 +13,23 @@ import type { IssuedToken, Profile, Secret, Session } from '../core/auth/secrets
 import type { AccountPort } from '../core/http/backend.js';
 import type { KeyOf, Redis } from './redis.js';
 
-// ログインした1人ぶんのアカウントを Redis に置く。Cloudflare 版の AccountDurableObject と同じことをする。
+// Keeps the account of one logged-in person in Redis. Does the same as the Cloudflare version's
+// AccountDurableObject.
 //
-//   acct:<鍵>:profile         HASH  userId（初めのときに決めたまま）・name・avatarUrl・createdAt・updatedAt
-//   acct:<鍵>:code:<ID>       HASH  hash・challenge・expiresAt。期限で消える
-//   acct:<鍵>:codes           SET   コードの ID（アカウントを消すときのため）
-//   acct:<鍵>:rt:<ID>         STR   リフレッシュトークンの系統。期限で消える
-//   acct:<鍵>:fam:<系統>      HASH  ID → {hash, expiresAt, used} の JSON
-//   acct:<鍵>:families        SET   系統
+//   acct:<key>:profile         HASH  userId (as decided the first time), name, avatarUrl, createdAt,
+//                                    updatedAt.
+//   acct:<key>:code:<ID>       HASH  hash, challenge, expiresAt. Goes away when it expires.
+//   acct:<key>:codes           SET   The code ids (for when the account is deleted).
+//   acct:<key>:rt:<ID>         STR   The refresh token's family. Goes away when it expires.
+//   acct:<key>:fam:<family>    HASH  id → JSON of {hash, expiresAt, used}.
+//   acct:<key>:families        SET   The families.
 //
-// 秘密はハッシュにして置く。期限は、置いた expiresAt で確かめる（キーの期限は片付けのため）
+// Secrets are kept as hashes. Expiry is checked with the stored expiresAt (the keys' expiry is for
+// tidying up).
 
 const SECOND_MS = 1000;
 
-/** 系統の中のリフレッシュトークン */
+/** A refresh token in a family. */
 interface TokenEntry {
   hash: string;
   expiresAt: number;
@@ -34,10 +37,13 @@ interface TokenEntry {
 }
 
 /**
- * リフレッシュトークンを使い、同じ系統の新しいものに替える。
- * KEYS は系統・新しいトークン・系統の一覧、ARGV は使ったトークンの ID・新しい ID・新しい中身・期限（ミリ秒）・系統。読んでから書くまでを1つにし、同じトークンで
- * 同時に来た2つが、どちらも使っていないものとして通らないようにする。
- * もう使ったものが来たら、系統ごと消して -1。見つからなければ 0。替えたら 1
+ * Uses a refresh token and swaps it for a new one in the same family.
+ * KEYS are the family, the new token and the list of families; ARGV are the used token's id, the
+ * new id, the new contents, the expiry (milliseconds) and the family. The read and the write are
+ * one step, so that two requests that come at the same time with the same token cannot both get
+ * through as if it were unused.
+ * When a token already used comes, deletes the whole family and returns -1. 0 when the token is
+ * not found. 1 when it was swapped.
  */
 const ROTATE = `
 local entry = redis.call('HGET', KEYS[1], ARGV[1])
@@ -68,7 +74,7 @@ export const redisAccount = (redis: Redis, key: KeyOf, accountKey: string): Acco
     };
   };
 
-  /** 系統に、作っておいたトークンを置く */
+  /** Puts a token made beforehand into a family. */
   const issue = async (family: string, next: IssuedToken): Promise<void> => {
     const ttl = REFRESH_TOKEN_SECONDS * SECOND_MS;
     const entry: TokenEntry = {
@@ -85,13 +91,13 @@ export const redisAccount = (redis: Redis, key: KeyOf, accountKey: string): Acco
       .exec();
   };
 
-  /** 人の情報があれば、渡すものを作る。消したあとなら null */
+  /** Makes what is handed out, when the person's profile is there. Null once it has been deleted. */
   const sessionOf = async (next: IssuedToken): Promise<Session | null> => {
     const current = await account();
     return current && { account: current, accountKey, refreshToken: next.token };
   };
 
-  /** 期限のうちで、秘密の合うトークンの系統と中身。無ければ null */
+  /** The family and contents of an unexpired token whose secret matches. Null when there is none. */
   const findRefreshToken = async (
     token: Secret,
     hash: string
@@ -134,7 +140,7 @@ export const redisAccount = (redis: Redis, key: KeyOf, accountKey: string): Acco
 
     async redeem(code: Secret, verifier: string): Promise<Session | null> {
       const codeKey = of('code', code.id);
-      // 1度しか使えない。合わなくても消す
+      // It can be used only once. It is deleted even when it does not match.
       const [stored] = (await redis
         .multi()
         .hGetAll(codeKey)

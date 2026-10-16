@@ -10,7 +10,7 @@ import type { Swept } from '../server/deps.js';
 import { onError } from '../core/http/errors.js';
 import { serverRoutes } from '../core/http/routes/index.js';
 
-/** 部屋のサーバーの経路。SkyWay の経路とは、設定もエラーの形も別 */
+/** The room server's routes. Their settings and error shape are separate from the SkyWay routes'. */
 export const SERVER_PATHS = [
   '/v1/rooms',
   '/v1/rooms/*',
@@ -22,19 +22,20 @@ export const SERVER_PATHS = [
 ];
 
 export interface ServerAppOptions {
-  /** 環境変数。置かなければ process.env */
+  /** The environment variables, or process.env when not given. */
   env?: () => Record<string, string | undefined>;
-  /** 設定に合う部屋のサーバー */
+  /** The room server that fits the settings. */
   backendFor: (config: VercelServerConfig) => Promise<ServerBackend>;
-  /** 消す時刻を過ぎた部屋と、消しそこねたアセットを消す */
+  /** Deletes the rooms past their time to be deleted, and the assets that failed to be deleted. */
   sweep: (config: VercelServerConfig) => Promise<Swept>;
 }
 
 type ServerAppEnv = ServerEnv & { Variables: { config: VercelServerConfig } };
 
 /**
- * 部屋のサーバーの経路。Cloudflare 版と同じ src/core の経路を、Redis と Blob に置く部屋のサーバーで動かす。
- * 設定は1度読んだら使い回す（Node のプロセスのあいだ変わらない）。読めなければ次のリクエストで読み直す
+ * The room server's routes. Runs the same src/core routes as the Cloudflare version on a room
+ * server kept in Redis and Blob. The settings are read once and then reused (they do not change
+ * while the Node process lives). When they cannot be read, the next request reads them again.
  */
 export const serverApp = (options: ServerAppOptions): Hono<ServerAppEnv> => {
   let cached: VercelServerConfig | undefined;
@@ -48,7 +49,7 @@ export const serverApp = (options: ServerAppOptions): Hono<ServerAppEnv> => {
   app.onError(onError);
   for (const path of SERVER_PATHS) app.use(path, loader);
   app.route('/v1', serverRoutes());
-  // Vercel Cron が呼ぶ掃除。CRON_SECRET を置いていれば、Vercel が付ける Authorization を確かめる
+  // The sweep Vercel Cron calls. When CRON_SECRET is set, checks the Authorization Vercel adds.
   app.get('/internal/sweep', async (c) => {
     const config = c.get('config');
     const authorization = c.req.header('Authorization') ?? '';

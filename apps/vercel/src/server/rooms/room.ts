@@ -12,80 +12,82 @@ import { expiryKeyOf, readRoomMeta, roomKeysOf } from './keys.js';
 import type { RoomKeys, RoomMeta } from './keys.js';
 import { RedisRoomStore } from './store.js';
 
-/** 持ち主の lease が続く時間（ミリ秒）。持ち主は LEASE_RENEW_MS ごとに延ばす */
+/** How long the owner's lease lasts (milliseconds). The owner extends it every LEASE_RENEW_MS. */
 export const LEASE_MS = 15_000;
 export const LEASE_RENEW_MS = 5_000;
 
-/** 人がいるあいだ、部屋を見回る間（ミリ秒）。Cloudflare 版の alarm の代わり */
+/** How often the room is checked while people are in it (milliseconds). Replaces the Cloudflare version's alarm. */
 export const ROOM_TICK_MS = 30_000;
 
-/** 部屋の lease が空くのを待つ間（ミリ秒） */
+/** How long each wait is while waiting for the room's lease to come free (milliseconds). */
 const LEASE_POLL_MS = 100;
 
-/** lease を延ばす。まだ自分のものなら延ばして 1 */
+/** Extends the lease. Extends it and returns 1 when it is still this owner's. */
 const RENEW = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 redis.call('PEXPIRE', KEYS[1], ARGV[2])
 return 1
 `;
 
-/** lease を返す。自分のものなら消して 1 */
+/** Gives the lease back. Deletes it and returns 1 when it is this owner's. */
 const RELEASE = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 redis.call('DEL', KEYS[1])
 return 1
 `;
 
-/** 部屋への接続の、送ると閉じる */
+/** Sending and closing, for a connection to a room. */
 export interface ConnSocket {
   send(frame: Uint8Array | string): void;
   close(code: number, reason: string): void;
 }
 
-/** 部屋への1つの接続 */
+/** One connection to a room. */
 export interface Conn {
-  /** 接続の ID */
+  /** The connection's id. */
   readonly id: string;
   readonly socket: ConnSocket;
   seat: Seat | null;
-  /** ほかのインスタンスに着いた WebSocket なら、そのインスタンス。このインスタンスのものなら無い */
+  /** The instance, for a WebSocket that landed on another instance. Not set for one on this instance. */
   readonly instance?: string;
 }
 
-/** 部屋を開こうとした結果。ほかのインスタンスが持ち主なら、そのインスタンス */
+/** What came of trying to open a room. When another instance is the owner, that instance. */
 export type Claim = { room: VercelRoom } | { holder: string };
 
-/** 部屋が使う、インスタンスで1つのもの */
+/** What a room uses, one of each per instance. */
 export interface RoomDeps {
   redis: Redis;
   key: KeyOf;
   lobby: RedisLobby;
-  /** このインスタンスの ID */
+  /** This instance's id. */
   instance: string;
-  /** 部屋から最後の1人が出てから、部屋を消すまでの秒数 */
+  /** Seconds from when the last person leaves a room until the room is deleted. */
   retentionSeconds: number;
-  /** トークンを確かめる鍵。部屋ごとにログインを外していれば null */
+  /** The secret that tokens are checked with. Null when login is turned off for the room. */
   sessionSecret: (roomKey: string) => string | null;
-  /** welcome で知らせるアセットの置き方。1回の PUT で種類ごとの上限まで置けるなら null */
+  /** How assets are stored, as told in welcome. Null when one PUT can store up to the limit for each kind. */
   assetUpload: AssetUploadPolicy | null;
-  /** 部屋を消すときに、部屋のアセットを消す */
+  /** Deletes a room's assets when the room is deleted. */
   deleteAssets: (roomKey: string) => Promise<void>;
-  /** 返したあとも終わるまで続ける仕事 */
+  /** Work that goes on to the end even after the response is sent. */
   defer: (work: Promise<unknown>) => void;
   tombstoneLimits?: TombstoneLimits;
-  /** lease と見回りの間（ミリ秒）。テストで短くする */
+  /** The intervals of the lease and the check (milliseconds). The tests make them short. */
   timing?: { leaseMs: number; renewMs: number; tickMs: number };
-  /** そのインスタンスが生きているか。生きていなければ、その lease が切れるのを待つ */
+  /** Whether that instance is alive. When it is not, waits for its lease to run out. */
   isAlive?: (instance: string) => Promise<boolean>;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * 1つの部屋。このインスタンスが部屋の持ち主（lease を持つ）のあいだ、部屋の状態をメモリに置き、
- * RoomEngine に中継と同期を任せる。Cloudflare 版の RoomDurableObject にあたる。
+ * One room. While this instance is the room's owner (holds the lease), it keeps the room's state in
+ * memory and leaves relaying and syncing to RoomEngine. The counterpart of the Cloudflare version's
+ * RoomDurableObject.
  *
- * 部屋の状態（オブジェクト・役割・人がいるか）は Redis に置き、書くのは持ち主のときだけ（fencedWrite）
+ * The room's state (objects, roles, whether people are in) is kept in Redis, and written only while
+ * this instance is the owner (fencedWrite).
  */
 export class VercelRoom implements RoomHost<Conn> {
   readonly engine = new RoomEngine<Conn>(this);
@@ -93,10 +95,10 @@ export class VercelRoom implements RoomHost<Conn> {
   private deleting = false;
   private released = false;
   private timers: ReturnType<typeof setInterval>[] = [];
-  /** Redis に書く順番。持ち主のときだけ書く */
+  /** The queue of writes to Redis, in order. Writes only while this instance is the owner. */
   private writing: Promise<void> = Promise.resolve();
   private lobbyQueue: Promise<void> = Promise.resolve();
-  /** 放したときに呼ぶ */
+  /** Called when the room is let go. */
   onRelease: () => void = () => undefined;
 
   private constructor(
@@ -110,9 +112,10 @@ export class VercelRoom implements RoomHost<Conn> {
   ) {}
 
   /**
-   * 部屋を開く。部屋があれば lease を取り、状態を読む。生きているほかのインスタンスが lease を持って
-   * いれば、そのインスタンスを返す（そちらへ中継する）。持ち主が落ちていれば、lease が切れるのを待つ。
-   * 部屋が無ければ、つないできた人を断るだけの部屋を返す
+   * Opens a room. When the room exists, takes the lease and reads the state. When another instance
+   * that is alive holds the lease, returns that instance (to relay to it). When the owner has gone
+   * down, waits for the lease to run out. When there is no room, returns a room that only refuses
+   * whoever connects.
    */
   static async claim(deps: RoomDeps, roomKey: string): Promise<Claim> {
     const keys = roomKeysOf(deps.key, roomKey);
@@ -128,7 +131,8 @@ export class VercelRoom implements RoomHost<Conn> {
       })) === null
     ) {
       const holder = (await deps.redis.get(keys.lease))?.split(':')[0];
-      // このインスタンスの前の部屋が放すところなら待つ。ほかのインスタンスが生きていれば、そちらの部屋
+      // Waits when this instance's earlier room is letting go. When another instance is alive, the
+      // room is that instance's.
       if (holder && holder !== deps.instance && (await deps.isAlive?.(holder))) return { holder };
       await sleep(LEASE_POLL_MS);
     }
@@ -152,7 +156,7 @@ export class VercelRoom implements RoomHost<Conn> {
     return { room };
   }
 
-  /** 部屋を開く。ほかのインスタンスが持ち主なら、放すまで待つ（このインスタンスで動かすとき） */
+  /** Opens a room. Waits until another instance that owns it lets go (for running it on this instance). */
   static async open(deps: RoomDeps, roomKey: string): Promise<VercelRoom> {
     for (;;) {
       const claim = await VercelRoom.claim(deps, roomKey);
@@ -181,8 +185,9 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 
   /**
-   * 見回り。トークンの切れた席と、いない人のカーソルを片付け、一覧の人数を合わせる。人がいれば、消す時刻を
-   * 先へ延ばす
+   * The check. Clears away the seats whose token has run out and the cursors of people not there,
+   * and brings the head count in the list up to date. When people are in, pushes the time to delete
+   * the room later.
    */
   tick(): void {
     if (!this.meta || this.released) return;
@@ -193,7 +198,7 @@ export class VercelRoom implements RoomHost<Conn> {
     this.dropLostInstances().catch((err: unknown) => console.error('Could not look for lost instances:', err));
   }
 
-  /** 落ちたインスタンス（生きている印の切れたもの）に着いていた接続を、出たことにする */
+  /** Treats the connections on a lost instance (one whose alive mark ran out) as having left. */
   private async dropLostInstances(): Promise<void> {
     const isAlive = this.deps.isAlive;
     if (!isAlive) return;
@@ -202,9 +207,9 @@ export class VercelRoom implements RoomHost<Conn> {
     }
   }
 
-  // ---- 接続 ----
+  // ---- Connections ----
 
-  /** 接続を受ける */
+  /** Takes a connection. */
   accept(conn: Conn): void {
     this.conns.add(conn);
     this.engine.accept(conn);
@@ -215,8 +220,8 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 
   /**
-   * 接続が切れた。このインスタンスの接続が無くなったら、部屋を放す。持ち主は、自分の WebSocket を
-   * 持っているあいだだけ動いている（Vercel は、呼び出しの無いインスタンスを止めてしまう）
+   * A connection dropped. When this instance has no connections left, lets the room go. The owner
+   * runs only while it holds WebSockets of its own (Vercel stops an instance with no calls).
    */
   closed(conn: Conn): void {
     this.engine.closed(conn);
@@ -224,26 +229,26 @@ export class VercelRoom implements RoomHost<Conn> {
     if (![...this.conns].some((other) => !other.instance)) this.letGo();
   }
 
-  /** ほかのインスタンスに着いた接続 */
+  /** The connections that landed on other instances. */
   get remotes(): Conn[] {
     return [...this.conns].filter((conn) => conn.instance);
   }
 
-  /** いまの接続の数 */
+  /** How many connections there are now. */
   get size(): number {
     return this.conns.size;
   }
 
-  /** もう放した（持ち主でない） */
+  /** Whether the room has already been let go (this instance is not the owner). */
   get isReleased(): boolean {
     return this.released;
   }
 
-  // ---- 削除 ----
+  // ---- Deleting ----
 
   /**
-   * 部屋を削除する。その部屋の GM だけが削除できる。入っている人には room-deleted を送ってから閉じ、
-   * 一覧から外して置いたものをすべて消す
+   * Deletes the room. Only a GM of the room can delete it. Sends room-deleted to the people in it
+   * before closing them, takes the room off the list and deletes everything it kept.
    */
   async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     if (!this.meta || this.deleting) return 'not-found';
@@ -255,8 +260,8 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 
   /**
-   * ほかのインスタンスで、この部屋の GM が部屋を削除した（そちらで確かめて、消す印も付けてある）。
-   * 入っている人に room-deleted を送ってから閉じ、残りを消す
+   * A GM of this room deleted it on another instance (that instance checked, and also marked it to
+   * be deleted). Sends room-deleted to the people in it before closing them, and deletes the rest.
    */
   async deletedElsewhere(): Promise<void> {
     if (!this.meta || this.deleting) return;
@@ -266,8 +271,9 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 
   /**
-   * 部屋を一覧から外し、部屋のアセットと置いたものをすべて消す。消しはじめたことを先に書くので、途中で
-   * 落ちても入れる部屋には戻らず、掃除が残りを消す
+   * Takes the room off the list and deletes its assets and everything it kept. It writes first that
+   * deleting has begun, so even if the server goes down partway, the room does not go back to being
+   * one that people can join, and the sweep deletes the rest.
    */
   async wipe(): Promise<void> {
     this.deleting = true;
@@ -291,27 +297,28 @@ export class VercelRoom implements RoomHost<Conn> {
     await this.release();
   }
 
-  // ---- 持ち主をやめる ----
+  // ---- Stepping down as owner ----
 
-  /** lease を失った（ほかのインスタンスが部屋を取った）。つないでいる人には、つなぎ直してもらう */
+  /** The lease was lost (another instance took the room). Has the people connected reconnect. */
   stepDown(): void {
     if (this.released) return;
     for (const conn of this.conns) this.close(conn, COME_BACK_CODE, 'moved');
     this.letGo();
   }
 
-  /** 放す。うまく放せなくても（Redis が落ちた）、lease は切れて、ほかのインスタンスが取る */
+  /** Lets the room go. Even when that fails (Redis went down), the lease runs out and another instance takes it. */
   private letGo(): void {
     this.release().catch((err: unknown) => console.error('Could not let the room go:', err));
   }
 
-  /** まとめておいた変更を書き、書き終えてから lease を返す */
+  /** Writes the changes gathered so far, and gives the lease back once they are written. */
   async release(): Promise<void> {
     if (this.released) return;
     this.released = true;
     for (const timer of this.timers) clearInterval(timer);
     this.onRelease();
-    // 最後の1人が出た直後の変更も、lease を返す前に書く。返したあとでは書けない
+    // Changes made just after the last person left are also written before the lease goes back.
+    // They cannot be written after that.
     if (this.room()) this.engine.flushNow();
     await this.settle();
     if (this.lease) {
@@ -319,14 +326,14 @@ export class VercelRoom implements RoomHost<Conn> {
     }
   }
 
-  /** 書きかけのものを書き終えるまで待つ */
+  /** Waits until the writes under way are done. */
   async settle(): Promise<void> {
     await this.objects?.settle();
     await this.writing;
     await this.lobbyQueue;
   }
 
-  // ---- RoomEngine に渡すもの ----
+  // ---- What RoomEngine is given ----
 
   connections(): Conn[] {
     return [...this.conns];
@@ -366,7 +373,7 @@ export class VercelRoom implements RoomHost<Conn> {
     return this.objects as RedisRoomStore;
   }
 
-  /** ログインした人ごとの役割。メモリに置き、Redis には後ろで書く */
+  /** The role of each logged-in person. Kept in memory, and written to Redis in the background. */
   readonly roles: RoleBook = {
     roleOf: (userId) => this.roleMap.get(userId) ?? null,
     add: (userId, role) => this.setRole(userId, role),
@@ -388,19 +395,20 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 
   /**
-   * 人がいるあいだは消さない。消す時刻は、見回りのたびに先へ延ばす。持ち主が落ちて延ばす者がいなくなれば、
-   * 最後に見たときから保持期間のあとに消える
+   * The room is not deleted while people are in. Each check pushes the time to delete it later. When
+   * the owner goes down and nobody pushes it any more, the room goes away one retention period after
+   * it was last checked.
    */
   occupied(): void {
     this.persist([{ command: 'HDEL', key: this.keys.meta, args: ['emptiedAt'] }, this.expiry()]);
   }
 
-  /** だれもいなくなった。ここから保持期間を数える */
+  /** Nobody is left. The retention period is counted from here. */
   emptied(): void {
     this.persist([{ command: 'HSET', key: this.keys.meta, args: ['emptiedAt', String(Date.now())] }, this.expiry()]);
   }
 
-  /** 消す時刻を、いまから保持期間のあとにする */
+  /** Sets the time to delete the room to one retention period from now. */
   private expiry(): Op {
     return {
       command: 'ZADD',
@@ -409,7 +417,7 @@ export class VercelRoom implements RoomHost<Conn> {
     };
   }
 
-  /** 一覧の人数と GM を直す。知らせる順に並べる。部屋が消えたあとの知らせは、一覧が受けない */
+  /** Updates the head count and GMs in the list, in order. The list does not take notices for a deleted room. */
   lobbyChanged(roomKey: string): void {
     this.lobbyQueue = this.lobbyQueue
       .then(async () => {
@@ -424,7 +432,7 @@ export class VercelRoom implements RoomHost<Conn> {
     this.deps.defer(this.lobbyQueue);
   }
 
-  /** 部屋で起きたことを、構造化したログに1行書く */
+  /** Writes what happened in the room as one line of structured log. */
   record(event: RoomEvent, detail: string, value: number): void {
     if (!this.meta) return;
     console.info(
@@ -443,7 +451,7 @@ export class VercelRoom implements RoomHost<Conn> {
     this.deps.defer(work);
   }
 
-  /** 持ち主として、順に書く */
+  /** Writes as the owner, in order. */
   private persist(ops: Op[]): void {
     this.writing = this.writing
       .then(async () => {
@@ -454,7 +462,7 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 }
 
-/** 部屋の置いたものを Redis からすべて消す */
+/** Deletes everything the room kept from Redis. */
 export const wipeRoom = async (redis: Redis, key: KeyOf, roomKey: string): Promise<void> => {
   const keys = roomKeysOf(key, roomKey);
   const chunked = await redis.sMembers(keys.chunked);

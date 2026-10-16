@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 部屋を作った部屋のサーバーと、別の設定の runtime */
+/** A room server that made a room, and a runtime with other settings. */
 const setUp = async (options: { socketSeconds?: number; parkMs?: number } = {}) => {
   const deps = await depsOf(connection.redis);
   await vercelBackend(deps).rooms.create({
@@ -102,7 +102,7 @@ describe('the room runtime', () => {
   it('opens a room again when it was let go while being waited for', async () => {
     const { runtime } = await setUp();
     const first = runtime.room('room');
-    // 1つめが受け取ったあと、2つめが受け取る前に放す
+    // Lets go after the first one gets the room and before the second one does.
     const { rooms } = runtime as unknown as {
       rooms: Map<string, Promise<{ room: { release(): Promise<void> } }>>;
     };

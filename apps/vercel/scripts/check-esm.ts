@@ -1,6 +1,7 @@
-// tsc で JavaScript にしたものを素の Node で読み、BCDice を1回振る。テストは Vite を通すので、
-// import の .js の付け忘れや、JSON の import 属性の漏れを見逃す。Vercel の上では素の Node で動く。
-// tsx を通さずに node で動かす（tsx は拡張子の無い import も解決してしまう）
+// Loads what tsc turns into JavaScript in plain Node, and rolls BCDice once. The tests go through
+// Vite, so they miss a .js left off an import, or an import attribute left off a JSON import. On
+// Vercel the code runs in plain Node.
+// Run it with node, not through tsx (tsx also resolves imports that have no extension).
 import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';

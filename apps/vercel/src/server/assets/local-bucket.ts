@@ -4,8 +4,8 @@ import { dirname, join, sep } from 'node:path';
 import type { AssetBucket, BucketItem } from './bucket.js';
 
 /**
- * 手元のディレクトリに置くもの。手元で試すときだけ使う（BLOB_LOCAL_DIR）。Vercel の上では
- * Function のファイルは残らないので、設定が断る。一覧は1ページで返す
+ * A store in a local directory, used only when trying things out locally (BLOB_LOCAL_DIR). On
+ * Vercel a Function's files do not last, so the settings refuse it. It lists everything in one page.
  */
 export const localBucket = (dir: string): AssetBucket => {
   const fileOf = (path: string) => join(dir, ...path.split('/'));

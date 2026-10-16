@@ -6,14 +6,17 @@ import type { Fence } from './fence.js';
 import { storeKeysOf } from './store.js';
 import type { StoreKeys } from './store.js';
 
-// 部屋ごとに Redis に置くもの。
+// What is kept in Redis for each room.
 //
-//   r:<鍵>:meta    HASH  roomKey・roomId・name・salt・hash（パスワード、base64）・host・createdAt・emptiedAt・deleting
-//   r:<鍵>:roles   HASH  ユーザー ID → 役割（ログインして入ったことのある人）
-//   r:<鍵>:seats   HASH  接続の ID → 席の JSON（いま入っている人。アセットを置けるかを尋ねるため）
-//   r:<鍵>:lease   STR   部屋の持ち主（インスタンス:epoch）。持ち主が延ばし続ける
-//   r:<鍵>:epoch   STR   持ち主が替わるたびに増やす数
-//   rooms:expiry   ZSET  部屋の鍵 → 消す時刻。人がいるあいだは持ち主が先へ延ばし続ける（sweep.ts が消す）
+//   r:<key>:meta   HASH  roomKey, roomId, name, salt, hash (of the password, base64), host, createdAt,
+//                        emptiedAt, deleting.
+//   r:<key>:roles  HASH  user id → role (for each person who has come in logged in).
+//   r:<key>:seats  HASH  connection id → JSON of the seat (who is in now, so that the server can ask
+//                        whether they may store assets).
+//   r:<key>:lease  STR   The room's owner (instance:epoch). The owner keeps extending it.
+//   r:<key>:epoch  STR   A number raised each time the owner changes.
+//   rooms:expiry   ZSET  room key → when to delete the room. While people are in, the owner keeps
+//                        pushing it later (sweep.ts deletes the rooms).
 
 export interface RoomKeys extends StoreKeys, Fence {
   roles: string;
@@ -32,7 +35,7 @@ export const roomKeysOf = (key: KeyOf, roomKey: string): RoomKeys => ({
 
 export const expiryKeyOf = (key: KeyOf): string => key('rooms', 'expiry');
 
-/** 部屋の、席を作るのに要ることと、記録に添えるもの */
+/** What a room needs to make a seat, and what goes along with its log lines. */
 export interface RoomMeta {
   roomKey: string;
   password: PasswordHash | null;
@@ -46,7 +49,7 @@ const bytesOf = (text: string): ArrayBuffer => {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 };
 
-/** 部屋を作る。作った人が GM になり、だれも入らなければ保持期間で消える */
+/** Makes a room. Its maker becomes GM, and if nobody comes in, it goes away after the retention period. */
 export const createRoom = async (
   redis: Redis,
   key: KeyOf,
@@ -74,12 +77,12 @@ export const createRoom = async (
   return password !== null;
 };
 
-/** 部屋。作られていないか、消しはじめたか、保持期間を過ぎていれば null */
+/** The room, or null when it has not been made, is being deleted, or is past its retention period. */
 export const readRoomMeta = async (redis: Redis, key: KeyOf, roomKey: string): Promise<RoomMeta | null> => {
   const keys = roomKeysOf(key, roomKey);
   const [meta, wipeAt] = await Promise.all([redis.hGetAll(keys.meta), redis.zScore(expiryKeyOf(key), roomKey)]);
   if (!meta.roomKey || meta.deleting === '1') return null;
-  // 保持期間を過ぎた部屋は、消すのが遅れていても、もう無いものとする
+  // A room past its retention period counts as gone, even when deleting it is late.
   if (wipeAt !== null && wipeAt <= Date.now()) return null;
   return {
     roomKey,

@@ -5,9 +5,9 @@ import { isAllowedOrigin } from '../../core/http/origin.js';
 import { AppError } from '../errors/app-error.js';
 import type { AppEnv } from '../context.js';
 
-// Origin は下の createCorsMiddleware で検証済みなので、ここではそのまま echo する。
-// リクエストごとに cors() を組み立てると、Fluid compute の長命プロセスでは
-// 毎回ミドルウェアとオプションを再生成することになるためモジュールスコープに固定する。
+// The Origin has already been checked by createCorsMiddleware below, so this echoes it as it is.
+// Building cors() on every request would make the middleware and its options anew each time in a
+// long-lived Fluid compute process, so it is fixed at module scope.
 const corsMiddleware = cors({
   origin: (origin) => origin,
   allowHeaders: ['Content-Type', 'Accept'],

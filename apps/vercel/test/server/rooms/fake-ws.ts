@@ -7,7 +7,7 @@ import { ACCESS_TOKEN_SECONDS, signToken } from '../../../src/core/auth/tokens.j
 import { decodeFrame } from '../../../src/core/rooms/codec.js';
 import { LOGIN } from '../server-helpers.js';
 
-/** 部屋のサーバーが受けた WebSocket の代わり */
+/** Stands in for a WebSocket the room server took. */
 export class FakeWs extends EventEmitter {
   readonly sent: (string | Uint8Array)[] = [];
   closedWith: { code: number | undefined; reason: string | undefined } | null = null;
@@ -16,24 +16,24 @@ export class FakeWs extends EventEmitter {
     this.sent.push(data);
   }
 
-  /** ws と同じく、閉じるのは1回だけ。あとから閉じても何もしない */
+  /** As with ws, closes only once. Closing again later does nothing. */
   close(code?: number, reason?: string): void {
     if (this.closedWith) return;
     this.closedWith = { code, reason };
     queueMicrotask(() => this.emit('close', code, Buffer.from(reason ?? '')));
   }
 
-  /** 届いたもののうち、部屋のメッセージ */
+  /** The room messages among what arrived. */
   messages(): ServerMessage[] {
     return this.sent.flatMap((data) => (typeof data === 'string' ? [] : [decodeFrame(data) as ServerMessage]));
   }
 
-  /** 部屋のメッセージを送る */
+  /** Sends a room message. */
   emitMessage(message: unknown): void {
     this.emit('message', Buffer.from(encode(message)), true);
   }
 
-  /** 届いた data のイベント */
+  /** The events in the data messages that arrived. */
   events(): { eventName: string; data: unknown; sendFrom: string }[] {
     return this.messages().flatMap((message) => (message.type === 'data' ? message.events : []));
   }

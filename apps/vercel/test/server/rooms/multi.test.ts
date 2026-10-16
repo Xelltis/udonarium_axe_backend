@@ -13,7 +13,7 @@ import { REDIS_URL } from '../redis-helpers.js';
 import { configOf } from '../server-helpers.js';
 import { FakeWs } from './fake-ws.js';
 
-// 1つの部屋の WebSocket が、ちがうインスタンスに着いたとき
+// When the WebSockets of one room land on different instances.
 
 const opened: { runtime: { close(): Promise<void> }; redis: { destroy(): void } }[] = [];
 
@@ -25,13 +25,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-// lease が切れるのを待つテストは無いので、混んだマシンでも延ばしそこねない長さにする（持ち主が替わると
-// テストが崩れる）。見回りは短くする
+// No test waits for the lease to run out, so it is long enough not to fail to be extended even on a
+// busy machine (the tests break when the owner changes). The check is made short.
 const TIMING = { leaseMs: 5000, renewMs: 100, tickMs: 100 };
 
 /**
- * 同じ Redis を使う2つのインスタンス。部屋は a が作る。b の WebSocket は socketSecondsOfB で閉じ、b は
- * 持ち主を leaseMsOfB の2倍まで探す
+ * Two instances that use the same Redis. Instance a makes the room. Instance b's WebSockets close
+ * after socketSecondsOfB, and b looks for the owner for up to twice leaseMsOfB.
  */
 const twoInstances = async ({
   parkMs = 50,
@@ -71,7 +71,7 @@ const attach = (deps: { runtime: { attach(ws: WebSocket, roomKey: string): void 
 const welcomed = (ws: FakeWs) =>
   vi.waitFor(() => expect(ws.messages().some((message) => message.type === 'welcome')).toBe(true));
 
-/** 部屋に入る */
+/** Joins the room. */
 const enter = async (deps: Parameters<typeof attach>[0], peerId: string) => {
   const ws = attach(deps);
   ws.hello(peerId);
@@ -195,7 +195,7 @@ describe('a room whose sockets reach different instances', () => {
     const bob = attach(b);
     bob.hello('bob');
     await welcomed(bob);
-    // a の受け口だけを止める。lease はまだ持っているので、b は a に送り続けようとする
+    // Stops only the listeners of a. Instance a still holds the lease, so b keeps trying to send to it.
     await a.relay.unsubscribe(a.relay.inboundOf('room'));
     await a.relay.unsubscribe(a.relay.controlOf('room'));
 
@@ -227,7 +227,7 @@ describe('a room whose sockets reach different instances', () => {
 
     await vi.waitFor(() => expect(bob.closedWith).toEqual({ code: 1012, reason: 'rotate' }));
     await enter(a, 'bob');
-    // 取っておいた席を放すまで待つ
+    // Waits until the seat kept aside is let go.
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     const seen = alice.messages().map((message) => message.type);
@@ -285,7 +285,7 @@ describe('a room whose sockets reach different instances', () => {
 
     await b.relay.publish(a.relay.inboundOf('room'), { t: 'frame', c: 'nobody', d: 'hello?' });
     await b.relay.publish(a.relay.controlOf('room'), { t: 'moved' });
-    // b からのものは順に届くので、bob が入れたら、その前のものも受けている
+    // What comes from b arrives in order, so once bob is in, what came before has been taken too.
     await enter(b, 'bob');
 
     expect(alice.closedWith).toBeNull();
@@ -296,7 +296,7 @@ describe('a room whose sockets reach different instances', () => {
     const { a, b } = await twoInstances();
     const alice = await enter(a, 'alice');
     const room = (await a.runtime.openRoom('room')) as VercelRoom;
-    // 放したあとも聞こえたままにする
+    // Keeps listening even after the room is let go.
     vi.spyOn(a.relay, 'unsubscribe').mockResolvedValue(undefined);
     const accept = vi.spyOn(room, 'accept');
     alice.close(1000, 'bye');
@@ -352,7 +352,7 @@ describe('a room whose sockets reach different instances', () => {
   it('finds no room to delete from another instance when it went meanwhile', async () => {
     const { a, b } = await twoInstances();
     await enter(a, 'alice');
-    // 持ち主を確かめたあとで、部屋が無くなる
+    // The room goes away after the owner is checked.
     const hGetAll = b.redis.hGetAll.bind(b.redis);
     vi.spyOn(b.redis, 'hGetAll')
       .mockImplementationOnce(hGetAll as never)

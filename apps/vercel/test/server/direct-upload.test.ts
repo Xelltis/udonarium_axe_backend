@@ -6,7 +6,8 @@ import { bucket, harness } from '../harness.js';
 import { OGG_HEAD, ROOM_KEY, assetTokenFor, call, fileOf, jsonOf, put, sha256Hex } from '../shared/helpers.js';
 import { prepareAssetRooms } from '../shared/room-helpers.js';
 
-// Vercel の Function は、本文が 4.5MB を超える要求を受けない。大きい音声は、置き場所へ直接上げる
+// A Vercel Function does not take a request whose body is over 4.5MB. A big sound is uploaded
+// straight to the store.
 
 const asPlayer = {
   'Content-Type': 'application/json',
@@ -26,7 +27,7 @@ describe('a sound too big for one request', () => {
       headers: asPlayer,
     });
     const ticket = await jsonOf<UploadTicketResponse>(asked);
-    // ブラウザの代わりに、渡された先へ上げる
+    // Uploads to the target given, in place of the browser.
     await bucket.put(new URL(ticket.upload.url).pathname.slice(1), sound, 'audio/ogg');
     const done = await call(`${id}/uploads/complete`, {
       method: 'POST',
@@ -43,7 +44,7 @@ describe('a sound too big for one request', () => {
       size: sound.byteLength,
     });
     expect(read.headers.get('X-Asset-Name')).toBe('theme.ogg');
-    // 4MB を1バイトずつ比べると遅いので、ハッシュで比べる
+    // Comparing 4MB byte by byte is slow, so the hashes are compared.
     expect(await sha256Hex(new Uint8Array(await read.arrayBuffer()))).toBe(id);
     expect(bucket.paths().some((path) => path.startsWith('uploads/'))).toBe(false);
   });

@@ -1,19 +1,21 @@
 import type { Redis } from '../redis.js';
 
-/** 部屋の持ち主が書く1つの操作。key のほかの引数は args に並べる */
+/** One operation the room's owner writes. The arguments besides key go in args. */
 export interface Op {
   command: 'HSET' | 'HDEL' | 'DEL' | 'ZADD' | 'ZREM' | 'SET' | 'SADD' | 'SREM' | 'PEXPIRE';
   key: string;
   args: (string | Buffer)[];
 }
 
-/** 1回に送る量の上限。Redis（Upstash など）が1つの要求で受ける大きさより小さくしておく */
+/** The limit on how much is sent at once. Kept below what Redis (Upstash and others) takes in one request. */
 export const MAX_BATCH_BYTES = 4 * 1024 * 1024;
 
 /**
- * lease がまだ自分のもので、部屋が消されていなければ、操作を順に流す。そうでなければ何もせずに 0。
- * KEYS[1] は lease、KEYS[2] は部屋の meta、KEYS[3..] は操作の鍵。ARGV[1] は自分の lease、ARGV[2..] は
- * 操作ごとに「コマンド・鍵の番号・引数の数・引数…」
+ * Runs the operations in order when the lease is still this owner's and the room has not been
+ * deleted. Otherwise does nothing and returns 0.
+ * KEYS[1] is the lease, KEYS[2] the room's meta, KEYS[3..] the operations' keys. ARGV[1] is this
+ * owner's lease, and ARGV[2..] hold, for each operation, "command, key number, argument count,
+ * arguments…".
  */
 const FENCED = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
@@ -31,7 +33,7 @@ return 1
 
 const sizeOf = (op: Op): number => op.key.length + op.args.reduce((size, arg) => size + arg.length, 0);
 
-/** 1回に送れる量ずつに分ける。1つで上限を超える操作は、それだけで1回にする */
+/** Splits into batches that fit in one send. An operation over the limit by itself gets a batch of its own. */
 export const batchesOf = (ops: Op[]): Op[][] => {
   const batches: Op[][] = [];
   let size = Infinity;
@@ -47,17 +49,18 @@ export const batchesOf = (ops: Op[]): Op[][] => {
   return batches;
 };
 
-/** 持ち主として書くときに確かめるもの */
+/** What is checked when writing as the owner. */
 export interface Fence {
-  /** lease の鍵 */
+  /** The lease's key. */
   lease: string;
-  /** 部屋の meta の鍵。無いか、消している印があれば書かない */
+  /** The key of the room's meta. Nothing is written when it is missing or marked as being deleted. */
   meta: string;
 }
 
 /**
- * 持ち主として書く。lease が自分のものでなくなっていたら（ほかのインスタンスが部屋を取った）、
- * または部屋が消されていたら、そこで止めて false。分けて送るので、途中で止まれば前半だけが書かれる
+ * Writes as the owner. When the lease is no longer this owner's (another instance took the room),
+ * or the room has been deleted, stops there and returns false. The batches go one by one, so when
+ * it stops partway, only the first part is written.
  */
 export const fencedWrite = async (redis: Redis, fence: Fence, lease: string, ops: Op[]): Promise<boolean> => {
   for (const batch of batchesOf(ops)) {

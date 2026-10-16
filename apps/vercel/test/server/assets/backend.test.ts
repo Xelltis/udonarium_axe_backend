@@ -27,7 +27,7 @@ const hexOf = async (bytes: Uint8Array) =>
     byte.toString(16).padStart(2, '0')
   ).join('');
 
-/** 置いたアセットと、それを読む部屋のサーバー */
+/** A stored asset, and the room server that reads it. */
 const stored = async (options: { bucket?: AssetBucket; allowed?: boolean; afterStore?: () => void } = {}) => {
   const bucket = options.bucket ?? memoryBucket();
   const key = freshKey();
@@ -113,7 +113,7 @@ describe('room assets on Vercel', () => {
   ])('answers Range %s with %i', async (range, status, contentRange, bytes) => {
     const bucket = memoryBucket();
     const original = bucket.get.bind(bucket);
-    // 中身を細かく分けて流し、切り出しがまたがるところを試す
+    // Streams the contents in small pieces, to test a cut that spans them.
     bucket.get = async (path) => {
       const whole = new Uint8Array(await new Response(await original(path)).arrayBuffer());
       return streamOf([whole.subarray(0, 3), whole.subarray(3, 6), whole.subarray(6)]);

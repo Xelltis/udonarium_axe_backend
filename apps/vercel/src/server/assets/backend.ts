@@ -8,13 +8,14 @@ import { failure } from '../../core/http/errors.js';
 import type { KeyOf, Redis } from '../redis.js';
 import type { AssetBucket } from './bucket.js';
 
-// 部屋のアセット。中身は AssetBucket に、索引は Redis に置く。
+// The rooms' assets. The contents are kept in the AssetBucket, and the index in Redis.
 //
-//   a:<部屋の鍵>   HASH  SHA-256 → {type, size, name, uploadedAt} の JSON
+//   a:<room key>   HASH  SHA-256 → JSON of {type, size, name, uploadedAt}.
 //
-// 置いてあるか・ヘッダー・一覧・条件付きのリクエストは索引で答え、中身を読むのは本文を返すときだけ
+// Whether an asset is there, its headers, the list and conditional requests are answered from the
+// index. The contents are read only when a body is sent back.
 
-/** 索引の1つ */
+/** One entry in the index. */
 interface Indexed {
   type: string;
   size: number;
@@ -23,28 +24,28 @@ interface Indexed {
 }
 
 /**
- * 1回の PUT で受けるバイト数の上限。Vercel の Function は、本文が 4.5MB を超える要求を受けない。これを
- * 超えるものは、置き場所へ直接上げてもらう
+ * The limit on the bytes taken in one PUT. A Vercel Function does not take a request whose body is
+ * over 4.5MB. Anything over this is uploaded straight to the store instead.
  */
 export const MAX_PUT_BYTES = 4_000_000;
 
-/** 部屋のアセットの索引の鍵 */
+/** The key of a room's asset index. */
 export const assetIndexOf = (key: KeyOf, roomKey: string): string => key('a', roomKey);
 
-/** ETag。名前が中身の SHA-256 なので、名前から作る */
+/** The ETag. The name is the SHA-256 of the contents, so it is made from the name. */
 const etagOf = (id: string) => `"${id}"`;
 
-/** If-Match・If-None-Match の値が etag に当たるか。`*`、弱い ETag、並べたものも受ける */
+/** Whether an If-Match or If-None-Match value matches the etag. Takes `*`, weak ETags and lists too. */
 const matches = (header: string, etag: string): boolean =>
   header
     .split(',')
     .map((value) => value.trim().replace(/^W\//, ''))
     .some((value) => value === '*' || value === etag);
 
-/** HTTP の日付は秒まで。置いた時刻も秒に丸めて比べる */
+/** HTTP dates go down to seconds. The time an asset was stored is also rounded to seconds to compare. */
 const secondsOf = (ms: number) => Math.floor(ms / 1000);
 
-/** Range の1つの範囲。読めないか、満たせなければ null（そのときは全体を返す） */
+/** The single range in a Range header. Null when it cannot be read or met (the whole is then sent back). */
 const rangeOf = (header: string | null, size: number): { start: number; end: number } | null => {
   const match = header ? /^bytes=(\d*)-(\d*)$/.exec(header.trim()) : null;
   if (!match || (match[1] === '' && match[2] === '')) return null;
@@ -55,7 +56,7 @@ const rangeOf = (header: string | null, size: number): { start: number; end: num
   return start <= end ? { start, end } : null;
 };
 
-/** 流れてくる中身から、start から end まで（含む）を切り出す */
+/** Cuts start to end (inclusive) out of the contents as they stream in. */
 const slice = (stream: ReadableStream<Uint8Array>, start: number, end: number): ReadableStream<Uint8Array> => {
   let offset = 0;
   return stream.pipeThrough(
@@ -75,7 +76,7 @@ export const vercelAssets = (
   key: KeyOf,
   bucket: AssetBucket,
   limit: (request: Request, kind: LimitKind) => Promise<boolean>,
-  /** 新しく置いたあとのついでの仕事（消しそこねの掃除） */
+  /** The work done on the side after something new is stored (the sweep of leftover assets). */
   afterStore: () => void
 ): AssetBackend & { deleteRoom(roomKey: string): Promise<void> } => {
   const indexed = async (roomKey: string, id: string): Promise<Indexed | null> => {
@@ -92,7 +93,8 @@ export const vercelAssets = (
     exists: async (roomKey, id) => (await redis.hExists(assetIndexOf(key, roomKey), id)) === 1,
 
     store: async (roomKey, id, body, length, type, name) => {
-      // 本文は種類ごとの上限（10MiB）までなので、読み溜めてから置く。読みながら SHA-256 を求める
+      // The body is at most the limit for its kind (10MiB), so it is read in full before it is
+      // stored. The SHA-256 is worked out while it is read.
       const hash = createHash('sha256');
       const chunks: Uint8Array[] = [];
       let size = 0;
@@ -166,7 +168,7 @@ export const vercelAssets = (
 
     afterStore,
 
-    // 置き場所が直接上げる先を作れれば（Blob）、大きいものはそこへ上げてもらう
+    // When the store can make a direct upload target (Blob), big assets are uploaded there instead.
     ...(bucket.target && {
       direct: {
         maxPutBytes: MAX_PUT_BYTES,
@@ -176,7 +178,7 @@ export const vercelAssets = (
       },
     }),
 
-    /** 部屋を消すときに、その部屋のアセットをすべて消す */
+    /** Deletes all of a room's assets when the room is deleted. */
     deleteRoom: async (roomKey) => {
       const ids = await redis.hKeys(assetIndexOf(key, roomKey));
       if (ids.length > 0) await bucket.delete(ids.map((id) => roomAssetKey(roomKey, id)));

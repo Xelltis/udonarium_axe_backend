@@ -46,7 +46,7 @@ describe('configLoader middleware', () => {
     const app = buildApp();
     const first = await app.fetch(new Request('http://localhost/'));
 
-    // 2 回目のリクエストではキャッシュが使われるため、env が差し替わっても影響しない
+    // The second request uses the cache, so swapping env has no effect.
     rawEnv = {};
     const second = await app.fetch(new Request('http://localhost/'));
 

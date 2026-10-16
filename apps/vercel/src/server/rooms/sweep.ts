@@ -3,38 +3,39 @@ import type { KeyOf, Redis } from '../redis.js';
 import { expiryKeyOf, roomKeysOf } from './keys.js';
 import { wipeRoom } from './room.js';
 
-// 部屋の掃除。Cloudflare 版では部屋ごとの alarm が消すが、Vercel では、だれもいない部屋を動かすものが
-// 無い。そこで、消す時刻（rooms:expiry）を過ぎた部屋を、ほかの要求のついでと、Vercel Cron で消す。
-// 消すまでのあいだも、読む側は時刻を過ぎた部屋を無いものとして扱う（readRoomMeta）
+// The sweep of rooms. In the Cloudflare version each room's alarm deletes it, but on Vercel nothing
+// runs a room nobody is in. So the rooms past their time to be deleted (rooms:expiry) are deleted
+// on the side of other requests, and by Vercel Cron. Until they are deleted, readers treat a room
+// past its time as gone (readRoomMeta).
 //
-//   sweep:lock   STR   ついでの掃除をしたインスタンス。SWEEP_EVERY_MS で切れる
+//   sweep:lock   STR   The instance that swept on the side. Runs out after SWEEP_EVERY_MS.
 
-/** ついでの掃除は、インスタンスをまたいでこの間に1度だけ（ミリ秒） */
+/** The sweep on the side runs only once in this long, across instances (milliseconds). */
 export const SWEEP_EVERY_MS = 60_000;
 
-/** ついでの掃除で消す部屋の数 */
+/** How many rooms a sweep on the side deletes. */
 export const SWEEP_ROOMS = 5;
 
-/** Cron の掃除で消す部屋の数 */
+/** How many rooms the Cron sweep deletes. */
 export const CRON_SWEEP_ROOMS = 200;
 
-/** 消しきれなかった部屋を、もう一度試すまで（ミリ秒）。ほかの部屋を先に消す */
+/** How long before a room that could not be fully deleted is tried again (milliseconds). Other rooms go first. */
 export const SWEEP_RETRY_MS = 60_000;
 
 export interface SweepDeps {
   redis: Redis;
   key: KeyOf;
   lobby: RedisLobby;
-  /** 部屋のアセットを消す */
+  /** Deletes a room's assets. */
   deleteAssets: (roomKey: string) => Promise<void>;
-  /** 返したあとも終わるまで続ける仕事 */
+  /** Work that goes on to the end even after the response is sent. */
   defer: (work: Promise<unknown>) => void;
 }
 
 export interface RoomSweeper {
-  /** ついでに掃除する。ほかのインスタンスが少し前に掃除していれば何もしない。返したあとで行う */
+  /** Sweeps on the side, after the response. Does nothing when another instance swept a little while ago. */
   soon(): void;
-  /** いま掃除する。消した部屋の数を返す */
+  /** Sweeps now. Returns how many rooms it deleted. */
   now(limit?: number): Promise<number>;
 }
 
@@ -43,10 +44,11 @@ export const roomSweeper = (deps: SweepDeps): RoomSweeper => {
   const expiry = expiryKeyOf(key);
 
   const wipe = async (roomKey: string) => {
-    // 消しはじめたことを先に書く。消しきれずに時刻を先へ延ばしても、入れる部屋には戻らない
+    // Writes first that deleting has begun. Even when it cannot finish and the time is pushed later,
+    // the room does not go back to being one that people can join.
     await redis.hSet(roomKeysOf(key, roomKey).meta, 'deleting', '1');
     await deps.lobby.remove(roomKey);
-    // アセットが消せなくても部屋は消す。Blob に残ったものは、Blob の掃除が消す
+    // The room is deleted even when its assets cannot be. The Blob sweep deletes what is left in Blob.
     await deps.deleteAssets(roomKey).catch((err: unknown) => console.error('Room asset deletion failed:', err));
     await wipeRoom(redis, key, roomKey);
   };

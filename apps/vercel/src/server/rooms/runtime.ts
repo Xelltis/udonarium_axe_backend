@@ -7,27 +7,28 @@ import { LEASE_MS, VercelRoom } from './room.js';
 import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
 
 /**
- * こちらから閉じてつなぎ直させた（rotate）席を、残しておく時間（ミリ秒）。そのあいだに同じ人が
- * つなぎ直せば、ほかの人には出入りを見せずに席を替える
+ * How long a seat is kept after the server closed it to have it reconnect (rotate), in
+ * milliseconds. When the same person reconnects in that time, the seat is swapped without showing
+ * the others anyone leaving or coming in.
  */
 export const PARK_MS = 15_000;
 
-/** 持ち主が見つからないとき、もう一度試すまでの間（ミリ秒） */
+/** How long to wait before trying again when no owner is found (milliseconds). */
 const RETRY_MS = 100;
 
 export interface RuntimeOptions {
-  /** 部屋の WebSocket を、こちらから閉じてつなぎ直させるまでの秒数 */
+  /** Seconds before the server closes a room's WebSocket itself and has it reconnect. */
   socketSeconds: number;
   parkMs?: number;
 }
 
-/** 1つの WebSocket の、部屋とのつながり */
+/** How one WebSocket is tied to the room. */
 interface Link {
-  /** 持ち主が決まるまでに届いたもの */
+  /** What came in before the owner was settled. */
   waiting: (string | Uint8Array)[];
-  /** 届いたものを渡す先。持ち主が決まってから */
+  /** Where what comes in is passed. Set once the owner is settled. */
   route: ((message: string | Uint8Array) => void) | null;
-  /** 切れたときにすること。持ち主が決まってから */
+  /** What to do when the connection drops. Set once the owner is settled. */
   leave: (() => void) | null;
   rotated: boolean;
   gone: boolean;
@@ -36,15 +37,15 @@ interface Link {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * 閉じ返すときのコード。閉じてきたコードが送れるもの（1000 か 3000〜4999）ならそのまま、そうでなければ
- * 1000。Cloudflare 版の webSocketClose と同じ
+ * The code to close back with. The code the other side closed with when it can be sent (1000 or
+ * 3000 to 4999), or else 1000. The same as the Cloudflare version's webSocketClose.
  */
 const closeBackCode = (code: number | undefined): number =>
   code === 1000 || (code !== undefined && code >= 3000 && code <= 4999) ? code : 1000;
 
 /**
- * ws の WebSocket を、部屋が使う形にする。閉じてきた相手に閉じ返すのは ws が自分で行うので、
- * そのときのコードを Cloudflare 版と同じにそろえる
+ * Turns a ws WebSocket into the shape a room uses. ws itself closes back to a side that closed, so
+ * the code it uses then is made the same as in the Cloudflare version.
  */
 const socketOf = (ws: WebSocket): ConnSocket => {
   const close = ws.close.bind(ws);
@@ -54,35 +55,35 @@ const socketOf = (ws: WebSocket): ConnSocket => {
       try {
         ws.send(frame);
       } catch {
-        // 閉じかけている。close で出たことになる
+        // It is closing. The close event counts it as having left.
       }
     },
     close: (code, reason) => {
       try {
         close(code, reason);
       } catch {
-        // もう閉じている
+        // It is already closed.
       }
     },
   };
 };
 
 /**
- * このインスタンスの部屋。部屋につないできた WebSocket を受け、このインスタンスが部屋の持ち主なら
- * 部屋に渡し、ほかのインスタンスが持ち主なら、そちらへ中継する
+ * This instance's rooms. Takes the WebSockets that connect to a room, and hands them to the room
+ * when this instance is its owner, or relays them to the owner when another instance is.
  */
 export class RoomRuntime {
-  /** このインスタンスが持ち主の（持ち主になろうとしている）部屋 */
+  /** The rooms this instance owns (or is trying to own). */
   private readonly rooms = new Map<string, Promise<Claim>>();
-  /** ほかのインスタンスへ中継している WebSocket。接続の ID ごと（持ち主から届いたものを渡す） */
+  /** The WebSockets relayed to other instances, by connection id (to pass on what comes from the owner). */
   private readonly proxies = new Map<string, ConnSocket>();
-  /** ほかのインスタンスへ中継している WebSocket。部屋ごと（持ち主が替われば、つなぎ直してもらう） */
+  /** The WebSockets relayed to other instances, by room (to have them reconnect when the owner changes). */
   private readonly watched = new Map<string, Set<ConnSocket>>();
-  /** 持ち主として、ほかのインスタンスからの WebSocket を受けている部屋 */
+  /** The rooms that, as owner, take WebSockets from other instances. */
   private readonly served = new WeakSet<VercelRoom>();
   private readonly parkMs: number;
   private started: Promise<void> | null = null;
-  /** 放した部屋の受け口を閉じているところ */
+  /** The closings, still under way, of the listeners of rooms that were let go. */
   private readonly unserving = new Set<Promise<void>>();
 
   constructor(
@@ -93,7 +94,7 @@ export class RoomRuntime {
     this.parkMs = options.parkMs ?? PARK_MS;
   }
 
-  /** 中継を受け始める */
+  /** Starts listening to the relay. */
   private ready(): Promise<void> {
     const relay = this.relay;
     if (!relay) return Promise.resolve();
@@ -103,7 +104,7 @@ export class RoomRuntime {
     return this.started;
   }
 
-  /** 部屋の持ち主になろうとする。ほかのインスタンスが持ち主なら、そのインスタンスを返す */
+  /** Tries to become the room's owner. When another instance is the owner, returns that instance. */
   private claim(roomKey: string): Promise<Claim> {
     let pending = this.rooms.get(roomKey);
     if (!pending) {
@@ -129,11 +130,11 @@ export class RoomRuntime {
         () => this.rooms.delete(roomKey)
       );
     }
-    // 待つあいだに放されたら（だれもいなくなった）、もう一度
+    // When the room was let go while waiting (nobody was left), tries again.
     return pending.then((claim) => ('room' in claim && claim.room.isReleased ? this.claim(roomKey) : claim));
   }
 
-  /** このインスタンスで部屋を開く。ほかのインスタンスが持ち主なら、放すまで待つ */
+  /** Opens a room on this instance. When another instance is the owner, waits until it lets go. */
   async room(roomKey: string): Promise<VercelRoom> {
     for (;;) {
       const claim = await this.claim(roomKey);
@@ -142,13 +143,13 @@ export class RoomRuntime {
     }
   }
 
-  /** このインスタンスが持ち主の（持ち主になろうとしている）部屋。無ければ null */
+  /** The room this instance owns (or is trying to own), or null when there is none. */
   async openRoom(roomKey: string): Promise<VercelRoom | null> {
     const claim = await this.rooms.get(roomKey);
     return claim && 'room' in claim ? claim.room : null;
   }
 
-  /** このインスタンスの部屋をすべて放し、中継もやめる */
+  /** Lets go of all this instance's rooms, and stops the relay too. */
   async close(): Promise<void> {
     for (const pending of [...this.rooms.values()]) {
       const claim = await pending;
@@ -158,7 +159,7 @@ export class RoomRuntime {
     await this.relay?.stop();
   }
 
-  /** 部屋の中で run を動かす。だれもつないでいなければ、終わったら放す */
+  /** Calls run inside the room. When nobody is connected, lets the room go once it is done. */
   async withRoom<T>(roomKey: string, run: (room: VercelRoom) => T | Promise<T>): Promise<T> {
     const room = await this.room(roomKey);
     try {
@@ -169,8 +170,9 @@ export class RoomRuntime {
   }
 
   /**
-   * 部屋を削除する。持ち主がこのインスタンスか、だれもいなければここで消す。ほかのインスタンスが持ち主
-   * なら、ここで GM かを確かめてから、持ち主に消させる（一覧からはすぐ外す）
+   * Deletes a room. When this instance is the owner, or nobody is in, deletes it here. When another
+   * instance is the owner, checks here that the person is GM, then has the owner delete it (taking
+   * it off the list right away).
    */
   async deleteRoom(roomKey: string, userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const claim = await this.claim(roomKey);
@@ -188,7 +190,7 @@ export class RoomRuntime {
     const relay = this.relay as Relay;
     const control: Control = { t: 'delete' };
     if ((await relay.publish(relay.controlOf(roomKey), control)) === 0) {
-      // 持ち主が落ちていた。消す印を付けて、掃除に残りを消させる
+      // The owner had gone down. Marks the room to be deleted and leaves the rest to the sweep.
       await redis
         .multi()
         .hSet(roomKeysOf(key, roomKey).meta, 'deleting', '1')
@@ -199,12 +201,13 @@ export class RoomRuntime {
     return 'deleted';
   }
 
-  /** 部屋につないできた WebSocket を受ける */
+  /** Takes a WebSocket that connected to a room. */
   attach(ws: WebSocket, roomKey: string): void {
     const conn: Conn = { id: crypto.randomUUID(), socket: socketOf(ws), seat: null };
     const link: Link = { waiting: [], route: null, leave: null, rotated: false, gone: false };
 
-    // Vercel の Function の最大実行時間で切られる前に、こちらから閉じてつなぎ直させる
+    // Before the Vercel Function's maximum duration cuts it off, the server closes it itself and
+    // has it reconnect.
     const rotation = setTimeout(() => {
       link.rotated = true;
       conn.socket.close(COME_BACK_CODE, 'rotate');
@@ -213,7 +216,8 @@ export class RoomRuntime {
 
     ws.on('message', (data, isBinary) => {
       const message = isBinary ? new Uint8Array(data as Buffer) : String(data);
-      // PING には、部屋に渡さずに答える（Cloudflare 版では部屋を起こさずに答える）
+      // Answers PING without passing it to the room (the Cloudflare version answers without waking
+      // the room).
       if (message === PING) return conn.socket.send(PONG);
       if (link.route) link.route(message);
       else link.waiting.push(message);
@@ -231,10 +235,11 @@ export class RoomRuntime {
     });
   }
 
-  /** 持ち主を見つけて、WebSocket をつなぐ。このインスタンスが持ち主になれば部屋に、でなければ中継する */
+  /** Finds the owner and connects the WebSocket: to the room when this instance owns it, else via the relay. */
   private async connect(conn: Conn, roomKey: string, link: Link): Promise<void> {
     await this.ready();
-    // 持ち主を探すのは lease の2倍の時間まで。持ち主が落ちていても、lease が切れれば持ち主になれる
+    // Looks for the owner for up to twice the lease. Even when the owner has gone down, this
+    // instance can become the owner once the lease runs out.
     const until = Date.now() + 2 * (this.deps.timing?.leaseMs ?? LEASE_MS);
     for (;;) {
       const claim = await this.claim(roomKey);
@@ -256,7 +261,7 @@ export class RoomRuntime {
     }
   }
 
-  /** 持ち主へ中継する。持ち主が受けなければ（放したばかり、落ちた）false */
+  /** Relays to the owner. False when the owner does not take it (it just let go, or went down). */
   private async proxy(conn: Conn, roomKey: string, link: Link): Promise<boolean> {
     const relay = this.relay as Relay;
     const inbound = relay.inboundOf(roomKey);
@@ -267,9 +272,9 @@ export class RoomRuntime {
       return false;
     }
     this.proxies.set(conn.id, conn.socket);
-    // 持ち主に届かなくなった（落ちた）。つなぎ直してもらう
+    // The owner can no longer be reached (it went down). Has the connection reconnect.
     const moved = () => conn.socket.close(COME_BACK_CODE, 'moved');
-    // 1つの WebSocket から届いたものは、届いた順に送る
+    // What comes from one WebSocket is sent in the order it came.
     let queue: Promise<unknown> = Promise.resolve();
     const send = (message: Inbound) => {
       queue = queue
@@ -289,7 +294,7 @@ export class RoomRuntime {
     return true;
   }
 
-  /** 持ち主から届いたものを、中継している WebSocket に渡す */
+  /** Passes what comes from the owner to the relayed WebSocket. */
   private fromOwner(message: Outbound): void {
     const socket = this.proxies.get(message.c);
     if (!socket) return;
@@ -297,7 +302,7 @@ export class RoomRuntime {
     else socket.close(message.code, message.reason);
   }
 
-  /** 中継する WebSocket の部屋の知らせを受ける。持ち主が替われば（放した）、つなぎ直してもらう */
+  /** Listens to the notices of a relayed WebSocket's room. When the owner changes (let go), has it reconnect. */
   private async watch(roomKey: string, socket: ConnSocket): Promise<void> {
     const watching = this.watched.get(roomKey);
     if (watching) {
@@ -322,7 +327,7 @@ export class RoomRuntime {
     void relay.unsubscribe(relay.controlOf(roomKey));
   }
 
-  /** 持ち主として、ほかのインスタンスに着いた WebSocket を受ける */
+  /** As the owner, takes the WebSockets that landed on other instances. */
   private async serve(room: VercelRoom): Promise<void> {
     const relay = this.relay;
     if (!relay || !room.room()) return;
@@ -333,7 +338,7 @@ export class RoomRuntime {
       if (room.isReleased) return;
       if (message.t === 'open') {
         const out = relay.outboundOf(message.i);
-        // 届かなくても（そのインスタンスが落ちた）、見回りがその席を外す
+        // Even when it does not get there (that instance went down), the check removes the seat.
         const tell = (outbound: Outbound) => void relay.publish(out, outbound).catch(() => undefined);
         const conn: Conn = {
           id: message.c,
@@ -360,7 +365,7 @@ export class RoomRuntime {
     });
   }
 
-  /** 持ち主をやめた。ほかのインスタンスに着いた WebSocket には、つなぎ直してもらう */
+  /** Stepped down as owner. Has the WebSockets that landed on other instances reconnect. */
   private async unserve(room: VercelRoom): Promise<void> {
     const relay = this.relay;
     if (!relay || !this.served.has(room)) return;

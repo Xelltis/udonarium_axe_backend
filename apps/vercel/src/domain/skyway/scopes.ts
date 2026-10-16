@@ -1,8 +1,9 @@
 import type { ChannelScope } from '@skyway-sdk/token';
 
 /**
- * ロビーのチャンネル名の頭。ロビーのスコープはデータの送受信を許していないので、
- * この頭で始まる名前を部屋として頼まれても、部屋のスコープ（送受信あり）は出さない。
+ * The start of a lobby channel name. The lobby scope does not allow sending or receiving data, so
+ * even when a name that starts with this is asked for as a room, the room scope (which allows
+ * sending and receiving) is not given out.
  */
 export const LOBBY_CHANNEL_PREFIX = 'udonarium-lobby-';
 

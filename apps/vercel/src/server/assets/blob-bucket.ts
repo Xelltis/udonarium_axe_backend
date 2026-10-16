@@ -14,22 +14,23 @@ import type { VercelServerConfig } from '../../config/server.js';
 import type { AssetBucket } from './bucket.js';
 import { localBucket } from './local-bucket.js';
 
-/** 一覧の1ページの数 */
+/** How many items one page of a listing holds. */
 const PAGE_SIZE = 1000;
 
-/** 直接上げる先が使える時間（ミリ秒） */
+/** How long a direct upload target can be used (milliseconds). */
 export const TARGET_MS = 10 * 60 * 1000;
 
-/** Blob の API の版。@vercel/blob 2.8 が送るものと同じ */
+/** The Blob API version. The same as the one @vercel/blob 2.8 sends. */
 const BLOB_API_VERSION = '12';
 
 /**
- * Vercel Blob の private のストア。資格は SDK が環境から読む（Vercel の上では OIDC と BLOB_STORE_ID、
- * ほかでは BLOB_READ_WRITE_TOKEN）
+ * A private Vercel Blob store. The SDK reads the credentials from the environment (OIDC and
+ * BLOB_STORE_ID on Vercel, BLOB_READ_WRITE_TOKEN elsewhere).
  */
 export const blobBucket = (): AssetBucket => ({
   put: async (path, bytes, type) => {
-    // 名前が中身の SHA-256 なので、同じ名前に置き直しても中身は同じ
+    // The name is the SHA-256 of the contents, so storing again under the same name keeps the
+    // same contents.
     await put(path, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), {
       access: 'private',
       contentType: type,
@@ -61,7 +62,7 @@ export const blobBucket = (): AssetBucket => ({
   },
   target: async (path, size) => {
     const validUntil = Date.now() + TARGET_MS;
-    // その場所へ、その大きさまでを、上書きせずに一度だけ。置き場所（CDN）が確かめる
+    // To that path, up to that size, once, without overwriting. The store (its CDN) checks this.
     const token = await issueSignedToken({
       pathname: path,
       operations: ['put'],
@@ -80,7 +81,7 @@ export const blobBucket = (): AssetBucket => ({
     return {
       url: presignedUrl,
       method: 'PUT',
-      // SDK の uploadPresigned が、ブラウザから上げるときに付けるもの
+      // What the SDK's uploadPresigned adds when it uploads from a browser.
       headers: {
         'x-api-version': BLOB_API_VERSION,
         'x-vercel-blob-access': 'private',
@@ -91,6 +92,6 @@ export const blobBucket = (): AssetBucket => ({
   },
 });
 
-/** 設定に合う、部屋のアセットを置くところ。BLOB_LOCAL_DIR があれば手元のディレクトリ */
+/** The store for the rooms' assets that fits the settings. A local directory when BLOB_LOCAL_DIR is set. */
 export const bucketFor = (config: VercelServerConfig): AssetBucket =>
   config.blob?.kind === 'local' ? localBucket(config.blob.dir) : blobBucket();

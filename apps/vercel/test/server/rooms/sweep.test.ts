@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** 部屋を作って一覧に載せ、past の部屋は消す時刻を過ぎたことにする */
+/** Makes the rooms and lists them. The past rooms are made past their time to be deleted. */
 const setUp = async (rooms: Record<string, 'past' | 'future'>, overrides: Partial<SweepDeps> = {}) => {
   const key = freshKey();
   const lobby = redisLobby(connection.redis, key);

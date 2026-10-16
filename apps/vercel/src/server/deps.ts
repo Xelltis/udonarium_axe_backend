@@ -18,37 +18,38 @@ import { RoomRuntime } from './rooms/runtime.js';
 import { roomSweeper } from './rooms/sweep.js';
 
 /**
- * WebSocket につなぎ替える要求。Node のサーバーと、部屋の経路が同じものを見る
+ * The requests that switch over to a WebSocket. The Node server and the room route look at the
+ * same one.
  */
 export const upgrades: Upgrades = new WeakMap<Request, (onSocket: (ws: WebSocket) => void) => void>();
 
-/** 新しく置いたこの回数ごとに、消しそこねのアセットを掃除する */
+/** The leftover assets are swept once for every this many new assets stored. */
 export const ORPHAN_SWEEP_EVERY = 20;
 
-/** 掃除で消したもの */
+/** What a sweep deleted. */
 export interface Swept {
   rooms: number;
   assets: number;
 }
 
-/** 部屋のサーバーを組み立てるときに、外から替えられるもの（テストと手元の試し） */
+/** What can be swapped in from outside when the room server is put together (for tests and local trials). */
 export interface DepsOptions {
-  /** 部屋のアセットを置くところ。置かなければ、設定の blob から作る */
+  /** The store for the rooms' assets. When not given, it is made from blob in the settings. */
   bucketOf?: (config: VercelServerConfig) => AssetBucket;
   limits?: Readonly<Record<LimitKind, number>>;
-  /** 部屋ごとにログインを外す（テストで、ログインを外した部屋のサーバーを試すため） */
+  /** Turns login off room by room (so the tests can try a room server with login turned off). */
   withoutLogin?: Set<string>;
-  /** このインスタンスの ID */
+  /** This instance's id. */
   instance?: string;
-  /** 返したあとも終わるまで続ける仕事。Vercel の上では waitUntil に渡す */
+  /** Work that goes on to the end even after the response is sent. On Vercel it is passed to waitUntil. */
   defer?: (work: Promise<unknown>) => void;
-  /** こちらから閉じてつなぎ直させた席を、残しておく時間（ミリ秒）を替える */
+  /** Changes how long a seat is kept after the server closed it to have it reconnect (milliseconds). */
   parkMs?: number;
-  /** lease と見回りの間（ミリ秒）を替える */
+  /** Changes the intervals of the lease and the check (milliseconds). */
   timing?: RoomDeps['timing'];
 }
 
-/** 設定から、インスタンスで1つの部屋のサーバーのものを作る */
+/** Makes what the room server uses, one of each per instance, from the settings. */
 export const createServerDeps = async (
   config: VercelServerConfig,
   options: DepsOptions,
@@ -58,7 +59,8 @@ export const createServerDeps = async (
   const key = keyOf(config.redisKeyPrefix);
   const limit = redisLimiter(connection, key, options.limits ?? LIMITS);
   const lobby = redisLobby(connection, key);
-  // 返したあとの仕事が失敗しても、プロセスを落とさない。失敗は、それぞれの仕事が書き残す
+  // Work after the response does not bring the process down when it fails. Each piece of work logs
+  // its own failure.
   const defer = (work: Promise<unknown>) => {
     const settled = work.catch(() => undefined);
     options.defer?.(settled);
@@ -82,7 +84,8 @@ export const createServerDeps = async (
       isAlive: (other) => relay.isAlive(other),
       retentionSeconds: config.roomRetentionSeconds,
       sessionSecret: (roomKey) => (options.withoutLogin?.has(roomKey) ? null : (config.login?.sessionSecret ?? null)),
-      // 本文に上限があるので、超えるものは置き場所へ直接上げてもらう（手元のディレクトリでは上限が無い）
+      // The body has a limit, so anything over it is uploaded straight to the store instead (with a
+      // local directory there is no limit).
       assetUpload: assets.direct ? { maxPutBytes: assets.direct.maxPutBytes, directUpload: true } : null,
       deleteAssets,
       defer,
@@ -107,7 +110,8 @@ export const createServerDeps = async (
 };
 
 /**
- * 設定に合う部屋のサーバー。Redis につなぐのはインスタンスで1度だけ（同じ Redis と頭なら使い回す）
+ * The room server that fits the settings. Connects to Redis only once per instance (reuses the
+ * connection for the same Redis and prefix).
  */
 export const backendProvider = (options: DepsOptions) => {
   const made = new Map<string, Promise<ServerDeps>>();
@@ -127,15 +131,15 @@ export const backendProvider = (options: DepsOptions) => {
       return vercelBackend(await depsOf(config));
     },
     /**
-     * 消す時刻を過ぎた部屋と、消しそこねたアセットを消す（Vercel Cron）。部屋を置く Redis が無ければ
-     * 何もしない
+     * Deletes the rooms past their time to be deleted, and the leftover assets (Vercel Cron). Does
+     * nothing when there is no Redis to hold rooms.
      */
     async sweep(config: VercelServerConfig): Promise<Swept> {
       if (!config.redisUrl) return { rooms: 0, assets: 0 };
       const deps = await depsOf(config);
       return { rooms: await deps.sweeper.now(), assets: await deps.orphans() };
     },
-    /** 作ったもの（テストが中に触るため） */
+    /** What was made (so the tests can reach inside). */
     depsFor: (config: VercelServerConfig) => made.get(`${config.redisUrl}|${config.redisKeyPrefix}`),
   };
 };

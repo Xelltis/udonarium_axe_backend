@@ -1,6 +1,6 @@
 import { createClient } from 'redis';
 
-/** テストは Redis を使う。つながらなければ、立て方を添えて止める */
+/** The tests use Redis. When it cannot be reached, stops and says how to start one. */
 export default async () => {
   const url = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
   const redis = createClient({ url, socket: { reconnectStrategy: false, connectTimeout: 2000 } });
