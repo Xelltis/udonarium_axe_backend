@@ -11,7 +11,7 @@ Workerを置く人が、1回だけ作ります。
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)で**New Application**を押し、名前を付けて作ります。名前は、ログインの同意の画面に出ます。
 2. **OAuth2**の画面を開きます。
-3. **Redirects**に、次のURLを足します。`<Workerのドメイン>`は、デプロイしたWorkerのURLです。
+3. **Redirects**に、次のURLを足します。`<Workerのドメイン>`は、Axeの`backend.url`に書くのと同じドメインです（カスタムドメインを付けたなら、そちら）。
    ```text
    https://<Workerのドメイン>/v1/login/discord/callback
    ```

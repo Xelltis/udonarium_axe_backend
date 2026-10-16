@@ -42,6 +42,7 @@ R2を使い始めていないアカウントでは、バケットを作れずに
 どれも入れなければ、ログインも部屋も、部屋のアセットも使えません。
 Discordのアプリの作りかたは[ログインと役割](/cloudflare/login#ログインを使えるようにする)にあります。
 アプリの**Redirects**に入れるURLはWorkerのURLから決まるので、先にアプリだけ作ってClient IDとClient Secretを入れ、デプロイしてURLが決まってから**Redirects**を足しても構いません。
+**Redirects**は、Axeの`backend.url`に書くのと同じドメインで登録してください。手順3でカスタムドメインを付けるなら、そのドメインです。戻り先のURLはリクエストを受けたホスト名から作るので、`*.workers.dev`で登録したままカスタムドメインから使うと、Discordが`Invalid OAuth2 redirect_uri`を出します。
 
 **Deploy**を押すと、リポジトリの複製、R2のバケットの作成、部屋のサーバー（Durable Objects）の作成、Workerのデプロイがまとめて行われます。
 完了すると、`https://<Workerの名前>.<アカウントのサブドメイン>.workers.dev`のURLが出ます。
