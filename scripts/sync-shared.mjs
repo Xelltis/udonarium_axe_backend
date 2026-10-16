@@ -5,9 +5,11 @@
 //
 //   node scripts/sync-shared.mjs          copies (and deletes what only apps/vercel has)
 //   node scripts/sync-shared.mjs --check  checks the copies are the same; exits with 1 if not (CI)
+//   node scripts/sync-shared.mjs --staged checks what is staged for the commit instead (pre-commit)
 //
 // The npm packages the shared code uses, and the Prettier that lays it out, are given the same version
 // range in both package.json files.
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,10 +22,21 @@ const DEPENDENCIES = ['@msgpack/msgpack', 'bcdice', 'hono', 'valibot'];
 // Prettier lays out both copies of the shared code, which have to come out byte for byte the same.
 const DEV_DEPENDENCIES = ['prettier'];
 
-const check = process.argv.includes('--check');
+const staged = process.argv.includes('--staged');
+const check = staged || process.argv.includes('--check');
 
-/** The files under dir, as paths relative to dir. None when dir does not exist. */
+const git = (...args) => execFileSync('git', args, { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
+
+/** The files under dir, as paths relative to dir: those staged, or those on disk. None when there is no dir. */
 const filesUnder = (dir) => {
+  if (staged) {
+    const prefix = `${relative(ROOT, dir)}/`;
+    return git('ls-files', '--cached', '-z', '--', prefix)
+      .toString()
+      .split('\0')
+      .filter(Boolean)
+      .map((path) => path.slice(prefix.length));
+  }
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -31,6 +44,16 @@ const filesUnder = (dir) => {
       ? filesUnder(path).map((file) => join(name, file))
       : [name];
   });
+};
+
+/** A file's bytes, as staged or on disk; null when there is none. */
+const read = (path) => {
+  if (!staged) return existsSync(path) ? readFileSync(path) : null;
+  try {
+    return git('show', `:${relative(ROOT, path)}`);
+  } catch {
+    return null;
+  }
 };
 
 const problems = [];
@@ -42,7 +65,8 @@ for (const dir of SHARED) {
   for (const file of sources) {
     const source = join(from, file);
     const target = join(to, file);
-    const same = existsSync(target) && readFileSync(source).equals(readFileSync(target));
+    const copy = read(target);
+    const same = copy !== null && read(source).equals(copy);
     if (same) continue;
     if (check) {
       problems.push(`${relative(ROOT, target)} differs from ${relative(ROOT, source)}`);
@@ -58,7 +82,7 @@ for (const dir of SHARED) {
   }
 }
 
-const packageOf = (app) => JSON.parse(readFileSync(join(app, 'package.json'), 'utf-8'));
+const packageOf = (app) => JSON.parse(read(join(app, 'package.json')).toString('utf-8'));
 const [source, target] = [packageOf(SOURCE), packageOf(TARGET)];
 for (const [field, names] of [
   ['dependencies', DEPENDENCIES],
