@@ -5,6 +5,8 @@
 Deploy to Cloudflareのボタンを使うので、ブラウザの操作だけで進められます。
 かかる時間は、アカウント作りを含めて1時間ほどです。
 
+<Journey mode="server" here="cloudflare" />
+
 ::: info 画面の言葉
 Cloudflareの画面は、日本語でも表示できます（右上のプロフィールから**Settings**の**Language**で選びます）。
 このページでは、ボタンやメニューの名前を英語の表示で書きます。
@@ -67,6 +69,9 @@ Discordのアプリに登録する戻り先のURL（Redirects）は、WorkerのU
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Xelltis/udonarium_axe_backend/tree/main/apps/cloudflare)
 
 Cloudflareのデプロイの画面が開きます。
+
+<DeployMap kind="cloudflare" />
+
 このボタンは、このリポジトリの`apps/cloudflare`だけを、あなたのGitHubに新しいリポジトリとして複製し、そこからCloudflareにデプロイします。
 このリポジトリそのものは変わりません。
 

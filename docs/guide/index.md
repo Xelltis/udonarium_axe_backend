@@ -18,11 +18,21 @@ Axeの配信には、2つの方式があります。
 | SkyWay版   | 参加者どうしが、[SkyWay](https://skyway.ntt.com/)を使って直接つながる          | トークン発行サーバー（PHP版かVercel版）  |
 | サーバー版 | 全員が部屋のサーバーにつながる。部屋のサーバーが卓の状態と画像と音声を持つ   | 部屋のサーバー（Cloudflare版かVercel版） |
 
+<ModeCompare />
+
 サーバー版はAxe v1.68.0から使えます。
 全員が抜けても卓が残る、裏向きのカードや秘話を見てはいけない人に届けない、などの違いがあります。
 2つの違いと選びかたは、[どれを置くか](/guide/choose)で詳しく説明しています。
 
 ## 置くまでの流れ
+
+<StepFlow numbered :steps="[
+  { title: 'どれを置くか決める', text: '方式と置き場所を選ぶ', link: '/guide/choose' },
+  { title: '準備する', text: 'アカウントとOriginを確かめる', link: '/guide/prepare' },
+  { title: 'サーバーを置く', text: '選んだものの手順で' },
+  { title: 'Axeにつなぐ', text: 'config.jsonにURLを書く', link: '/guide/client-config' },
+  { title: '公開するなら', text: '料金・安全・規約を確かめる', link: '/operate/' },
+]" />
 
 1. [どれを置くか](/guide/choose)で、方式と置き場所を決めます。
 2. [設置の準備](/guide/prepare)で、要るアカウントと、AxeのOriginを確かめます。

@@ -4,6 +4,8 @@ SkyWay版のAxeで遊ぶためのトークン発行サーバーを、Vercelに�
 サーバーを持っていなくても、ブラウザの操作だけで進められます。
 かかる時間は、アカウント作りを含めて30分ほどです。
 
+<Journey mode="skyway" here="vercel" />
+
 Vercelの東京のリージョン（`hnd1`）で動くので、国内からの応答が速くなります。
 部屋のサーバー（サーバー版）としてVercelに置くときは、[Vercelに置く（サーバー版）](/server/vercel)を見てください。
 
@@ -44,6 +46,9 @@ Hobbyは、個人が自分のために使うためのプランです。
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
 Vercelの新しいプロジェクトを作る画面が開きます。
+
+<DeployMap kind="vercel-token" />
+
 このボタンは、このリポジトリの`apps/vercel`だけを、あなたのGitHubに新しいリポジトリとして複製し、そこからVercelにデプロイします。
 このリポジトリそのものは変わりません。
 

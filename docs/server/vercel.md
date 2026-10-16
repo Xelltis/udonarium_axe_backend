@@ -4,6 +4,8 @@
 Cloudflare版と同じ部屋のサーバーが、VercelとRedisとVercel Blobの上で動きます。
 かかる時間は、アカウント作りを含めて1時間ほどです。
 
+<Journey mode="server" here="vercel" />
+
 どちらにするか迷ったら、長く安定して置けるCloudflare版をすすめます（→ [どれを置くか](/guide/choose#サーバー版-cloudflare版かvercel版か)）。
 Cloudflare版との違いは、次のとおりです。
 
@@ -50,6 +52,8 @@ Discordのアプリに登録する戻り先のURL（Redirects）は、サーバ�
 トークン発行のボタンとは、入れる環境変数が違います。
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
+
+<DeployMap kind="vercel-rooms" />
 
 **Create Git Repository**の欄で、複製先を決めます。
 

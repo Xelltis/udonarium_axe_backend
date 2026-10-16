@@ -5,6 +5,9 @@ hero:
   name: Udonarium Axe Backend
   text: Axeにつなぐサーバーを、自分の手で置く
   tagline: Udonarium Axeを配信する人が、SkyWay版のトークン発行サーバーか、サーバー版の部屋のサーバーを、自分のアカウントに置くためのドキュメントです。
+  image:
+    src: /hero.svg
+    alt: 参加者のブラウザが、サーバーとつながっている絵
   actions:
     - theme: brand
       text: はじめに
@@ -17,15 +20,21 @@ hero:
       link: /guide/prepare
 
 features:
-  - title: SkyWay版を置く
+  - icon:
+      src: /icons/skyway.svg
+    title: SkyWay版を置く
     details: 参加者どうしがSkyWayで直接つながる方式です。認証トークンを作るサーバーを、Vercelか、借りているレンタルサーバー（PHP）に置きます。
     link: /skyway/
     linkText: SkyWay版へ
-  - title: サーバー版を置く
+  - icon:
+      src: /icons/server.svg
+    title: サーバー版を置く
     details: 全員が部屋のサーバーにつながる方式です。卓が残り、見てはいけないものは届かず、GMとPLはDiscordでログインします。CloudflareかVercelに置きます。Axe v1.68.0から使えます。
     link: /server/
     linkText: サーバー版へ
-  - title: 公開して運営する
+  - icon:
+      src: /icons/operate.svg
+    title: 公開して運営する
     details: 身内の外にも開くときに、料金の目安、安全のしくみ、預かるもの、申し立てへの応えかた、規約のひな形を確かめます。
     link: /operate/
     linkText: 運営するへ

@@ -5,6 +5,8 @@ SkyWay版のAxeは、参加者どうしのやりとりに[SkyWay](https://skyway
 このページは、そのアプリケーションを作り、2つの値を控えるまでの手順です。
 かかる時間は10分ほどです。
 
+<Journey mode="skyway" here="app" />
+
 サーバー版（Cloudflare版と、Vercel版の部屋のサーバー）だけを使うなら、SkyWayのアプリは要りません。
 
 ## SkyWayの料金
