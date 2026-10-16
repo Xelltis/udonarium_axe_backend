@@ -85,8 +85,6 @@ AxeをHTTPS（`https://`）で配信しているなら、トークン発行サ�
  ├─ .htaccess      URLの振り分けと、見られては困るファイルを守る設定
  ├─ index.php      入口
  ├─ src/           本体のプログラム
- ├─ docs/          説明書（Webからは見えないようにしてある）
- ├─ README.md
  ├─ LICENSE
  ├─ CHANGELOG.md
  └─ CONTRIBUTING.md
@@ -298,3 +296,5 @@ SSHが使えて、公開フォルダの外にファイルを置けるサーバ�
 配布物のzipには`.env`が入っていないので、上げても`.env`はそのまま残ります。
 新しい版で設定項目が増えたときは、[リリースノート](https://github.com/Xelltis/udonarium_axe_backend/releases)と`.env.example`を見比べて、足りない項目を`.env`に書き足します。
 
+前の版で`docs/`や`README.md`を上げていたときは、サーバーから消して構いません。
+いまの配布物には入っていません。

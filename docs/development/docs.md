@@ -36,6 +36,10 @@ npm run docs:preview
 
 ページを足したら、`docs/.vitepress/config.mts`の`sidebar`にも足してください。
 
+`apps/`の中には、READMEや説明書を置きません。
+設置・設定・APIの説明も、開発の決まりも、すべて`docs/`に書きます。
+Deployボタンで複製したリポジトリと、PHP版のzipにも説明書は入らないので、コードのコメントから説明を指すときは、このドキュメントのURLを書きます。
+
 ## 書きかた
 
 まとまった日本語（READMEと`docs/`の本文）は、`yomiyasu`スキルを通して書きます。

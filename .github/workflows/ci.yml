@@ -284,9 +284,7 @@ jobs:
             index.php \
             .htaccess \
             .env.example \
-            src/ \
-            docs/ \
-            README.md)
+            src/)
           zip dist/udonarium-axe-backend.zip \
             LICENSE \
             CHANGELOG.md \

@@ -7,6 +7,8 @@
 [Udonarium Axe](https://github.com/Xelltis/udonarium_axe)のバックエンドを集めたリポジトリです。
 動かす場所ごとに、`apps/`の下へ分けて置いています。
 選びかた、設置のしかた、設定項目、困ったときの対処は、[ドキュメント](https://xelltis.github.io/udonarium_axe_backend/)にまとめています。
+アプリのディレクトリには説明書を置いていません。
+初めて設置するなら、[設置の準備](https://xelltis.github.io/udonarium_axe_backend/guide/prepare)から読んでください。
 
 | ディレクトリ                       | 内容                                                                             | 動かす場所                                         |
 | ---------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
@@ -18,7 +20,7 @@
 
 PHP版は[リリース](https://github.com/Xelltis/udonarium_axe_backend/releases/latest)のzipを使います。
 展開した中身をそのままドキュメントルートに置き、`.env`を作ります。
-詳しい手順は[apps/php/README.md](apps/php/README.md)です。
+手順は[PHP版を設置する](https://xelltis.github.io/udonarium_axe_backend/php/setup)にあります。
 
 Vercel版とCloudflare版は、ボタンから自分のアカウントにデプロイできます。
 このリポジトリのそのディレクトリが、自分のGitHubリポジトリとして複製されます。
@@ -28,12 +30,14 @@ Vercel版（SkyWayの認証トークンの発行）:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
+手順は[Vercel版をデプロイする](https://xelltis.github.io/udonarium_axe_backend/vercel/deploy)にあります。
+
 Vercel版（部屋のサーバー）:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
 
 部屋のサーバーには、デプロイしたあとでRedisとVercel Blob（private）のストアをプロジェクトにつなぎます。
-要る環境変数は[apps/vercel/README.md](apps/vercel/README.md)にあり、手順は[ドキュメント](https://xelltis.github.io/udonarium_axe_backend/vercel/deploy)にあります。
+手順と要る環境変数は、[部屋のサーバーとして置く](https://xelltis.github.io/udonarium_axe_backend/vercel/rooms)にあります。
 
 Cloudflare版（SkyWayを使わない部屋のサーバー）:
 
@@ -41,7 +45,7 @@ Cloudflare版（SkyWayを使わない部屋のサーバー）:
 
 R2のバケットと部屋のサーバー（Durable Objects）は、デプロイのときに作られます。
 前もって、アカウントでR2を使い始めておくことが要ります。
-詳しくは[apps/cloudflare/README.md](apps/cloudflare/README.md)にあります。
+手順は[Cloudflare版をデプロイする](https://xelltis.github.io/udonarium_axe_backend/cloudflare/deploy)にあります。
 
 ## 開発
 

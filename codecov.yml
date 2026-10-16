@@ -53,7 +53,6 @@ comment:
 ignore:
   - "apps/php/tests/**"
   - "apps/php/bin/**"
-  - "apps/php/docs/**"
   - "apps/php/vendor/**"
   - "apps/php/index.php"
   - "apps/vercel/test/**"

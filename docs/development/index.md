@@ -114,6 +114,7 @@ npm run format           # Prettierで整形する（確かめるだけならfor
 npm run typecheck
 npm run check:esm        # tscで出したものを素のNodeで読み、BCDiceを1回振る
 npm test                 # カバレッジ100%を要求
+npm run coverage:check   # npm testのあとで、100%を下回るファイルが無いかを確かめる（CIでも流す）
 ```
 
 部屋のサーバーのテストは、本物のRedisを使います（テストのファイルごとに、キーの頭を分けます）。
@@ -122,6 +123,27 @@ CIでは、Redisのサービスのコンテナを立てます。
 相対パスの`import`には、拡張子（`./foo.js`）を付けてください。
 Vercelは型を検査せずにファイルごとに変換するので、拡張子が無いと本番で`ERR_MODULE_NOT_FOUND`になります。
 `npm run typecheck`がこれを見つけます。
+
+中は次のように分けています。
+
+```text
+apps/vercel/
+ ├─ api/index.ts   Vercel Functionの入口。WebSocketも受けるNodeのHTTPサーバー（src/server/node.ts）をdefault exportする
+ ├─ src/
+ │   ├─ config/    環境変数の形（Valibotのスキーマ）と、値の読み方
+ │   ├─ domain/    SkyWayのトークンを作る処理（JWTとチャンネルのスコープ）
+ │   ├─ http/      Honoのアプリ、経路、CORSと設定を読むミドルウェア、エラー
+ │   ├─ infra/     暗号とエンコードの小さな部品
+ │   ├─ server/    部屋のサーバーのVercel側（Redis、Blob、部屋を受け持つインスタンスと中継、掃除）
+ │   └─ core/      部屋のサーバーの中身。apps/cloudflareの写し
+ ├─ contracts/     apps/cloudflareの写し
+ ├─ test/          Vitestのテスト。test/shared/はapps/cloudflareの写し
+ ├─ scripts/       カバレッジの確認、ESMの確認、手元で動かすサーバー
+ ├─ public/        空のまま置く。Vercelにリポジトリ全体を静的なファイルとして公開させないため
+ └─ vercel.json    リージョン（東京のhnd1）、Functionの最大実行時間、Cron、すべての経路を/apiへ送る書き換え
+```
+
+SkyWayのトークンを作る処理は、署名に使うHMAC、UUIDの生成、いまの時刻を外から受け取る関数にしてあり、テストではそれを差し替えます。
 
 ### Cloudflare版（`apps/cloudflare`）
 
