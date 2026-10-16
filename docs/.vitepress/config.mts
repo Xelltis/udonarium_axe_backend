@@ -131,6 +131,23 @@ export default defineConfig({
         }
       });
 
+      // A short name in a table (an error code, a variable, a header) breaks at its hyphens when
+      // its column is narrow, leaving `login-` on one line and `unavailable` on the next. Such
+      // names are marked to be kept on one line; a URL or a sentence in code still wraps.
+      md.core.ruler.push('axe-table-code', (state) => {
+        let inTable = false;
+        for (const token of state.tokens) {
+          if (token.type === 'table_open') inTable = true;
+          if (token.type === 'table_close') inTable = false;
+          if (!inTable || token.type !== 'inline') continue;
+          for (const kid of token.children ?? []) {
+            if (kid.type === 'code_inline' && kid.content.length <= 32 && !/\s/.test(kid.content)) {
+              kid.attrJoin('class', 'axe-code-whole');
+            }
+          }
+        }
+      });
+
       // Default VitePress tables are `display: block`, so they shrink to their
       // content and hug the left edge. Wrapping them lets the table fill the
       // column while wide ones scroll sideways inside the wrapper.

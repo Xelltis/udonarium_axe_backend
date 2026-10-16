@@ -237,37 +237,60 @@
 }
 
 /*
- * Japanese breaks between any two characters, so a label cell can be squeezed
- * down to one character per line. The first column keeps its words whole, and
- * every cell keeps room for a few words.
+ * Japanese can break between any two characters, so a table laid out by its
+ * content can squeeze a column of sentences down to a character a line. Cells
+ * wrap at phrase boundaries where the browser finds them, and keep room for a
+ * few words where it does not. The first column names the row and keeps its
+ * words whole.
  */
+.vp-doc .table-wrap > table td {
+  word-break: auto-phrase;
+}
+
+@supports not (word-break: auto-phrase) {
+  .vp-doc .table-wrap > table td {
+    min-width: 5em;
+  }
+}
+
 .vp-doc .table-wrap > table td:first-child {
   word-break: keep-all;
   font-weight: 600;
   color: var(--vp-c-text-1);
-  min-width: 7.5em;
+  min-width: 6em;
 }
 
-.vp-doc .table-wrap > table td {
-  min-width: 8em;
+/* A short name in code is kept on one line (see the axe-table-code rule in config.mts). */
+.vp-doc .table-wrap > table code.axe-code-whole {
+  white-space: nowrap;
 }
 
 /*
- * A comparison of four or more columns gives each compared column the same
- * width, so that no one column is squeezed by the others' long headers.
+ * On a phone, a table squeezed to the screen leaves a few characters a line.
+ * Its columns keep room for a phrase, and the table scrolls sideways instead.
  */
-.vp-doc .table-wrap > table:has(thead th:nth-child(4)) {
+@media (max-width: 639px) {
+  .vp-doc .table-wrap > table td {
+    min-width: 7em;
+  }
+}
+
+/*
+ * A comparison, whose top-left cell is empty, gives each compared column the
+ * same width, so that none is squeezed by the others' longer text.
+ */
+.vp-doc .table-wrap > table:has(thead th:first-child:empty) {
   table-layout: fixed;
+  min-width: 560px;
+}
+
+.vp-doc .table-wrap > table:has(thead th:nth-child(4)):has(thead th:first-child:empty) {
   min-width: 720px;
 }
 
-.vp-doc .table-wrap > table:has(thead th:nth-child(4)) th:first-child,
-.vp-doc .table-wrap > table:has(thead th:nth-child(4)) td:first-child {
+.vp-doc .table-wrap > table:has(thead th:first-child:empty) th:first-child,
+.vp-doc .table-wrap > table:has(thead th:first-child:empty) td:first-child {
   width: 9.5em;
-}
-
-.vp-doc .table-wrap > table:has(thead th:nth-child(4)) td {
-  min-width: 0;
 }
 
 /* --------------------------------------------------------- custom blocks */
