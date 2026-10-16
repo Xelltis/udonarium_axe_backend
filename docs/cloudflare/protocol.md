@@ -7,17 +7,19 @@
 
 ## HTTP
 
-| メソッド | パス                                | 内容                                         |
-| -------- | ----------------------------------- | -------------------------------------------- |
-| `POST`   | `/v1/rooms`                         | 部屋を作る                                   |
-| `GET`    | `/v1/rooms`                         | 部屋の一覧                                   |
-| `GET`    | `/v1/rooms/:roomKey`                | 部屋を鍵で1つ引く                            |
-| `DELETE` | `/v1/rooms/:roomKey`                | 部屋を削除する（その部屋のGMだけ）           |
-| `GET`    | `/v1/rooms/:roomKey/ws`             | 部屋に入る（WebSocketにつなぎ替える）        |
-| `HEAD`   | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットが置かれているか               |
-| `GET`    | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットの中身                         |
-| `PUT`    | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットを置く（その部屋のGMとPLだけ） |
-| `GET`    | `/v1/rooms/:roomKey/assets`         | 部屋に置いてあるアセットの一覧               |
+| メソッド | パス                                                 | 内容                                             |
+| -------- | ---------------------------------------------------- | ------------------------------------------------ |
+| `POST`   | `/v1/rooms`                                          | 部屋を作る                                       |
+| `GET`    | `/v1/rooms`                                          | 部屋の一覧                                       |
+| `GET`    | `/v1/rooms/:roomKey`                                 | 部屋を鍵で1つ引く                                |
+| `DELETE` | `/v1/rooms/:roomKey`                                 | 部屋を削除する（その部屋のGMだけ）               |
+| `GET`    | `/v1/rooms/:roomKey/ws`                              | 部屋に入る（WebSocketにつなぎ替える）            |
+| `HEAD`   | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットが置かれているか                   |
+| `GET`    | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットの中身                             |
+| `PUT`    | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットを置く（その部屋のGMとPLだけ）     |
+| `GET`    | `/v1/rooms/:roomKey/assets`                          | 部屋に置いてあるアセットの一覧                   |
+| `POST`   | `/v1/rooms/:roomKey/assets/:sha256/uploads`          | 置き場所へ直接上げる先を受け取る（Vercel版だけ） |
+| `POST`   | `/v1/rooms/:roomKey/assets/:sha256/uploads/complete` | 直接上げ終えたことを知らせる（Vercel版だけ）     |
 
 どれも、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのページからしか受けません。
 ほかのOriginには`403 origin-not-allowed`を返します。
@@ -61,15 +63,15 @@ Content-Type: application/json
 
 ```json
 {
-  "rooms": [
-    {
-      "roomKey": "511c18c8…",
-      "roomId": "O46",
-      "name": "金曜の卓",
-      "hasPassword": true,
-      "members": 2
-    }
-  ]
+    "rooms": [
+        {
+            "roomKey": "511c18c8…",
+            "roomId": "O46",
+            "name": "金曜の卓",
+            "hasPassword": true,
+            "members": 2
+        }
+    ]
 }
 ```
 
@@ -170,6 +172,30 @@ X-Asset-Name: <ファイル名をencodeURIComponentしたもの>
 
 返すヘッダー、形式と大きさの上限、条件付きリクエストと範囲指定、ほかのコード（`411`・`413`・`415`・`429`・`451`など）は、[APIリファレンス](/cloudflare/api)にあります。
 
+### 置き場所へ直接上げる
+
+1回の要求の本文に上限のある部屋のサーバー（Vercel版は4.5MB）は、`welcome`の`assetUpload`でそれを知らせます。
+`assetUpload`が無ければ（Cloudflare版）、種類ごとの上限（画像2MiB、音声10MiB）まで1回の`PUT`で置けます。
+
+```json
+{ "maxPutBytes": 4000000, "directUpload": true }
+```
+
+`maxPutBytes`を超えるものは、`PUT`では`413 too-large`になります。
+`directUpload`が`true`なら、置き場所（Vercel Blob）へ直接上げます。
+
+1. `POST /v1/rooms/:roomKey/assets/:sha256/uploads`に、`{"size":<大きさ>,"name":"<ファイル名>"}`を送ります。アセットのトークンを付けます。
+2. `201`で`{ticket, upload:{url, method, headers, expiresAt}}`が返ります。すでに置かれていれば、`PUT`と同じ`200`（`"status":"exists"`）です。
+3. `upload.url`へ、`upload.method`（`PUT`）と`upload.headers`で、中身だけを送ります。アセットのトークンは付けません。
+4. `POST /v1/rooms/:roomKey/assets/:sha256/uploads/complete`に、`{"ticket":"<ticket>"}`を送ります。アセットのトークンを付けます。
+5. 部屋のサーバーが中身の形式・大きさ・SHA-256を確かめ、置けたら`201`（`"status":"stored"`）を返します。
+
+- 確かめる順とコードは`PUT`と同じです。数を絞るのは、1で尋ねたときだけです。
+- `ticket`は、部屋・アセット・その人・大きさの約束で、15分で切れます。ほかの部屋やアセット、ほかの人のものは`400 invalid-request`になります。
+- `upload`の先が使えるのは`expiresAt`（Unixミリ秒）までです。置き場所が、大きさと期限と上書きしないことを確かめます。
+- 上げていないうちに知らせると`404 not-found`です。上げたものは、確かめたあと（置けても置けなくても）消します。
+- 直接上げる流れの無い部屋のサーバーでは、どちらのパスも`404 not-found`です。
+
 ## WebSocketのフレーム
 
 - **バイナリのフレーム**：中身は、下の封筒をMessagePackにしたものです。フレーム全体をgzipしても構いません。先頭の2バイトが`1f 8b`ならgzipとみなします。サーバーは、1KiBを超えて縮むフレームをgzipして送ります。
@@ -185,13 +211,13 @@ X-Asset-Name: <ファイル名をencodeURIComponentしたもの>
 
 ```json
 {
-  "type": "hello",
-  "protocolVersion": 2,
-  "peerId": "a1B2c3XyZq9W8e7r6-",
-  "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
-  "password": "secret",
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+    "type": "hello",
+    "protocolVersion": 2,
+    "peerId": "a1B2c3XyZq9W8e7r6-",
+    "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
+    "password": "secret",
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+    "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
 }
 ```
 
@@ -210,15 +236,15 @@ X-Asset-Name: <ファイル名をencodeURIComponentしたもの>
 
 ```json
 {
-  "type": "send",
-  "to": "Zz9Yy8XyZq9W8e7r6-",
-  "events": [
-    {
-      "eventName": "WRITING_A_MESSAGE_DETAIL",
-      "data": "…",
-      "sendFrom": "a1B2c3XyZq9W8e7r6-"
-    }
-  ]
+    "type": "send",
+    "to": "Zz9Yy8XyZq9W8e7r6-",
+    "events": [
+        {
+            "eventName": "WRITING_A_MESSAGE_DETAIL",
+            "data": "…",
+            "sendFrom": "a1B2c3XyZq9W8e7r6-"
+        }
+    ]
 }
 ```
 
@@ -255,21 +281,23 @@ Axeは、トークンを替えたらすぐ送ります。
 
 ## サーバーから送るもの
 
-| `type`        | 中身                                                                                                                 | 送るとき                                              |
-| ------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `welcome`     | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime`、`assetToken`、`assetTokenExpiresAt` | `hello`が通ったとき                                   |
-| `join`        | `member`（`peerId`、`userId`、`role`）                                                                               | 誰かが入ったとき                                      |
-| `leave`       | `peerId`                                                                                                             | 誰かが抜けたとき                                      |
-| `data`        | `from`（送り主のピアID）、`events`                                                                                   | イベントを届けるとき                                  |
-| `time`        | `serverTime`（Unixミリ秒）                                                                                           | `time`を受けたとき                                    |
-| `invite`      | `role`、`invite`、`expiresAt`。GMでないときと、Workerにログインが置かれていないときは`invite`と`expiresAt`が`null`   | `invite`を受けたとき                                  |
-| `asset-token` | `assetToken`、`expiresAt`（Unixミリ秒）、`role`（その席のいまの役割）                                                | `asset-token`を受けたときと、自分の役割が変わったとき |
-| `error`       | `code`、`protocolVersion`                                                                                            | 接続を閉じる前                                        |
+| `type`        | 中身                                                                                                                                              | 送るとき                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `welcome`     | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime`、`assetToken`、`assetTokenExpiresAt`、`assetUpload`（省略できる） | `hello`が通ったとき                                   |
+| `join`        | `member`（`peerId`、`userId`、`role`）                                                                                                            | 誰かが入ったとき                                      |
+| `leave`       | `peerId`                                                                                                                                          | 誰かが抜けたとき                                      |
+| `data`        | `from`（送り主のピアID）、`events`                                                                                                                | イベントを届けるとき                                  |
+| `time`        | `serverTime`（Unixミリ秒）                                                                                                                        | `time`を受けたとき                                    |
+| `invite`      | `role`、`invite`、`expiresAt`。GMでないときと、Workerにログインが置かれていないときは`invite`と`expiresAt`が`null`                                | `invite`を受けたとき                                  |
+| `asset-token` | `assetToken`、`expiresAt`（Unixミリ秒）、`role`（その席のいまの役割）                                                                             | `asset-token`を受けたときと、自分の役割が変わったとき |
+| `error`       | `code`、`protocolVersion`                                                                                                                         | 接続を閉じる前                                        |
 
 - `welcome`の`role`は、サーバーが決めた自分の役割（`gm`・`pl`・`guest`）です。自分の`PeerCursor`の`role`はこれにします。
 - `welcome`の`members`には、つないだ本人とサーバーは入りません。
 - サーバー自身のピアIDは`welcome`の`authorityPeerId`（`@authority`）で知らせます。ピアIDの形から推し量らないでください。
 - `welcome`のすぐあとには、必ずサーバーのカタログ（`from`が`@authority`の`data`）が届きます。部屋が空でも、空のカタログが1件届きます。
+- `welcome`の`assetUpload`は、アセットの置き方です（→ [置き場所へ直接上げる](#置き場所へ直接上げる)）。
+- 省略できる欄は、これからも足すことがあります。知らない欄は無視してください。
 
 ### 部屋のアセットのトークン
 
@@ -280,10 +308,10 @@ Axeは、トークンを替えたらすぐ送ります。
 
 ```json
 {
-  "type": "asset-token",
-  "assetToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-  "expiresAt": 1792000900000,
-  "role": "pl"
+    "type": "asset-token",
+    "assetToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+    "expiresAt": 1792000900000,
+    "role": "pl"
 }
 ```
 
@@ -342,29 +370,29 @@ Axeは、自分で振るときと同じ形で結果の発言（`chat`）を用�
 
 ```json
 {
-  "eventName": "ROLL_REQUEST",
-  "data": {
-    "message": {
-      "aliasName": "chat",
-      "identifier": "…",
-      "majorVersion": 1,
-      "minorVersion": 0.5,
-      "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
-    },
-    "command": "2d6+3",
-    "gameSystem": "SwordWorld2.5",
-    "speaker": "Kai",
-    "suffix": " [ゴブリン]"
-  }
+    "eventName": "ROLL_REQUEST",
+    "data": {
+        "message": {
+            "aliasName": "chat",
+            "identifier": "…",
+            "majorVersion": 1,
+            "minorVersion": 0.5,
+            "syncData": { "parentIdentifier": "<タブ>", "…": "…" }
+        },
+        "command": "2d6+3",
+        "gameSystem": "SwordWorld2.5",
+        "speaker": "Kai",
+        "suffix": " [ゴブリン]"
+    }
 }
 ```
 
-| フィールド   | 内容                                                                                                        |
-| ------------ | ----------------------------------------------------------------------------------------------------------- |
-| `message`    | 用意した結果の発言                                                                                          |
-| `command`    | 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい。4000文字まで                     |
-| `gameSystem` | ゲームシステムのID。知らないものなら`DiceBot`で振る                                                         |
-| `speaker`    | 発言した人の名前                                                                                            |
+| フィールド   | 内容                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `message`    | 用意した結果の発言                                                                                                       |
+| `command`    | 振るコマンド。全角を半角に直したもの。先頭に回数（`3 2d6`）を付けてもよい。4000文字まで                                  |
+| `gameSystem` | ゲームシステムのID。知らないものなら`DiceBot`で振る                                                                      |
+| `speaker`    | 発言した人の名前                                                                                                         |
 | `suffix`     | 結果の文面の後ろに付ける対象のキャラの名前。` [名前]`の1行だけで、名前は改行と角括弧と`→`を含まず128文字まで。省いてよい |
 
 サーバーは振った結果で、発言の次の項目を埋め、新しい発言として全員に配ります（振った人にも届きます）。

@@ -22,6 +22,12 @@ interface Indexed {
   uploadedAt: number;
 }
 
+/**
+ * 1回の PUT で受けるバイト数の上限。Vercel の Function は、本文が 4.5MB を超える要求を受けない。これを
+ * 超えるものは、置き場所へ直接上げてもらう
+ */
+export const MAX_PUT_BYTES = 4_000_000;
+
 /** 部屋のアセットの索引の鍵 */
 export const assetIndexOf = (key: KeyOf, roomKey: string): string => key('a', roomKey);
 
@@ -165,6 +171,16 @@ export const vercelAssets = (
       }),
 
     afterStore,
+
+    // 置き場所が直接上げる先を作れれば（Blob）、大きいものはそこへ上げてもらう
+    ...(bucket.target && {
+      direct: {
+        maxPutBytes: MAX_PUT_BYTES,
+        target: bucket.target,
+        open: (path: string) => bucket.get(path),
+        discard: (path: string) => bucket.delete([path]),
+      },
+    }),
 
     /** 部屋を消すときに、その部屋のアセットをすべて消す */
     deleteRoom: async (roomKey) => {

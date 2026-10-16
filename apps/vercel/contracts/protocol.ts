@@ -187,6 +187,26 @@ export interface WelcomeMessage {
   assetToken: string;
   /** assetToken が使えなくなる時刻（Unix ミリ秒）。その前に asset-token で渡し直してもらう */
   assetTokenExpiresAt: number;
+  /**
+   * アセットの置き方。無ければ、種類ごとの上限（画像 2MiB、音声 10MiB。Axe が読み込める大きさと同じ）
+   * まで1回の PUT で置ける。
+   * 省略できる欄は、これからも足すことがある。クライアントは知らない欄を無視する
+   */
+  assetUpload?: AssetUploadPolicy;
+}
+
+/**
+ * 部屋のサーバーのアセットの置き方。1回の要求の本文に上限のある部屋のサーバー（Vercel 版）が、welcome で
+ * 知らせる
+ */
+export interface AssetUploadPolicy {
+  /** 1回の PUT で受けるバイト数の上限。これを超えるものは PUT では置けない */
+  maxPutBytes: number;
+  /**
+   * maxPutBytes を超えるものを、置き場所へ直接上げられるか。上げられるなら、POST …/uploads で上げる先を
+   * 受け取って上げ、POST …/uploads/complete で知らせる。上げられなければ、超えるものは置けない
+   */
+  directUpload: boolean;
 }
 
 /** だれかが部屋に入った */
@@ -363,6 +383,50 @@ export interface RoomAsset {
  */
 export interface RoomAssetListResponse {
   assets: RoomAsset[];
+}
+
+/** PUT /v1/rooms/:roomKey/assets/:sha256 と POST …/uploads/complete の返事。置いたら 201、あれば 200 */
+export interface AssetStoredResponse {
+  id: string;
+  status: 'stored' | 'exists';
+}
+
+/**
+ * POST /v1/rooms/:roomKey/assets/:sha256/uploads の本文。welcome の assetUpload が directUpload の
+ * 部屋のサーバーで、maxPutBytes を超えるものを置くときに、上げる先を尋ねる。部屋のアセットのトークンで
+ * 尋ねる。もう置いてあれば、上げる先の代わりに AssetStoredResponse（200、exists）が返る
+ */
+export interface UploadTicketRequest {
+  /** 上げる中身のバイト数 */
+  size: number;
+  /** アセットの名前（ファイル名）。長いものは MAX_ASSET_NAME_LENGTH 文字で切る */
+  name?: string;
+}
+
+/**
+ * 置き場所へ直接上げる先。この URL へ、このメソッドとヘッダーで中身だけを送る。部屋のアセットの
+ * トークン（Authorization）は付けない。置き場所が、大きさと期限と上書きしないことを確かめる
+ */
+export interface DirectUploadTarget {
+  url: string;
+  method: 'PUT';
+  headers: Record<string, string>;
+  /** この時刻（Unix ミリ秒）を過ぎると上げられない */
+  expiresAt: number;
+}
+
+/** POST …/uploads の返事（201）。upload へ上げてから、ticket を POST …/uploads/complete に送る */
+export interface UploadTicketResponse {
+  ticket: string;
+  upload: DirectUploadTarget;
+}
+
+/**
+ * POST /v1/rooms/:roomKey/assets/:sha256/uploads/complete の本文。上げ終えたことを知らせると、部屋の
+ * サーバーが中身を確かめて部屋のアセットにする。返事は AssetStoredResponse
+ */
+export interface UploadCompleteRequest {
+  ticket: string;
 }
 
 /** GET /v1/auth/config。ログインに使える提供元。空なら、このサーバーではログインも部屋も使えない */

@@ -10,7 +10,13 @@ import type {
 import type { ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
 import { bearerOf } from '../request.js';
-import { getRoomAsset, listRoomAssets, putRoomAsset } from './assets.js';
+import {
+  completeUpload,
+  getRoomAsset,
+  listRoomAssets,
+  putRoomAsset,
+  requestUpload,
+} from './assets.js';
 
 /** 部屋の鍵。128 ビットの乱数を小文字の16進で書いたもの */
 const ROOM_KEY = /^[0-9a-f]{32}$/;
@@ -107,6 +113,13 @@ roomRoutes.get('/:roomKey/assets/:id', (c) =>
 );
 roomRoutes.put('/:roomKey/assets/:id', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? putRoomAsset(c) : fail(c, 400, 'invalid-id'),
+);
+// 置き場所へ直接上げる流れ。持たない部屋のサーバー（Cloudflare 版）では not-found
+roomRoutes.post('/:roomKey/assets/:id/uploads', (c) =>
+  ROOM_KEY.test(c.req.param('roomKey')) ? requestUpload(c) : fail(c, 400, 'invalid-id'),
+);
+roomRoutes.post('/:roomKey/assets/:id/uploads/complete', (c) =>
+  ROOM_KEY.test(c.req.param('roomKey')) ? completeUpload(c) : fail(c, 400, 'invalid-id'),
 );
 
 roomRoutes.get('/:roomKey/ws', async (c) => {

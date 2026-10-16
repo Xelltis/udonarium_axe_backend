@@ -99,3 +99,20 @@ export const put = (id: string, body: Bytes, headers: Record<string, string> = {
       ...headers,
     },
   });
+
+/**
+ * 値の形。キーと値の型を並べたもの。配列は1つ目の形。null は文字列とみなす（契約で null になるのは、
+ * 無いかもしれない文字列だけ）
+ */
+export const shapeOf = (value: unknown): unknown => {
+  if (value === null) return 'string';
+  if (Array.isArray(value)) return [shapeOf(value[0])];
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, shapeOf(item)]),
+    );
+  }
+  return typeof value;
+};

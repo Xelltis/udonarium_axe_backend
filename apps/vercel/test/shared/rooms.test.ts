@@ -178,8 +178,11 @@ describe('joining a room', () => {
       serverTime: expect.any(Number),
       assetToken: expect.any(String),
       assetTokenExpiresAt: expect.any(Number),
+      ...(harness.assetUpload ? { assetUpload: harness.assetUpload } : {}),
     });
-    expect(keysOf(welcome)).toEqual(keysOf(messages.server.welcome));
+    expect(keysOf(welcome)).toEqual(
+      keysOf(harness.assetUpload ? messages.server.welcomeWithUpload : messages.server.welcome),
+    );
     expect(catalog).toEqual([
       { eventName: SyncEvent.CATALOG, data: [], sendFrom: AUTHORITY_PEER_ID },
     ]);

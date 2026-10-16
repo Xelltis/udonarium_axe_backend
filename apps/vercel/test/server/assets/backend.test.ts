@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { roomAssetKey } from '../../../src/core/assets/keys.js';
-import { assetIndexOf, vercelAssets } from '../../../src/server/assets/backend.js';
+import { MAX_PUT_BYTES, assetIndexOf, vercelAssets } from '../../../src/server/assets/backend.js';
 import { memoryBucket } from '../../../src/server/assets/bucket.js';
 import type { AssetBucket } from '../../../src/server/assets/bucket.js';
 import { localBucket } from '../../../src/server/assets/local-bucket.js';
@@ -165,6 +165,31 @@ describe('room assets on Vercel', () => {
 
     expect(await bucket.exists(roomAssetKey(ROOM, again.id))).toBe(false);
     expect(await connection.redis.exists(assetIndexOf(key, ROOM))).toBe(0);
+  });
+
+  it('has big assets put up straight to the store when the store can take them, and not otherwise', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'axe-direct-'));
+    const { assets, bucket } = await stored();
+    const local = vercelAssets(
+      connection.redis,
+      freshKey(),
+      localBucket(dir),
+      async () => true,
+      () => undefined,
+    );
+    const direct = assets.direct as NonNullable<typeof assets.direct>;
+    await bucket.put('uploads/r/a/n', new Uint8Array([7]), '');
+
+    const target = await direct.target('uploads/r/a/n', 1);
+    const opened = await direct.open('uploads/r/a/n');
+    await direct.discard('uploads/r/a/n');
+
+    expect(direct.maxPutBytes).toBe(MAX_PUT_BYTES);
+    expect(target).toMatchObject({ url: 'https://memory.example/uploads/r/a/n', method: 'PUT' });
+    expect([...new Uint8Array(await new Response(opened).arrayBuffer())]).toEqual([7]);
+    expect(await bucket.exists('uploads/r/a/n')).toBe(false);
+    expect(local.direct).toBeUndefined();
+    await rm(dir, { recursive: true, force: true });
   });
 
   it('does what it was given to do after storing', async () => {

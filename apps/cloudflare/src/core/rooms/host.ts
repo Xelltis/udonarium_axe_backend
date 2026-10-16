@@ -1,4 +1,4 @@
-import type { PeerRole } from '../../../contracts/protocol.js';
+import type { AssetUploadPolicy, PeerRole } from '../../../contracts/protocol.js';
 import type { ObjectIndex } from './object-index.js';
 import type { PasswordHash } from './password.js';
 
@@ -74,6 +74,8 @@ export interface RoomHost<C extends object> {
   readonly roles: RoleBook;
   /** トークンを確かめ、作る鍵。ログインを置いていなければ null */
   sessionSecret(): string | null;
+  /** welcome で知らせるアセットの置き方。種類ごとの上限まで1回の PUT で置けるなら null */
+  assetUploadPolicy(): AssetUploadPolicy | null;
   /** 人が入った。nextCheckAt までに見回りに来る */
   occupied(nextCheckAt: number): void;
   /** だれもいなくなった。ここから保持期間を数える */

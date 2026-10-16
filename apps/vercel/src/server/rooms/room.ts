@@ -1,4 +1,4 @@
-import type { PeerRole } from '../../../contracts/protocol.js';
+import type { AssetUploadPolicy, PeerRole } from '../../../contracts/protocol.js';
 import { RoomEngine } from '../../core/rooms/engine.js';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../../core/rooms/host.js';
 import type { TombstoneLimits } from '../../core/rooms/object-index.js';
@@ -65,6 +65,8 @@ export interface RoomDeps {
   retentionSeconds: number;
   /** トークンを確かめる鍵。部屋ごとにログインを外していれば null */
   sessionSecret: (roomKey: string) => string | null;
+  /** welcome で知らせるアセットの置き方。1回の PUT で種類ごとの上限まで置けるなら null */
+  assetUpload: AssetUploadPolicy | null;
   /** 部屋を消すときに、部屋のアセットを消す */
   deleteAssets: (roomKey: string) => Promise<void>;
   /** 返したあとも終わるまで続ける仕事 */
@@ -381,6 +383,10 @@ export class VercelRoom implements RoomHost<Conn> {
 
   sessionSecret(): string | null {
     return this.deps.sessionSecret(this.roomKey);
+  }
+
+  assetUploadPolicy(): AssetUploadPolicy | null {
+    return this.deps.assetUpload;
   }
 
   /**

@@ -295,6 +295,11 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return parseConfig(this.env).login?.sessionSecret ?? null;
   }
 
+  /** 1回の PUT で、種類ごとの上限まで置ける */
+  assetUploadPolicy(): null {
+    return null;
+  }
+
   /** 人がいるあいだは消さずに見回る */
   occupied(nextCheckAt: number): void {
     this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');

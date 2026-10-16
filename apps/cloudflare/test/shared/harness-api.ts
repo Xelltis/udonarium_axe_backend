@@ -1,3 +1,4 @@
+import type { AssetUploadPolicy } from '../../contracts/protocol.js';
 import type { RoomInit } from '../../src/core/http/backend.js';
 import type { RoomEngine } from '../../src/core/rooms/engine.js';
 import type { RoomHost } from '../../src/core/rooms/host.js';
@@ -40,6 +41,8 @@ export interface RoomInside {
 }
 
 export interface Harness {
+  /** welcome で知らせるアセットの置き方。種類ごとの上限まで1回の PUT で置ける部屋のサーバーなら null */
+  assetUpload: AssetUploadPolicy | null;
   /** 部屋のサーバーへのリクエスト。送信元の IP は CF-Connecting-IP に書いておく */
   fetch(request: Request): Promise<Response>;
   /**

@@ -18,6 +18,8 @@ export const LOGIN_STATE_SECONDS = 10 * 60;
  * 部屋にいるあいだは、切れる前に部屋のサーバーが渡し直す
  */
 export const ASSET_TOKEN_SECONDS = 15 * 60;
+/** 置き場所へ直接上げるときの、上げてから知らせるまでに許す秒数 */
+export const UPLOAD_TICKET_SECONDS = 15 * 60;
 
 const encoder = new TextEncoder();
 
@@ -67,6 +69,23 @@ const claimSchemas = {
     role: picklist(PEER_ROLES),
     /** 席のユーザー ID。置くときに、その人がいまも置ける役割かを部屋に尋ねる */
     uid: string(),
+    exp: number(),
+  }),
+  /**
+   * 置き場所へ直接上げる約束。上げる先を渡すときに出し、上げ終えた知らせで受ける。部屋のサーバーは
+   * 何も覚えておかず、これだけで、だれが何をどこへ上げたかを確かめる
+   */
+  upload: object({
+    aud: literal('upload'),
+    room: string(),
+    /** アセットの ID（中身の SHA-256） */
+    id: string(),
+    uid: string(),
+    /** 上げると言ったバイト数 */
+    size: number(),
+    name: string(),
+    /** 仮置きの場所 */
+    path: string(),
     exp: number(),
   }),
 } satisfies Record<string, GenericSchema>;

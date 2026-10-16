@@ -1,7 +1,12 @@
 import { encode } from '@msgpack/msgpack';
 
 import { PROTOCOL_VERSION } from '../../contracts/protocol.js';
-import type { ObjectContext, PeerRole, ServerMessage } from '../../contracts/protocol.js';
+import type {
+  AssetUploadPolicy,
+  ObjectContext,
+  PeerRole,
+  ServerMessage,
+} from '../../contracts/protocol.js';
 import { ACCESS_TOKEN_SECONDS, signToken } from '../../src/core/auth/tokens.js';
 import { decodeFrame } from '../../src/core/rooms/codec.js';
 import { RoomEngine } from '../../src/core/rooms/engine.js';
@@ -92,6 +97,8 @@ export class FakeHost implements RoomHost<FakeConn> {
   /** 人が入った・いなくなった・一覧を直す、の知らせ */
   readonly notices: string[] = [];
   readonly deferred: Promise<unknown>[] = [];
+  /** welcome で知らせるアセットの置き方。Vercel 版のように、本文に上限のある部屋のサーバーにしておく */
+  policy: AssetUploadPolicy | null = { maxPutBytes: 4_000_000, directUpload: true };
   readonly engine = new RoomEngine<FakeConn>(this);
 
   connections(): FakeConn[] {
@@ -135,6 +142,10 @@ export class FakeHost implements RoomHost<FakeConn> {
 
   sessionSecret(): string | null {
     return SECRET;
+  }
+
+  assetUploadPolicy(): AssetUploadPolicy | null {
+    return this.policy;
   }
 
   occupied(): void {

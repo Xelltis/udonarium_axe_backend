@@ -9,12 +9,15 @@ const blob = vi.hoisted(() => {
     head: vi.fn(),
     del: vi.fn(),
     list: vi.fn(),
+    issueSignedToken: vi.fn(),
+    presignUrl: vi.fn(),
+    parseStoreIdFromDelegationToken: vi.fn(),
   };
 });
 
 vi.mock('@vercel/blob', () => blob);
 
-import { blobBucket, bucketFor } from '../../../src/server/assets/blob-bucket.js';
+import { TARGET_MS, blobBucket, bucketFor } from '../../../src/server/assets/blob-bucket.js';
 import { configOf } from '../server-helpers.js';
 
 afterEach(() => {
@@ -85,6 +88,46 @@ describe('the Vercel Blob bucket', () => {
       [{ prefix: 'rooms/', cursor: undefined, limit: 1000 }],
       [{ prefix: 'rooms/', cursor: 'next', limit: 1000 }],
     ]);
+  });
+
+  it('lets the browser put up to the size asked for, once, without overwriting, for a while', async () => {
+    const bucket = blobBucket();
+    const token = { delegationToken: 'delegation', clientSigningToken: 'signing', validUntil: 0 };
+    blob.issueSignedToken.mockResolvedValueOnce(token);
+    blob.presignUrl.mockResolvedValueOnce({ presignedUrl: 'https://blob.example/put?signed' });
+    blob.parseStoreIdFromDelegationToken.mockReturnValueOnce('store_1');
+    const before = Date.now();
+
+    const target = await (bucket.target as NonNullable<typeof bucket.target>)('uploads/r/a/n', 5);
+
+    const [options] = blob.issueSignedToken.mock.calls[0] as [{ validUntil: number }];
+    expect(options).toEqual({
+      pathname: 'uploads/r/a/n',
+      operations: ['put'],
+      validUntil: expect.any(Number),
+      maximumSizeInBytes: 5,
+    });
+    expect(options.validUntil - before).toBeGreaterThanOrEqual(TARGET_MS);
+    expect(blob.presignUrl).toHaveBeenCalledWith(token, {
+      operation: 'put',
+      pathname: 'uploads/r/a/n',
+      access: 'private',
+      validUntil: options.validUntil,
+      maximumSizeInBytes: 5,
+      allowOverwrite: false,
+      addRandomSuffix: false,
+    });
+    expect(blob.parseStoreIdFromDelegationToken).toHaveBeenCalledWith('delegation');
+    expect(target).toEqual({
+      url: 'https://blob.example/put?signed',
+      method: 'PUT',
+      headers: {
+        'x-api-version': '12',
+        'x-vercel-blob-access': 'private',
+        'x-vercel-blob-store-id': 'store_1',
+      },
+      expiresAt: options.validUntil,
+    });
   });
 
   it('is chosen unless a directory is set for trying things out', async () => {

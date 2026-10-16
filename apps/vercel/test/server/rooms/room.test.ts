@@ -49,6 +49,7 @@ const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
     instance: 'here',
     retentionSeconds: 3600,
     sessionSecret: () => SECRET,
+    assetUpload: null,
     deleteAssets: async () => undefined,
     defer: () => undefined,
     timing: { leaseMs: 300, renewMs: 40, tickMs: 40 },
@@ -222,7 +223,7 @@ describe('a room held on Vercel', () => {
     await room.release();
   });
 
-    it('looks around while people are in, and no longer once it has let go', async () => {
+  it('looks around while people are in, and no longer once it has let go', async () => {
     const { deps, lobby } = await roomDepsOf(connection.redis);
     const room = await VercelRoom.open(deps, 'room');
     seat(room, 'alice');

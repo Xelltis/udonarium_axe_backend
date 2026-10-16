@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { MAX_PUT_BYTES } from '../../src/server/assets/backend.js';
 import { memoryBucket } from '../../src/server/assets/bucket.js';
+import { localBucket } from '../../src/server/assets/local-bucket.js';
 import { ORPHAN_SWEEP_EVERY, backendProvider, createServerDeps } from '../../src/server/deps.js';
 import { useRedis } from './redis-helpers.js';
 import { configOf, depsOf } from './server-helpers.js';
@@ -56,6 +58,19 @@ describe('the server dependencies', () => {
     await storeTimes(ORPHAN_SWEEP_EVERY);
     expect(error).toHaveBeenCalledWith('Asset sweep failed:', expect.any(Error));
     error.mockRestore();
+  });
+
+  it('tell a room to have big assets put up straight to the store, unless they go to a directory', async () => {
+    const policyOf = async (deps: Awaited<ReturnType<typeof depsOf>>) =>
+      deps.runtime.withRoom('room', (room) => room.assetUploadPolicy());
+
+    const toStore = await policyOf(await depsOf(connection.redis));
+    const toDirectory = await policyOf(
+      await depsOf(connection.redis, { bucketOf: () => localBucket('/nowhere') }),
+    );
+
+    expect(toStore).toEqual({ maxPutBytes: MAX_PUT_BYTES, directUpload: true });
+    expect(toDirectory).toBeNull();
   });
 
   it('sign nothing in rooms of a server without login', async () => {

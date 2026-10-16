@@ -17,7 +17,7 @@ const ID = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
 
 describe('the sweep of assets left behind', () => {
-  it('takes away what is old and belongs to no room, or to no index, and leaves the rest', async () => {
+  it('takes away what is old and belongs to no room, or to no index, or was never finished, and leaves the rest', async () => {
     const key = freshKey();
     const bucket = memoryBucket();
     await connection.redis.hSet(roomKeysOf(key, 'here').meta, 'roomKey', 'here');
@@ -33,11 +33,18 @@ describe('the sweep of assets left behind', () => {
     await put(roomAssetKey('gone', OTHER), Date.now());
     await put('rooms//stray', old);
     await put('blocked/x', old);
+    await put(`uploads/here/${ID}/old`, old);
+    await put(`uploads/here/${ID}/new`, Date.now());
 
-    expect(await orphanSweeper(connection.redis, key, bucket)()).toBe(3);
+    expect(await orphanSweeper(connection.redis, key, bucket)()).toBe(4);
 
     expect(bucket.paths().sort()).toEqual(
-      [roomAssetKey('here', ID), roomAssetKey('gone', OTHER), 'blocked/x'].sort(),
+      [
+        roomAssetKey('here', ID),
+        roomAssetKey('gone', OTHER),
+        'blocked/x',
+        `uploads/here/${ID}/new`,
+      ].sort(),
     );
   });
 
@@ -52,8 +59,8 @@ describe('the sweep of assets left behind', () => {
     await sweep();
 
     expect(list.mock.calls).toEqual([
-      ['rooms/', null],
-      ['rooms/', 'next'],
+      ['', null],
+      ['', 'next'],
     ]);
     expect(await connection.redis.exists(key('sweep', 'blob-cursor'))).toBe(0);
   });

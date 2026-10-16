@@ -94,6 +94,21 @@ describe('a room being deleted', () => {
   });
 });
 
+describe('welcoming', () => {
+  it('tells how to put up assets when the room server has its own way, and says nothing when it has not', () => {
+    const host = new FakeHost();
+    const told = host.join('told');
+    host.policy = null;
+    const plain = host.join('plain');
+
+    expect(told.of('welcome')[0]?.assetUpload).toEqual({
+      maxPutBytes: 4_000_000,
+      directUpload: true,
+    });
+    expect(plain.of('welcome')[0]).not.toHaveProperty('assetUpload');
+  });
+});
+
 describe('leaving', () => {
   it('counts a connection gone only once', () => {
     const host = new FakeHost();

@@ -21,6 +21,7 @@ import {
   judgeUpdate,
 } from '../../../contracts/protocol.js';
 import type {
+  AssetUploadPolicy,
   ErrorCode,
   EventContext,
   ObjectContext,
@@ -359,6 +360,12 @@ export class RoomEngine<C extends object> {
    * この部屋のアセットを読み書きするトークンと、それが切れる時刻（Unix ミリ秒）。時刻は expiresAt の名前で
    * 返す（welcome と asset-token で名前が違う）。役割を入れておき、置けるのは GM と PL だけにする
    */
+  /** アセットの置き方。PUT だけで置ける部屋のサーバー（Cloudflare 版）は、welcome に付けない */
+  private uploadPolicy(): { assetUpload?: AssetUploadPolicy } {
+    const policy = this.host.assetUploadPolicy();
+    return policy ? { assetUpload: policy } : {};
+  }
+
   private assetTokenFor<K extends string>(
     seat: Seat,
     expiresAt: K,
@@ -458,6 +465,7 @@ export class RoomEngine<C extends object> {
       members: others.filter((other) => other !== previous).map((other) => memberOf(other.seat)),
       serverTime: Date.now(),
       ...this.assetTokenFor(seat, 'assetTokenExpiresAt'),
+      ...this.uploadPolicy(),
     });
     this.post(conn, { type: 'data', from: AUTHORITY_PEER_ID, events: this.catalogEvents(seat) });
     // 人がいるあいだは消さずに見回る

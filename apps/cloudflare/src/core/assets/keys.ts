@@ -17,6 +17,13 @@ export const roomKeyOf = (key: string): string | null => {
   return roomKey.length > 0 ? roomKey : null;
 };
 
+/** 置き場所へ直接上げるものの仮置きの頭。確かめてから部屋のアセットにし、仮置きは消す */
+export const UPLOADS_PREFIX = 'uploads/';
+
+/** 仮置きの場所。同じものを何人が上げても、ぶつからないよう nonce で分ける */
+export const uploadKeyOf = (roomKey: string, id: string, nonce: string): string =>
+  `${UPLOADS_PREFIX}${roomKey}/${id}/${nonce}`;
+
 /**
  * 置かせないアセットの印。権利侵害の申し立てなどで消したものを、また上げさせないために置く。
  * 中身は空で、名前だけに意味がある（運用は README の「特定の画像を消したいとき」）。部屋にかかわらず効く

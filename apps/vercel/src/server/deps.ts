@@ -86,6 +86,10 @@ export const createServerDeps = async (
       retentionSeconds: config.roomRetentionSeconds,
       sessionSecret: (roomKey) =>
         options.withoutLogin?.has(roomKey) ? null : (config.login?.sessionSecret ?? null),
+      // 本文に上限があるので、超えるものは置き場所へ直接上げてもらう（手元のディレクトリでは上限が無い）
+      assetUpload: assets.direct
+        ? { maxPutBytes: assets.direct.maxPutBytes, directUpload: true }
+        : null,
       deleteAssets,
       defer,
       timing: options.timing,

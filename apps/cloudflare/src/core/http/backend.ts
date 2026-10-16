@@ -1,4 +1,9 @@
-import type { Account, RoomAsset, RoomSummary } from '../../../contracts/protocol.js';
+import type {
+  Account,
+  DirectUploadTarget,
+  RoomAsset,
+  RoomSummary,
+} from '../../../contracts/protocol.js';
 import type { Profile, Secret, Session } from '../auth/secrets.js';
 import type { LoginConfig } from '../config/login.js';
 
@@ -63,6 +68,20 @@ export interface AssetBackend {
   list(roomKey: string): Promise<RoomAsset[]>;
   /** 新しく置いたあとのついでの仕事（消しそこねの掃除など） */
   afterStore(): void;
+  /** 置き場所へ直接上げる流れ。1回の要求の本文に上限のある部屋のサーバー（Vercel 版）だけが持つ */
+  direct?: DirectUploads;
+}
+
+/** 置き場所へ直接上げる流れ。仮置きへ上げさせ、確かめてから部屋のアセットにする */
+export interface DirectUploads {
+  /** 1回の PUT で受けるバイト数の上限。これを超えるものは、直接上げてもらう */
+  maxPutBytes: number;
+  /** 仮置きの場所へ、size バイトまでを一度だけ上げさせる先を作る */
+  target(path: string, size: number): Promise<DirectUploadTarget>;
+  /** 仮置きの中身を流す。無ければ（まだ上げていないか、掃除で消えた）null */
+  open(path: string): Promise<ReadableStream<Uint8Array> | null>;
+  /** 仮置きを消す */
+  discard(path: string): Promise<void>;
 }
 
 /**

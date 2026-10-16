@@ -2,27 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import http from '../../contracts/fixtures/http.json' with { type: 'json' };
 import { callApi, logIn } from './auth-helpers.js';
-import { ROOM_KEY, accessTokenFor, assetTokenFor, freshFile, put, jsonOf } from './helpers.js';
+import {
+  ROOM_KEY,
+  accessTokenFor,
+  assetTokenFor,
+  freshFile,
+  put,
+  jsonOf,
+  shapeOf,
+} from './helpers.js';
 import { createRoom, prepareAssetRooms } from './room-helpers.js';
 
 // HTTP の返事が、contracts/fixtures/http.json の例と同じ形かを、実際に呼んで確かめる
-
-/**
- * 値の形。キーと値の型を並べたもの。配列は1つ目の形。null は文字列とみなす（契約で null になるのは、
- * 無いかもしれない文字列だけ）
- */
-const shapeOf = (value: unknown): unknown => {
-  if (value === null) return 'string';
-  if (Array.isArray(value)) return [shapeOf(value[0])];
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, shapeOf(item)]),
-    );
-  }
-  return typeof value;
-};
 
 describe('the HTTP contract', () => {
   it('opens a room as the example says', async () => {

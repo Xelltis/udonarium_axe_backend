@@ -6,7 +6,7 @@ import { parseServerConfig } from '../src/config/server.js';
 import { blockedKeyOf } from '../src/core/assets/keys.js';
 import { createApp } from '../src/http/app.js';
 import { memoryBucket } from '../src/server/assets/bucket.js';
-import { assetIndexOf } from '../src/server/assets/backend.js';
+import { MAX_PUT_BYTES, assetIndexOf } from '../src/server/assets/backend.js';
 import { backendProvider, upgrades } from '../src/server/deps.js';
 import { createServer } from '../src/server/node.js';
 import type { Harness, TestSocket } from './shared/harness-api.js';
@@ -25,7 +25,8 @@ const ENV: Record<string, string | undefined> = {
 };
 
 const config = parseServerConfig(ENV);
-const bucket = memoryBucket();
+/** 部屋のアセットを置くところ。直接上げる流れのテストが、ブラウザの代わりにここへ上げる */
+export const bucket = memoryBucket();
 const withoutLogin = new Set<string>();
 /** 返したあとに続ける仕事。fetchWith は、これが終わるまで待ってから返す */
 const deferred = new Set<Promise<unknown>>();
@@ -109,6 +110,9 @@ const socketOf = (ws: WebSocket): TestSocket => {
 };
 
 export const harness: Harness = {
+  // Blob は本文の上限を超えるものを直接上げさせられる。メモリの置き場所も同じにしてある
+  assetUpload: { maxPutBytes: MAX_PUT_BYTES, directUpload: true },
+
   fetch: async (request) => app.fetch(forVercel(request)),
 
   fetchWith: async (request, overrides) => {

@@ -34,6 +34,9 @@ const socketOf = (ws: WebSocket): TestSocket => {
 };
 
 export const harness: Harness = {
+  // 1回の PUT で、種類ごとの上限まで置ける
+  assetUpload: null,
+
   fetch: (request) => exports.default.fetch(request),
 
   fetchWith: async (request, overrides) => {
