@@ -67,8 +67,8 @@ R2は、無料枠に収まることがほとんどです。
 Vercel版は、使った量に応じて数えるものが多く、1卓あたりの見込みはまだ出していません。
 
 - **Function**：WebSocketがつながっているあいだ、Functionが動き続けます。Fluid computeでは、1つのインスタンスが多くのWebSocketを受けますが、つながっている時間のメモリの使用量が数えられます。
-- **Redis（Vercel Marketplace）**：コマンドの数か、置く量に決まりがあります。提供元とプランによって違います。
-- **Vercel Blob**：置く量、読み書きの回数、転送量に決まりがあります。
+- **Redis（Upstash for Redis）**：無料のプラン（Free）では、1か月に50万回のコマンド、置ける量は256MB、転送は1か月に10GBまでです。無料で作れるデータベースは、1つのUpstashのアカウントに1つです。超えたときの扱いは、[Upstashの料金のページ](https://upstash.com/pricing/redis)で確かめてください。
+- **Vercel Blob**：無料のプラン（Hobby）では、1か月に、置く量は1GB、読み出し（簡単な操作）は1万回、書き込みや一覧（高度な操作）は2,000回、転送は10GBまでです。ダッシュボードでストアの中を見ても、操作に数えられます。超えると料金はかからず、30日たつまでVercel Blobが使えなくなります（→ [Vercel Blobの料金](https://vercel.com/docs/vercel-blob/usage-and-pricing)）。
 - **Vercel Cron**：無料のプランは1日1回までです。部屋のサーバーは、1日1回の掃除にだけ使います。
 
 Vercelの無料のプラン（Hobby）は、個人の非商用での利用が前提です。
