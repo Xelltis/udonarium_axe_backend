@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { memoryBucket } from '../../src/server/assets/bucket.js';
-import { backendProvider, createServerDeps } from '../../src/server/deps.js';
+import { ORPHAN_SWEEP_EVERY, backendProvider, createServerDeps } from '../../src/server/deps.js';
 import { useRedis } from './redis-helpers.js';
 import { configOf, depsOf } from './server-helpers.js';
 
 const connection = useRedis();
 
 describe('the server dependencies', () => {
-  it('connect to Redis on their own when not handed a connection', async () => {
-    const deps = await createServerDeps(configOf(), { bucketOf: () => memoryBucket() });
+  it('connect to Redis on their own when not handed a connection, and keep assets in Blob', async () => {
+    const deps = await createServerDeps(configOf(), {});
 
     expect(await deps.redis.ping()).toBe('PONG');
     deps.redis.destroy();
@@ -29,6 +29,32 @@ describe('the server dependencies', () => {
 
     expect(secrets).toEqual([null, 'test-session-secret-0123456789abcdef']);
     expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('sweep the assets left behind once in so many stored, and say so when they cannot', async () => {
+    const deferred: Promise<unknown>[] = [];
+    const bucket = memoryBucket();
+    const deps = await depsOf(connection.redis, {
+      bucketOf: () => bucket,
+      defer: (work) => void deferred.push(work),
+    });
+    await bucket.put('rooms/gone/x', new Uint8Array(), '');
+    bucket.age('rooms/gone/x', 0);
+    const storeTimes = async (times: number) => {
+      for (let i = 0; i < times; i++) deps.assets.afterStore();
+      await Promise.all(deferred);
+    };
+
+    await storeTimes(ORPHAN_SWEEP_EVERY - 1);
+    expect(bucket.paths()).toEqual(['rooms/gone/x']);
+    await storeTimes(1);
+    expect(bucket.paths()).toEqual([]);
+
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(bucket, 'list').mockRejectedValueOnce(new Error('blob down'));
+    await storeTimes(ORPHAN_SWEEP_EVERY);
+    expect(error).toHaveBeenCalledWith('Asset sweep failed:', expect.any(Error));
     error.mockRestore();
   });
 
@@ -64,8 +90,8 @@ describe('the server dependencies', () => {
     await provider.backendFor(config);
 
     expect(await storeless.lobby.list()).toEqual([]);
-    expect(await provider.sweep(withoutStore)).toBe(0);
-    expect(await provider.sweep(config)).toBe(0);
+    expect(await provider.sweep(withoutStore)).toEqual({ rooms: 0, assets: 0 });
+    expect(await provider.sweep(config)).toEqual({ rooms: 0, assets: 0 });
     expect(provider.depsFor(broken)).toBeUndefined();
     (await provider.depsFor(config))?.redis.destroy();
   });

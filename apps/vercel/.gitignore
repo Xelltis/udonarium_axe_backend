@@ -32,3 +32,6 @@ lerna-debug.log*
 
 # coverage
 coverage/
+
+# npm run check:esm
+.esm-check/

@@ -1,10 +1,15 @@
+import { waitUntil } from '@vercel/functions';
+
 import { createApp } from '../src/http/app.js';
+import { backendProvider, upgrades } from '../src/server/deps.js';
+import { createServer } from '../src/server/node.js';
 
-export const app = createApp();
+const provider = backendProvider({ defer: waitUntil });
 
-// Vercel の Node.js ランタイムは、デフォルトエクスポートが `fetch` を持つ場合に
-// Web Standard ハンドラとして扱う。Hono の `app.fetch` はクラスプロパティの
-// アロー関数なので、そのまま切り出して渡せる。
-// `hono/vercel` の `handle()` は素の関数 `(req: Request) => Response` を返すため、
-// Node.js ランタイムでは `(req, res) => {}` 形式の Node ハンドラと誤検出される。
-export default { fetch: app.fetch };
+export const app = createApp({
+  server: { backendFor: provider.backendFor, sweep: provider.sweep },
+});
+
+// Vercel の Node.js ランタイムは、デフォルトエクスポートの Node の HTTP サーバーに要求を渡す。
+// WebSocket につなぎ替える要求も同じサーバーが受ける（部屋の WebSocket）
+export default createServer(app.fetch, upgrades);

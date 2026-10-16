@@ -102,6 +102,10 @@ jobs:
       # ERR_MODULE_NOT_FOUND になる (b0995cc 参照)。
       - run: npm run typecheck
 
+      # テストは Vite を通すので、素の Node で読めない import（JSON の import 属性の漏れなど）を
+      # 見逃す。tsc で出したものを素の Node で読み、BCDice を1回振る
+      - run: npm run check:esm
+
       - run: npm test
 
       # カバレッジ閾値割れで npm test が落ちた場合も、どの行が落ちたかを

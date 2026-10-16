@@ -34,9 +34,13 @@ const stored = async (
 ) => {
   const bucket = options.bucket ?? memoryBucket();
   const key = freshKey();
-  const assets = vercelAssets(connection.redis, key, bucket, async () => options.allowed ?? true, {
-    afterStore: options.afterStore,
-  });
+  const assets = vercelAssets(
+    connection.redis,
+    key,
+    bucket,
+    async () => options.allowed ?? true,
+    options.afterStore ?? (() => undefined),
+  );
   const bytes = new Uint8Array(Array.from({ length: 10 }, (_, i) => i));
   const id = await hexOf(bytes);
   expect(
@@ -163,13 +167,11 @@ describe('room assets on Vercel', () => {
     expect(await connection.redis.exists(assetIndexOf(key, ROOM))).toBe(0);
   });
 
-  it('does what comes after storing only when asked to', async () => {
+  it('does what it was given to do after storing', async () => {
     const afterStore = vi.fn();
     const { assets } = await stored({ afterStore });
-    const { assets: plain } = await stored();
 
     assets.afterStore();
-    plain.afterStore();
 
     expect(afterStore).toHaveBeenCalledOnce();
   });
@@ -196,6 +198,11 @@ describe('the buckets', () => {
     await bucket.put('rooms/r/a', new Uint8Array([1, 2, 3]), 'image/png');
 
     expect(await bucket.exists('rooms/r/a')).toBe(true);
+    const listed = await bucket.list('rooms/', null);
+    expect(listed.items.map((item) => item.path)).toEqual(['rooms/r/a']);
+    expect(listed.items[0]?.uploadedAt).toBeGreaterThan(Date.now() - 60_000);
+    expect(listed.cursor).toBeNull();
+    expect(await bucket.list('none/', null)).toEqual({ items: [], cursor: null });
     expect([
       ...new Uint8Array(await new Response(await bucket.get('rooms/r/a')).arrayBuffer()),
     ]).toEqual([1, 2, 3]);

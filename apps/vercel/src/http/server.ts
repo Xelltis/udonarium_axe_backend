@@ -6,6 +6,7 @@ import { parseServerConfig } from '../config/server.js';
 import type { VercelServerConfig } from '../config/server.js';
 import { sameText } from '../core/auth/secrets.js';
 import type { ServerBackend, ServerEnv } from '../core/http/backend.js';
+import type { Swept } from '../server/deps.js';
 import { onError } from '../core/http/errors.js';
 import { serverRoutes } from '../core/http/routes/index.js';
 
@@ -25,8 +26,8 @@ export interface ServerAppOptions {
   env?: () => Record<string, string | undefined>;
   /** 設定に合う部屋のサーバー */
   backendFor: (config: VercelServerConfig) => Promise<ServerBackend>;
-  /** 消す時刻を過ぎた部屋を消す。消した部屋の数 */
-  sweep: (config: VercelServerConfig) => Promise<number>;
+  /** 消す時刻を過ぎた部屋と、消しそこねたアセットを消す */
+  sweep: (config: VercelServerConfig) => Promise<Swept>;
 }
 
 type ServerAppEnv = ServerEnv & { Variables: { config: VercelServerConfig } };
@@ -54,7 +55,7 @@ export const serverApp = (options: ServerAppOptions): Hono<ServerAppEnv> => {
     if (config.cronSecret && !sameText(authorization, `Bearer ${config.cronSecret}`)) {
       return c.body(null, 401);
     }
-    return c.json({ swept: await options.sweep(config) });
+    return c.json(await options.sweep(config));
   });
   return app;
 };

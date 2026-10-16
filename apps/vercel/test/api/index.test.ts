@@ -8,16 +8,26 @@ vi.mock('hono/adapter', () => ({
   }),
 }));
 
-import handler, { app } from '../../api/index.js';
+import type { AddressInfo } from 'node:net';
+
+import server, { app } from '../../api/index.js';
 
 describe('api entry', () => {
-  // @vercel/node は default export が `fetch` を持つ場合のみ Web Standard
-  // ハンドラとして扱い、素の関数だと Node の (req, res) ハンドラと誤検出する。
-  it('exposes a fetch handler as the default export for the Vercel Node.js runtime', async () => {
-    expect(typeof handler.fetch).toBe('function');
+  // Vercel の Node.js ランタイムは、デフォルトエクスポートの HTTP サーバーに要求を渡す
+  it('exposes a Node HTTP server that answers both the SkyWay and the room server routes', async () => {
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const root = await fetch(`http://127.0.0.1:${port}/`);
+      const rooms = await fetch(`http://127.0.0.1:${port}/v1/rooms`, {
+        headers: { Origin: 'https://example.com' },
+      });
 
-    const res = await handler.fetch(new Request('http://localhost/'));
-    expect(res.status).toBe(200);
+      expect(root.status).toBe(200);
+      expect(await rooms.json()).toEqual({ rooms: [] });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it('responds to /', async () => {

@@ -68,17 +68,13 @@ const slice = (
   );
 };
 
-export interface VercelAssetsOptions {
-  /** 新しく置いたあとのついでの仕事（消しそこねの掃除など） */
-  afterStore?: () => void;
-}
-
 export const vercelAssets = (
   redis: Redis,
   key: KeyOf,
   bucket: AssetBucket,
   limit: (request: Request, kind: LimitKind) => Promise<boolean>,
-  options: VercelAssetsOptions = {},
+  /** 新しく置いたあとのついでの仕事（消しそこねの掃除） */
+  afterStore: () => void,
 ): AssetBackend & { deleteRoom(roomKey: string): Promise<void> } => {
   const indexed = async (roomKey: string, id: string): Promise<Indexed | null> => {
     const value = await redis.hGet(assetIndexOf(key, roomKey), id);
@@ -168,7 +164,7 @@ export const vercelAssets = (
         return { id, type, size, name };
       }),
 
-    afterStore: () => options.afterStore?.(),
+    afterStore,
 
     /** 部屋を消すときに、その部屋のアセットをすべて消す */
     deleteRoom: async (roomKey) => {

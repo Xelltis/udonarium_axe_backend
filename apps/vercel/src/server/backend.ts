@@ -28,6 +28,8 @@ export interface ServerDeps {
   relay: Relay;
   /** 消す時刻を過ぎた部屋の掃除 */
   sweeper: RoomSweeper;
+  /** 消しそこねたアセットの掃除。Blob を1ページ見て、消した数を返す */
+  orphans: () => Promise<number>;
   assets: AssetBackend;
   limit: (request: Request, kind: LimitKind) => Promise<boolean>;
   upgrades: Upgrades;
