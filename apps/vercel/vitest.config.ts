@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    globalSetup: ['test/global-setup.ts'],
     include: ['test/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
     // 共有のテストと、それが確かめる src/core は、部屋のサーバーがこのアプリで動くまで外しておく
     exclude: ['test/shared/**', 'node_modules/**'],

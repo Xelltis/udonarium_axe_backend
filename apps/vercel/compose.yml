@@ -1,0 +1,6 @@
+# テストと手元で動かすときの Redis。`docker compose up -d redis` で立てる
+services:
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - '127.0.0.1:6379:6379'

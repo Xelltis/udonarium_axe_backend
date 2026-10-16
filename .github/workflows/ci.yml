@@ -71,6 +71,14 @@ jobs:
     defaults:
       run:
         working-directory: apps/vercel
+    # 部屋のサーバーの置き場所（Redis）を使うテストのため
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
 
     steps:
       - uses: actions/checkout@v7
