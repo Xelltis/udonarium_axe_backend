@@ -43,7 +43,7 @@ CIは、写しが正本と同じかと、共有のコードが使うパッケー
 Cloudflare版の部屋のサーバーとAxeのあいだのやりとりは、`apps/cloudflare/contracts/`に型とフィクスチャ（JSONの例）を置いています。
 このディレクトリはサーバー側が持ち主で、Axeは同じ内容を写して使い、両側のテストが同じJSONを読みます。
 Deployボタンが`apps/cloudflare`だけを複製するので、リポジトリの直下ではなく、その中に置いています。
-やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](/cloudflare/protocol)）。
+やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](/reference/protocol)）。
 
 ## 準備
 

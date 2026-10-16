@@ -1,10 +1,11 @@
-# Vercel版をデプロイする（トークン発行）
+# Vercelに置く（SkyWay版）
 
 SkyWay版のAxeで遊ぶためのトークン発行サーバーを、Vercelに置く手順です。
 サーバーを持っていなくても、ブラウザの操作だけで進められます。
 かかる時間は、アカウント作りを含めて30分ほどです。
 
-部屋のサーバー（サーバー版）としてVercelに置くときは、[部屋のサーバーとして置く](/vercel/rooms)を見てください。
+Vercelの東京のリージョン（`hnd1`）で動くので、国内からの応答が速くなります。
+部屋のサーバー（サーバー版）としてVercelに置くときは、[Vercelに置く（サーバー版）](/server/vercel)を見てください。
 
 ::: info Vercelの画面は英語です
 Vercelの画面は英語だけで、日本語に切り替えられません。
@@ -15,7 +16,7 @@ Vercelの画面は英語だけで、日本語に切り替えられません。
 ## 0. 用意するもの
 
 - GitHubのアカウント（→ [設置の準備](/guide/prepare#githubのアカウントを作る)）
-- SkyWayのアプリケーションIDとシークレットキー（→ [SkyWayのアプリを作る](/guide/skyway)）
+- SkyWayのアプリケーションIDとシークレットキー（→ [SkyWayのアプリを作る](/skyway/app)）
 - AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
 
 ## 1. Vercelのアカウントを作る
@@ -70,7 +71,7 @@ Vercelの新しいプロジェクトを作る画面が開きます。
 - Originの末尾には`/`を付けません。パス（`/udonarium/`など）も付けません。
 
 ほかの設定（トークンの有効期間、ロビーの数）は、あとから足せます。
-ここでは入れなくて構いません（→ [設定項目](/vercel/configuration)）。
+ここでは入れなくて構いません（→ [設定項目](/skyway/configuration)）。
 
 ## 5. デプロイする
 
@@ -151,7 +152,7 @@ Axeを配信している場所の`assets/config.json`を開き、`backend.url`�
 
 書き換えた`config.json`を配信先に置き直したら、Axeを開き、部屋を作ります。
 ほかのブラウザ（または別の人）から同じ部屋に入れれば、完成です。
-`config.json`のほかの項目は、[Axe側の設定](/guide/client-config)にあります。
+`config.json`のほかの項目は、[Axeの設定](/guide/client-config)にあります。
 
 ## 設定を直す
 
@@ -188,4 +189,4 @@ Deployボタンで作ったリポジトリは、このリポジトリとは別�
 
 ## うまくいかないとき
 
-[Vercel版で困ったとき](/vercel/troubleshooting)を見てください。
+[SkyWay版で困ったとき](/skyway/troubleshooting)を見てください。

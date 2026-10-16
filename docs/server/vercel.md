@@ -1,11 +1,23 @@
-# 部屋のサーバーとして置く（Vercel版）
+# Vercelに置く（サーバー版）
 
 サーバー版のAxeで遊ぶための部屋のサーバーを、Vercelに置く手順です。
 Cloudflare版と同じ部屋のサーバーが、VercelとRedisとVercel Blobの上で動きます。
 かかる時間は、アカウント作りを含めて1時間ほどです。
 
-Cloudflare版との違いは[Vercel版の概要](/vercel/#部屋のサーバー)にあります。
-どちらにするか迷ったら、長く安定して置けるCloudflare版をすすめます（→ [どれを使うか](/guide/choose#部屋のサーバー-cloudflare版かvercel版か)）。
+どちらにするか迷ったら、長く安定して置けるCloudflare版をすすめます（→ [どれを置くか](/guide/choose#サーバー版-cloudflare版かvercel版か)）。
+Cloudflare版との違いは、次のとおりです。
+
+| 項目                   | Cloudflare版                              | Vercel版                                                                                                     |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 部屋の状態             | 部屋ごとのDurable Object                  | Redis。部屋のWebSocketを受けたインスタンスの1つが部屋を受け持ち、ほかのインスタンスはそこへ中継する          |
+| 部屋のアセット         | R2                                        | Vercel Blob（private）                                                                                       |
+| WebSocketの長さ        | 切れない                                  | Functionの最大実行時間（無料のプランは300秒）まで。その前に部屋のサーバーが閉じて、Axeが静かにつなぎ直す     |
+| 1回のアップロード      | 種類ごとの上限（画像2MiB、音声10MiB）まで | 4,000,000バイトまで。それより大きい音声は、AxeがBlobへ直接上げる                                             |
+| 時間が過ぎた部屋を消す | 部屋ごとのアラーム                        | 一覧・作る・入るのついでと、1日1回のVercel Cron                                                              |
+| 画像と音声のキャッシュ | データセンターに置く（カスタムドメインのとき） | 無い                                                                                                    |
+
+つなぎ直しのあいだも、ほかの人には、出たことも入ったことも見えません。
+料金の目安は[料金と上限](/operate/costs#vercel版)にあります。
 
 ::: warning VercelのWebSocketはベータです
 部屋のサーバーは、VercelのWebSocketを使います。
@@ -20,14 +32,14 @@ Vercelの画面は英語だけです。
 ## 0. 用意するもの
 
 - GitHubのアカウント（→ [設置の準備](/guide/prepare#githubのアカウントを作る)）
-- Vercelのアカウント（→ [トークン発行の手順の1](/vercel/deploy#_1-vercelのアカウントを作る)）
+- Vercelのアカウント（→ [Vercelに置く（SkyWay版）の手順1](/skyway/vercel#_1-vercelのアカウントを作る)）
 - AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
 - `SESSION_SECRET`に入れる乱数（→ [設置の準備](/guide/prepare#乱数を作る-session-secret)）
 
 ## 1. Discordのアプリを作る
 
 部屋に入るときのログインに、Discordを使います。
-[Discordのアプリを作る](/guide/discord)の手順で、アプリを作り、**Client ID**と**Client Secret**を控えます。
+[Discordのアプリを作る](/server/discord)の手順で、アプリを作り、**Client ID**と**Client Secret**を控えます。
 
 Discordのアプリに登録する戻り先のURL（Redirects）は、サーバーのURLが決まってから足します（手順8）。
 ここでは、Client IDとClient Secretを控えるところまで進めます。
@@ -120,7 +132,7 @@ RedisとBlobの変数は、いま動いているデプロイには入ってい�
 `my-udonarium-rooms-vercel.vercel.app`のような名前です。
 この前に`https://`を付けたものが、**部屋のサーバーのURL**です。
 
-Discordのアプリに戻り先を登録します（→ [Discordのアプリを作る](/guide/discord#_3-戻り先のurlを登録する)）。
+Discordのアプリに戻り先を登録します（→ [Discordのアプリを作る](/server/discord#_3-戻り先のurlを登録する)）。
 登録するURLは、部屋のサーバーのURLの後ろに`/v1/login/discord/callback`を付けたものです。
 
 ```text
@@ -186,7 +198,7 @@ Axeを配信している場所の`assets/config.json`を開き、`transport`を`
 3. 部屋を作ります。作った人がGMになります。
 4. ほかのブラウザ（または別の人）から同じ部屋に入れれば、完成です。ログインしていない人は、見学として入ります。
 
-Axe側の設定の詳しい意味は、[Axe側の設定](/guide/client-config#サーバー版で配信するとき)にあります。
+Axe側の設定の詳しい意味は、[Axeの設定](/guide/client-config#サーバー版のとき)にあります。
 
 ## 掃除の鍵を入れる（任意）
 
@@ -201,7 +213,7 @@ Axe側の設定の詳しい意味は、[Axe側の設定](/guide/client-config#�
 
 同じプロジェクトに`SKYWAY_APP_ID`と`SKYWAY_SECRET`も入れれば、SkyWay版のトークン発行も受け持ちます。
 別々のプロジェクトに分けても構いません。
-環境変数の足しかたは、[トークン発行の手順の「設定を直す」](/vercel/deploy#設定を直す)と同じです。
+環境変数の足しかたは、[Vercelに置く（SkyWay版）の「設定を直す」](/skyway/vercel#設定を直す)と同じです。
 
 ## 独自ドメインで公開する
 
@@ -217,11 +229,11 @@ Discordの戻り先は、Axeの`backend.url`と同じドメインで登録しま
 
 ## 更新するとき
 
-[トークン発行の手順の「更新するとき」](/vercel/deploy#更新するとき)と同じです。
+[Vercelに置く（SkyWay版）の「更新するとき」](/skyway/vercel#更新するとき)と同じです。
 新しいプロジェクトを作り直すときは、古いプロジェクトにつないでいたRedisとBlobのストアを、新しいプロジェクトにつなぎます（手順5と手順6の、つなぐところ）。
 つなげば、部屋と画像はそのまま使えます。
 Discordの戻り先とAxeの`backend.url`も、新しいURLに変えます。
 
 ## うまくいかないとき
 
-[Vercel版で困ったとき](/vercel/troubleshooting#部屋のサーバーで困ったとき)を見てください。
+[サーバー版で困ったとき](/server/troubleshooting)を見てください。

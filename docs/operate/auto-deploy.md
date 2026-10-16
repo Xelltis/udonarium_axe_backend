@@ -1,7 +1,7 @@
-# mainからの自動デプロイ
+# 自分のリポジトリから自動でデプロイする（Cloudflare版）
 
-このリポジトリでは、`main`に入った変更を、GitHub Actionsが自動でCloudflareにデプロイします。
-このページは、このリポジトリ（またはそのフォーク）を自分で運用する人向けです。
+このリポジトリでは、`main`に入った変更を、GitHub Actionsが自動でCloudflare版のWorkerにデプロイできます。
+このページは、このリポジトリをフォークして、自分で運用する人向けです。
 Deployボタンで置いた人は、Cloudflareが自動でデプロイし直すので、この設定は要りません。
 
 ## しくみ
@@ -38,7 +38,7 @@ Environmentごとに、次のSecretを入れます。
 | `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数。Environmentごとに別のものにする                 |
 
 ログインの3つは、そろえて入れるか、どれも入れないかのどちらかにします。一部だけだと、デプロイのジョブが止まります。
-Discordのアプリの作りかたは[ログインと役割](/cloudflare/login#ログインを使えるようにする)にあります。
+Discordのアプリの作りかたは[Discordのアプリを作る](/server/discord)にあります。
 
 `ACCESS_CONTROL_ALLOW_ORIGIN`とログインの3つは、デプロイのたびにWorkerのシークレットとして入れ直します。
 `wrangler.jsonc`に書いた手元用の値（`http://localhost:4200`）は、このシークレットで置き換わります。
@@ -99,6 +99,6 @@ GitHubの「Actions」で、`main`の最新のCIを開き、**Re-run all jobs**�
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `WORKER_NAME is not configured for the … environment`     | そのEnvironmentに`WORKER_NAME`が無い                                                                            |
 | `ACCESS_CONTROL_ALLOW_ORIGIN is not configured for the …` | そのEnvironmentに`ACCESS_CONTROL_ALLOW_ORIGIN`が無い                                                            |
-| `Please enable R2 through the Cloudflare Dashboard`       | アカウントでR2を使い始めていない（→ [デプロイする](/cloudflare/deploy#_2-r2を使い始める-アカウントに一度だけ)） |
+| `Please enable R2 through the Cloudflare Dashboard`       | アカウントでR2を使い始めていない（→ [Cloudflareに置く](/server/cloudflare#_2-r2を使い始める-アカウントに一度だけ)） |
 | `Authentication error`（`10000`など）                     | APIトークンの権限が足りない。初回は上の表の広い権限が要る                                                       |
 | ジョブが「skipped」になる                                 | `CLOUDFLARE_DEPLOY_ENVIRONMENTS`が空か、`main`へのpushではない                                                  |

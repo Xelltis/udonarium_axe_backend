@@ -84,9 +84,9 @@ URLは上の形のとおりに書き、末尾に`/`を付けません。
 ログインに使うのは、ここまでの設定だけです。
 **Bot**の画面や、**OAuth2**の画面の**OAuth2 URL Generator**は使いません。
 **OAuth2**の画面の**Public Client**は、オフのままにします。
-部屋のサーバーがDiscordに求めるのは`identify`だけで、ログインした人のユーザーID、名前、アイコンを受け取ります。メールアドレスや、入っているサーバーの一覧は求めません（→ [ログインと役割](/cloudflare/login)）。
+部屋のサーバーがDiscordに求めるのは`identify`だけで、ログインした人のユーザーID、名前、アイコンを受け取ります。メールアドレスや、入っているサーバーの一覧は求めません（→ [部屋のサーバーの中の動き](/reference/room-server#ログインの流れ)）。
 
 ## 次に読むもの
 
-- [Cloudflare版をデプロイする](/cloudflare/deploy)
-- [部屋のサーバーとして置く（Vercel版）](/vercel/rooms)
+- [Cloudflareに置く](/server/cloudflare)
+- [Vercelに置く（サーバー版）](/server/vercel)

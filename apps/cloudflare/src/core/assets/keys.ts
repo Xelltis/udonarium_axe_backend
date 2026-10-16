@@ -35,7 +35,7 @@ export const uploadKeyOf = (roomKey: string, id: string, nonce: string): string 
 /**
  * The mark for an asset that may not be stored. It is put there so that something deleted after,
  * for example, a claim of infringed rights cannot be uploaded again. It is empty and only its name
- * means anything (how to use it is in docs/cloudflare/policies.md, under answering a claim of
+ * means anything (how to use it is in docs/operate/policies.md, under answering a claim of
  * infringed rights). It applies in every room.
  */
 export const blockedKeyOf = (id: string): string => `blocked/${id}`;

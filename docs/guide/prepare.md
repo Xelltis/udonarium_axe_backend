@@ -11,12 +11,12 @@
 
 | やりたいこと                                 | 設置するもの               | 手順                                             | 要るアカウント                                        |
 | -------------------------------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| SkyWay版で遊ぶ（いちばん手軽）               | Vercel版（トークン発行）   | [Vercel版をデプロイする](/vercel/deploy)         | GitHub、Vercel、SkyWay                                |
-| SkyWay版で遊ぶ（借りているレンタルサーバー） | PHP版                      | [PHP版を設置する](/php/setup)                    | レンタルサーバー、SkyWay                              |
-| サーバー版で遊ぶ                             | Cloudflare版               | [Cloudflare版をデプロイする](/cloudflare/deploy) | GitHub、Cloudflare（支払い方法の登録が要る）、Discord |
-| サーバー版をVercelで動かす                   | Vercel版（部屋のサーバー） | [部屋のサーバーとして置く](/vercel/rooms)        | GitHub、Vercel、Discord                               |
+| SkyWay版で遊ぶ（いちばん手軽）               | Vercel版（トークン発行）   | [Vercelに置く（SkyWay版）](/skyway/vercel)         | GitHub、Vercel、SkyWay                                |
+| SkyWay版で遊ぶ（借りているレンタルサーバー） | PHP版                      | [レンタルサーバーに置く（PHP版）](/skyway/php)                    | レンタルサーバー、SkyWay                              |
+| サーバー版で遊ぶ                             | Cloudflare版               | [Cloudflareに置く](/server/cloudflare) | GitHub、Cloudflare（支払い方法の登録が要る）、Discord |
+| サーバー版をVercelで動かす                   | Vercel版（部屋のサーバー） | [Vercelに置く（サーバー版）](/server/vercel)        | GitHub、Vercel、Discord                               |
 
-SkyWay版とサーバー版の違いは[はじめに](/guide/)に、選びかたは[どれを使うか](/guide/choose)にあります。
+SkyWay版とサーバー版の違いは[はじめに](/guide/)に、選びかたは[どれを置くか](/guide/choose)にあります。
 
 ## AxeのOriginを確かめる
 
@@ -165,7 +165,7 @@ WordやGoogleドキュメントのような文書の作成ソフトは、見え�
 
 ## 次に読むもの
 
-- [Vercel版をデプロイする](/vercel/deploy)
-- [PHP版を設置する](/php/setup)
-- [Cloudflare版をデプロイする](/cloudflare/deploy)
-- [部屋のサーバーとして置く（Vercel版）](/vercel/rooms)
+- [Vercelに置く（SkyWay版）](/skyway/vercel)
+- [レンタルサーバーに置く（PHP版）](/skyway/php)
+- [Cloudflareに置く](/server/cloudflare)
+- [Vercelに置く（サーバー版）](/server/vercel)

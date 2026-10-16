@@ -4,47 +4,37 @@ layout: home
 hero:
   name: Udonarium Axe Backend
   text: Axeを動かすサーバーを、自分の手で
-  tagline: SkyWay版の配信を支えるサーバーと、SkyWayを使わずに遊べるサーバー版（ベータ）を用意しています。
+  tagline: SkyWay版の配信に使うトークン発行サーバーと、SkyWayを使わずに遊べるサーバー版の部屋のサーバーを、自分のアカウントに置けます。
   actions:
     - theme: brand
       text: はじめに
       link: /guide/
     - theme: alt
-      text: クイックスタート
-      link: /guide/quickstart
+      text: どれを置くか
+      link: /guide/choose
     - theme: alt
-      text: 今後の計画
-      link: /guide/roadmap
+      text: 設置の準備
+      link: /guide/prepare
 
 features:
-  - title: PHP版
-    details: SkyWay版の配信で使う認証トークンを発行します。レンタルサーバー（Apache＋PHP 8.3〜）に置き、.envを書くだけで動きます。
-    link: /php/
-    linkText: PHP版を見る
-  - title: Vercel版
-    details: 同じトークン発行をVercel Functionsで動かします。Deployボタンを押して環境変数を入れるだけで、サーバーの管理は要りません。
-    link: /vercel/
-    linkText: Vercel版を見る
-  - title: Cloudflare版
-    details: サーバー版のWorkerです。部屋ごとのサーバー（Durable Objects）が参加者のやりとりを中継し、卓の状態を持ちます。画像と音声も部屋の中に置き、その部屋の参加者に配ります。Axe v1.68.0から、SkyWayなしで遊べます（ベータ）。
-    link: /cloudflare/
-    linkText: Cloudflare版を見る
+  - title: SkyWay版で遊ぶ
+    details: 参加者どうしがSkyWayで直接つながる方式です。認証トークンを作るサーバーを、Vercelか、借りているレンタルサーバー（PHP）に置きます。
+    link: /skyway/
+    linkText: SkyWay版へ
+  - title: サーバー版で遊ぶ
+    details: 全員が部屋のサーバーにつながる方式です。卓が残り、見てはいけないものは届かず、GMとPLはDiscordでログインします。CloudflareかVercelに置きます。Axe v1.68.0から使えます。
+    link: /server/
+    linkText: サーバー版へ
+  - title: 運営する
+    details: 身内の外にも開いて運営する人向けに、料金の目安、安全のしくみ、預かるもの、申し立てへの応えかた、規約のひな形をまとめています。
+    link: /operate/
+    linkText: 運営するへ
 ---
 
 ## このドキュメントについて
 
 [Udonarium Axe](https://github.com/Xelltis/udonarium_axe)は、ブラウザだけで遊べるTRPGのオンラインセッション支援ツールです。
-このリポジトリには、Axeを動かすためのサーバーをまとめて置いています。
+このドキュメントでは、Axeを動かすためのサーバーの置きかたと運営のしかたを説明します。
 
-Axeの配信には、2つの方式があります。
-
-- **SkyWay版**：参加者どうしがSkyWayを使ってP2Pでつながる、いまの方式です。認証トークンを発行するサーバー（PHP版かVercel版）が1つ要ります。画像と音声も、参加者どうしのP2Pで配ります。
-- **サーバー版**：部屋ごとのサーバー（CloudflareのDurable Objects）に参加者がつながる方式で、SkyWayを使いません。Axe v1.68.0から、ベータとして使えます。
-
-どちらの方式で配信するかは、配信ごとに選びます。
-SkyWay版は、サーバー版ができたあとも残ります。
-
-- はじめて設置する人は、[はじめに](/guide/)から順に読んでください。
-- とにかく早く動かしたい人は、[クイックスタート](/guide/quickstart)へどうぞ。
-- サーバー版がどう進むかは、[今後の計画](/guide/roadmap)にあります。
-- Axe本体の遊びかたや設置のしかたは、[Axeの利用ガイド](https://xelltis.github.io/udonarium_axe/)にあります。
+- はじめて置く人は、[はじめに](/guide/)から順に読んでください。
+- Axe本体の遊びかたや置きかたは、[Axeの利用ガイド](https://xelltis.github.io/udonarium_axe/)にあります。

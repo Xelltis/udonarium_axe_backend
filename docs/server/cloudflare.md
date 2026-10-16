@@ -1,6 +1,7 @@
-# Cloudflare版をデプロイする
+# Cloudflareに置く（サーバー版）
 
-サーバー版のAxeで遊ぶための部屋のサーバー（Cloudflare版）を、自分のCloudflareアカウントに置く手順です。
+サーバー版のAxeで遊ぶための部屋のサーバーを、自分のCloudflareのアカウントに置く手順です。
+部屋ごとのDurable Objectが卓の状態を持ち、画像と音声はR2に置きます。
 Deploy to Cloudflareのボタンを使うので、ブラウザの操作だけで進められます。
 かかる時間は、アカウント作りを含めて1時間ほどです。
 
@@ -49,7 +50,7 @@ R2を使い始めていないアカウントでは、バケットを作れずに
 ## 3. Discordのアプリを作る
 
 部屋に入るときのログインに、Discordを使います。
-[Discordのアプリを作る](/guide/discord)の手順で、アプリを作り、**Client ID**と**Client Secret**を控えます。
+[Discordのアプリを作る](/server/discord)の手順で、アプリを作り、**Client ID**と**Client Secret**を控えます。
 
 Discordのアプリに登録する戻り先のURL（Redirects）は、WorkerのURLが決まってから足します（手順9）。
 ここでは、Client IDとClient Secretを控えるところまで進めます。
@@ -107,7 +108,7 @@ Cloudflareのデプロイの画面が開きます。
 このあとの手順では、`https://udonarium-axe-backend.yourname.workers.dev`として書きます。
 
 デプロイが失敗していたときは、Workerの画面の**Deployments**から**View build history**を開き、失敗したビルドのログを見ます。
-困ったときの見かたは、[Cloudflare版で困ったとき](/cloudflare/troubleshooting#デプロイでつまずく)にあります。
+困ったときの見かたは、[サーバー版で困ったとき](/server/troubleshooting#デプロイでつまずく)にあります。
 
 ## 8. Originの設定を確かめる
 
@@ -130,7 +131,7 @@ Cloudflareのデプロイの画面が開きます。
 
 ## 9. Discordに戻り先を登録する
 
-Discordのアプリに、ログインのあとの戻り先を登録します（→ [Discordのアプリを作る](/guide/discord#_3-戻り先のurlを登録する)）。
+Discordのアプリに、ログインのあとの戻り先を登録します（→ [Discordのアプリを作る](/server/discord#_3-戻り先のurlを登録する)）。
 登録するURLは、部屋のサーバーのURLの後ろに`/v1/login/discord/callback`を付けたものです。
 
 ```text
@@ -202,7 +203,7 @@ Axeを配信している場所の`assets/config.json`を開き、`transport`を`
 1. 画像を足した人（GMかPL）のブラウザ：`HEAD`（`404`）のあと`PUT`（`201`）
 2. ほかの参加者のブラウザ：`GET`（`200`）
 
-Axe側の設定の詳しい意味は、[Axe側の設定](/guide/client-config#サーバー版で配信するとき)にあります。
+Axe側の設定の詳しい意味は、[Axeの設定](/guide/client-config#サーバー版のとき)にあります。
 
 ## 12. カスタムドメインを付ける
 
@@ -233,7 +234,7 @@ DNSのレコードと証明書は、Cloudflareが作ります。
 ::: warning このWorkerのためだけのホスト名にする
 Axeやほかのサービスとは別の、このWorkerのためだけのホスト名にしてください。
 置かれたSVGが万一文書として開かれても、そのホスト名のcookieを読ませないためです。
-詳しくは[安全のしくみ](/cloudflare/security#svgはサンドボックスに入れて配る)にあります。
+詳しくは[安全のしくみ](/operate/security#svgはサンドボックスに入れて配る)にあります。
 :::
 
 ドメインを付けたら、次の3つを新しいドメインに変えます。
@@ -247,21 +248,12 @@ Discordの戻り先は、Axeの`backend.url`と同じドメインで登録しま
 
 ## 設定を変えるとき
 
-設定の置き場所は、2つに分かれています。
+設定は、2つの場所に分かれています。
 
-| 設定                                                           | 置き場所                             | 変えかた                                     |
-| -------------------------------------------------------------- | ------------------------------------ | -------------------------------------------- |
-| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`          | 複製したリポジトリの`wrangler.jsonc` | GitHubの画面でファイルを書き換える（手順8）  |
-| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET` | Workerのシークレット                 | Cloudflareのダッシュボードで書き換える（下） |
+- `ACCESS_CONTROL_ALLOW_ORIGIN`と`ROOM_RETENTION_HOURS`：複製したリポジトリの`wrangler.jsonc`。GitHubの画面で書き換えます（手順8）。
+- ログインの3つ（`DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`）：Workerのシークレット。Cloudflareのダッシュボードで書き換えます。
 
-シークレットを変えるときは、次のようにします。
-
-1. **Workers & Pages**からWorkerを開き、**Settings**の**Variables and Secrets**を開きます。
-2. 変えたいシークレットの**Edit**を押し、新しい値を入れます。足すときは**Add**を押し、種類を**Secret**にして、名前と値を入れます。
-3. **Deploy**を押します。押すまで、変更は反映されません。
-
-シークレットの値は、保存したあとは画面で見られません。
-`SESSION_SECRET`を替えると、ログインしていた人のアクセストークンと、作った招待は使えなくなります（→ [ログインと役割](/cloudflare/login#ログインを使えるようにする)）。
+変えかたの手順と、`SESSION_SECRET`を替えたときに起きることは、[設定項目](/server/configuration#値の置き場所)にあります。
 
 ## 手元からwranglerでデプロイする
 
@@ -308,6 +300,6 @@ Deployボタンで作ったリポジトリは、このリポジトリとは別�
 
 ## 次に読むもの
 
-- [設定項目](/cloudflare/configuration)
-- [運用と料金](/cloudflare/operations)
-- [困ったとき](/cloudflare/troubleshooting)
+- [設定項目](/server/configuration)
+- [運用](/operate/)と[料金と上限](/operate/costs)
+- [困ったとき](/server/troubleshooting)

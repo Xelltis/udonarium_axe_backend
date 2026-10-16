@@ -58,12 +58,12 @@
   "vars": {
     // Comma-separated. Rooms, assets and login take requests from these origins only. A deploy from CI
     // replaces them with the production origins, from the secret of the same name (see
-    // https://xelltis.github.io/udonarium_axe_backend/cloudflare/auto-deploy).
+    // https://xelltis.github.io/udonarium_axe_backend/operate/auto-deploy).
     "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
     // How long after the last person leaves a room it is deleted.
     "ROOM_RETENTION_HOURS": "24",
     // DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET are set as secrets (see
-    // https://xelltis.github.io/udonarium_axe_backend/cloudflare/configuration).
+    // https://xelltis.github.io/udonarium_axe_backend/server/configuration).
     // Locally, they go in .dev.vars.
   },
 }

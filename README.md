@@ -20,7 +20,7 @@
 
 PHP版は[リリース](https://github.com/Xelltis/udonarium_axe_backend/releases/latest)のzipを使います。
 展開した中身をそのままドキュメントルートに置き、`.env`を作ります。
-手順は[PHP版を設置する](https://xelltis.github.io/udonarium_axe_backend/php/setup)にあります。
+手順は[レンタルサーバーに置く（PHP版）](https://xelltis.github.io/udonarium_axe_backend/skyway/php)にあります。
 
 Vercel版とCloudflare版は、ボタンから自分のアカウントにデプロイできます。
 このリポジトリのそのディレクトリが、自分のGitHubリポジトリとして複製されます。
@@ -30,14 +30,14 @@ Vercel版（SkyWayの認証トークンの発行）:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
-手順は[Vercel版をデプロイする](https://xelltis.github.io/udonarium_axe_backend/vercel/deploy)にあります。
+手順は[Vercelに置く（SkyWay版）](https://xelltis.github.io/udonarium_axe_backend/skyway/vercel)にあります。
 
 Vercel版（部屋のサーバー）:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
 
 部屋のサーバーには、デプロイしたあとでRedisとVercel Blob（private）のストアをプロジェクトにつなぎます。
-手順と要る環境変数は、[部屋のサーバーとして置く](https://xelltis.github.io/udonarium_axe_backend/vercel/rooms)にあります。
+手順と要る環境変数は、[Vercelに置く（サーバー版）](https://xelltis.github.io/udonarium_axe_backend/server/vercel)にあります。
 
 Cloudflare版（SkyWayを使わない部屋のサーバー）:
 
@@ -45,7 +45,7 @@ Cloudflare版（SkyWayを使わない部屋のサーバー）:
 
 R2のバケットと部屋のサーバー（Durable Objects）は、デプロイのときに作られます。
 前もって、アカウントでR2を使い始めておくことが要ります。
-手順は[Cloudflare版をデプロイする](https://xelltis.github.io/udonarium_axe_backend/cloudflare/deploy)にあります。
+手順は[Cloudflareに置く（サーバー版）](https://xelltis.github.io/udonarium_axe_backend/server/cloudflare)にあります。
 
 ## 開発
 

@@ -1,4 +1,4 @@
-# APIリファレンス（トークン発行）
+# トークン発行のAPI
 
 PHP版とVercel版が受けるHTTPのAPIです。
 Axeが使うのは`GET /v1/status`と`POST /v1/skyway2023/token`の2つで、どちらのサーバーでも同じように答えます。
@@ -8,11 +8,11 @@ Axeが使うのは`GET /v1/status`と`POST /v1/skyway2023/token`の2つで、ど
 
 | メソッド  | パス                   | PHP版 | Vercel版 | 内容                                     |
 | --------- | ---------------------- | :---: | :------: | ---------------------------------------- |
-| `GET`     | `/`                    |  ✅   |    ✅    | 動いているかの簡単な確認                 |
-| `GET`     | `/v1/status`           |  ✅   |    ✅    | 動いているかの確認。Axeが最初に呼ぶ      |
-| `POST`    | `/v1/skyway2023/token` |  ✅   |    ✅    | SkyWayのトークンを発行する。Axeが呼ぶ    |
-| `POST`    | `/v1/skyway/tokens`    |       |    ✅    | 上と同じ。Vercel版で新しく使うときの名前 |
-| `OPTIONS` | 上のPOSTのパス         |  ✅   |    ✅    | ブラウザのプリフライトに答える           |
+| `GET`     | `/`                    |   ○   |    ○     | 動いているかの簡単な確認                 |
+| `GET`     | `/v1/status`           |   ○   |    ○     | 動いているかの確認。Axeが最初に呼ぶ      |
+| `POST`    | `/v1/skyway2023/token` |   ○   |    ○     | SkyWayのトークンを発行する。Axeが呼ぶ    |
+| `POST`    | `/v1/skyway/tokens`    |       |    ○     | 上と同じ。Vercel版で新しく使うときの名前 |
+| `OPTIONS` | 上のPOSTのパス         |   ○   |    ○     | ブラウザのプリフライトに答える           |
 
 ## `GET /`
 
@@ -73,7 +73,7 @@ Content-Type: application/json
 
 - `Origin`は、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのどれかでなければなりません。
 - PHP版は、`Content-Type: application/json`でないリクエストを`415`で断ります。本文は64KBまでです。
-- `channelName`と`peerId`の中身も確かめます（空、200バイト超、`*`や`\`を含むもの、`udonarium-lobby-`で始まる部屋名を断る）。理由は[トークン発行のしくみ](/token/#安全のための制限)にあります。
+- `channelName`と`peerId`の中身も確かめます（空、200バイト超、`*`や`\`を含むもの、`udonarium-lobby-`で始まる部屋名を断る）。理由は[SkyWay版のしくみ](/skyway/#安全のための制限)にあります。
 
 ### レスポンス
 
@@ -81,7 +81,7 @@ Content-Type: application/json
 { "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
 ```
 
-トークンの中身は[トークン発行のしくみ](/token/#トークンの中身)にあります。
+トークンの中身は[SkyWay版のしくみ](/skyway/#トークンの中身)にあります。
 
 ### Vercel版で付くヘッダー
 
