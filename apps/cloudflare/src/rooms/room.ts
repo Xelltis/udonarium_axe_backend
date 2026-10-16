@@ -39,10 +39,10 @@ import type {
   ServerMessage,
 } from '../../contracts/protocol';
 import { deleteRoomAssets } from '../assets/sweep';
-import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../auth/tokens';
+import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../core/auth/tokens';
 import { parseConfig } from '../config';
-import { rollLine } from '../dice/roll';
-import { decodeFrame, encodeFrame } from './codec';
+import { rollLine } from '../core/dice/roll';
+import { decodeFrame, encodeFrame } from '../core/rooms/codec';
 import { LOBBY_NAME } from './lobby';
 import {
   catalogSchema,
@@ -54,9 +54,9 @@ import {
   requestSchema,
   roleRequestSchema,
   rollRequestSchema,
-} from './messages';
-import { attributesOf, withAttributes } from './objects';
-import { hashPassword, verifyPassword } from './password';
+} from '../core/rooms/messages';
+import { attributesOf, withAttributes } from '../core/rooms/objects';
+import { hashPassword, verifyPassword } from '../core/rooms/password';
 import { RoomStore, migrate } from './store';
 import type { StoredEntry } from './store';
 import {
@@ -68,8 +68,8 @@ import {
   unmasked,
   viewFor,
   viewKind,
-} from './visibility';
-import type { Lookup, View, ViewKind, Viewer } from './visibility';
+} from '../core/rooms/visibility';
+import type { Lookup, View, ViewKind, Viewer } from '../core/rooms/visibility';
 
 /**
  * 変更をまとめて書くまでの間（ミリ秒）。待っているあいだは Hibernation に入らないので、

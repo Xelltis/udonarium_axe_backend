@@ -1,7 +1,7 @@
 import type { CatalogItem, ObjectContext } from '../../contracts/protocol';
-import { decodeData, encodeData } from './codec';
-import { describe } from './visibility';
-import type { View, ViewEntry } from './visibility';
+import { decodeData, encodeData } from '../core/rooms/codec';
+import { describe } from '../core/rooms/visibility';
+import type { View, ViewEntry } from '../core/rooms/visibility';
 
 /**
  * SQLite の1行は 2MB まで。syncData の上限が無いもの（白板の場面など）は、これより大きければ

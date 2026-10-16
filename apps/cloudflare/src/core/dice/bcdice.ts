@@ -3,7 +3,7 @@ import type BaseLoader from 'bcdice/lib/loader/loader';
 import type { I18nJsonObject } from 'bcdice/lib/loader/loader';
 import type GameSystemClass from 'bcdice/lib/game_system';
 
-import { GAME_SYSTEM_IMPORTERS, I18N_IMPORTERS } from './bcdice-importers.generated';
+import { GAME_SYSTEM_IMPORTERS, I18N_IMPORTERS } from './bcdice-importers.generated.js';
 
 /** CommonJS のモジュールの default。バンドルのしかたによって1段か2段になる */
 export const unwrapDefault = <T>(module: { default: T | { default?: T } }): T => {

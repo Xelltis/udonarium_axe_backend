@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { literal, number, object, optional, picklist, safeParse, string } from 'valibot';
 import type { GenericSchema, InferOutput } from 'valibot';
 
-import { PEER_ROLES } from '../../contracts/protocol';
+import { PEER_ROLES } from '../../../contracts/protocol.js';
 
 // 署名したトークン（JWT、HS256）。部屋の Durable Object が hello を受けたその場で確かめられるよう、
 // 署名も検証も同期で行う（非同期にすると、確かめているあいだに同じ接続のメッセージが割り込む）。

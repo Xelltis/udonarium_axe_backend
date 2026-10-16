@@ -4,7 +4,7 @@ import { maxLength, minLength, nullish, object, pipe, safeParse, string } from '
 import { MAX_PASSWORD_LENGTH, MAX_ROOM_NAME_LENGTH } from '../../contracts/protocol';
 import type { CreateRoomResponse, RoomListResponse, RoomResponse } from '../../contracts/protocol';
 import { getRoomAsset, listRoomAssets, putRoomAsset } from '../assets/routes';
-import { bearerOf } from '../auth/session';
+import { bearerOf } from '../auth/request';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';

@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
 import type { AppEnv } from './context';
-import { networkOf } from './network';
+import { networkOf } from '../core/http/network';
 
 /** 送信元。IPv6 は /64 ごとにまとめる */
 export const networkOfRequest = (c: Context<AppEnv>): string =>

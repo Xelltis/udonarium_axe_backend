@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const LIB = 'node_modules/bcdice/lib/bcdice';
-const OUTPUT = 'src/dice/bcdice-importers.generated.ts';
+const OUTPUT = 'src/core/dice/bcdice-importers.generated.ts';
 
 const { gameSystems } = JSON.parse(readFileSync(`${LIB}/game_system_list.json`, 'utf-8'));
 const { i18nList } = JSON.parse(readFileSync(`${LIB}/i18n_list.json`, 'utf-8'));

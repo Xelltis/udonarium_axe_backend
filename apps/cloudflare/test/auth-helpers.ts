@@ -2,7 +2,7 @@ import { exports } from 'cloudflare:workers';
 import { vi } from 'vitest';
 
 import type { TokenResponse } from '../contracts/protocol';
-import { base64url } from '../src/auth/tokens';
+import { base64url } from '../src/core/auth/tokens';
 import { ORIGIN, freshIp } from './helpers';
 
 export const BACKEND = 'https://backend.example';

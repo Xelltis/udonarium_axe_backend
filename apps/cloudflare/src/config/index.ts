@@ -1,16 +1,13 @@
 import { safeParse, summarize } from 'valibot';
 
+import { ConfigError, loginOf } from '../core/config/login';
+import type { LoginConfig } from '../core/config/login';
 import { envSchema } from './schema';
 
-const HOUR_SECONDS = 60 * 60;
+export { ConfigError } from '../core/config/login';
+export type { LoginConfig } from '../core/config/login';
 
-/** Discord でのログイン。置かなければ、ログインも部屋も部屋のアセットも使えない */
-export interface LoginConfig {
-  discordClientId: string;
-  discordClientSecret: string;
-  /** アクセストークン・招待・ログインの途中の状態に署名する鍵 */
-  sessionSecret: string;
-}
+const HOUR_SECONDS = 60 * 60;
 
 export interface AppConfig {
   /** 部屋とアセットとログインを受ける Origin */
@@ -18,11 +15,6 @@ export interface AppConfig {
   /** 部屋から最後の1人が出てから、部屋を消すまでの秒数 */
   roomRetentionSeconds: number;
   login: LoginConfig | null;
-}
-
-/** 環境変数が足りないか、形が違う。どのリクエストにも 500 を返し、理由はログに書く */
-export class ConfigError extends Error {
-  override name = 'ConfigError';
 }
 
 export const parseConfig = (env: unknown): AppConfig => {
@@ -38,12 +30,6 @@ export const parseConfig = (env: unknown): AppConfig => {
       .filter((origin) => origin.length > 0),
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     // 3つがそろっていることは envSchema で確かめてある
-    login: parsed.SESSION_SECRET
-      ? {
-          discordClientId: parsed.DISCORD_CLIENT_ID as string,
-          discordClientSecret: parsed.DISCORD_CLIENT_SECRET as string,
-          sessionSecret: parsed.SESSION_SECRET,
-        }
-      : null,
+    login: loginOf(parsed),
   };
 };

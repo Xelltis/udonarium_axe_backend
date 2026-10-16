@@ -2,9 +2,9 @@ import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:
 import { exports } from 'cloudflare:workers';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { roomAssetKey } from '../src/assets/keys';
+import { roomAssetKey } from '../src/core/assets/keys';
 import { MAX_BYTES } from '../src/assets/routes';
-import { SNIFF_BYTES } from '../src/assets/sniff';
+import { SNIFF_BYTES } from '../src/core/assets/sniff';
 import app from '../src/index';
 import {
   BASE,

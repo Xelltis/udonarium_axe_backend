@@ -20,10 +20,10 @@ import {
 } from '../contracts/protocol';
 import type { UpdateVerdict } from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
-import * as tokens from '../src/auth/tokens';
-import { clientMessageSchema, roleRequestSchema, rollRequestSchema } from '../src/rooms/messages';
-import { describe as describeObject, viewKind } from '../src/rooms/visibility';
-import type { ViewEntry, Viewer } from '../src/rooms/visibility';
+import * as tokens from '../src/core/auth/tokens';
+import { clientMessageSchema, roleRequestSchema, rollRequestSchema } from '../src/core/rooms/messages';
+import { describe as describeObject, viewKind } from '../src/core/rooms/visibility';
+import type { ViewEntry, Viewer } from '../src/core/rooms/visibility';
 
 describe('the LWW contract', () => {
   it.each(lww.cases)('judges $name as $verdict', ({ stored, incoming, deleted, verdict }) => {

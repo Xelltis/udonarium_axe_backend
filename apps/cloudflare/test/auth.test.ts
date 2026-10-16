@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ACCOUNT_USER_ID_PREFIX } from '../contracts/protocol';
 import type { TokenResponse } from '../contracts/protocol';
-import { unpackSecret } from '../src/auth/session';
-import { base64url, readToken } from '../src/auth/tokens';
+import { unpackSecret } from '../src/core/auth/session';
+import { base64url, readToken } from '../src/core/auth/tokens';
 import app from '../src/index';
 import {
   APP,

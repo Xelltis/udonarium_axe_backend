@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkerLoader, loadGameSystem, unwrapDefault } from '../src/dice/bcdice';
-import { encodeDetail, rollLine } from '../src/dice/roll';
+import { WorkerLoader, loadGameSystem, unwrapDefault } from '../src/core/dice/bcdice';
+import { encodeDetail, rollLine } from '../src/core/dice/roll';
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { setContentRange } from '../src/assets/response';
-import { roomKeyOf } from '../src/assets/keys';
+import { roomKeyOf } from '../src/core/assets/keys';
 import { ORPHAN_GRACE_MS, deleteRoomAssets, randomStart, sweepOrphans } from '../src/assets/sweep';
 import { ConfigError, parseConfig } from '../src/config';
-import { networkOf } from '../src/http/network';
-import { isAllowedOrigin } from '../src/http/origin';
+import { networkOf } from '../src/core/http/network';
+import { isAllowedOrigin } from '../src/core/http/origin';
 
 describe('networkOf', () => {
   it.each([

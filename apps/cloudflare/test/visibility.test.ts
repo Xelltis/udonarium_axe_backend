@@ -8,8 +8,8 @@ import {
   unmasked,
   viewFor,
   viewKind,
-} from '../src/rooms/visibility';
-import type { Lookup, ViewEntry, Viewer } from '../src/rooms/visibility';
+} from '../src/core/rooms/visibility';
+import type { Lookup, ViewEntry, Viewer } from '../src/core/rooms/visibility';
 
 const context = (
   aliasName: string,

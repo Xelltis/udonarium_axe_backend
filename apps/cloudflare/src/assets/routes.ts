@@ -3,16 +3,16 @@ import type { Context } from 'hono';
 import { ASSET_NAME_HEADER, MAX_ASSET_NAME_LENGTH } from '../../contracts/protocol';
 import type { RoomAsset, RoomAssetListResponse } from '../../contracts/protocol';
 
-import { readToken } from '../auth/tokens';
-import type { Claims } from '../auth/tokens';
+import { readToken } from '../core/auth/tokens';
+import type { Claims } from '../core/auth/tokens';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';
 import { LOBBY_NAME } from '../rooms/lobby';
-import { ASSET_ID, blockedKeyOf, roomAssetKey, roomAssetPrefix } from './keys';
+import { ASSET_ID, blockedKeyOf, roomAssetKey, roomAssetPrefix } from '../core/assets/keys';
 import { objectHeaders, privately, setContentRange } from './response';
-import { SNIFF_BYTES, sniff } from './sniff';
-import type { AssetKind } from './sniff';
+import { SNIFF_BYTES, sniff } from '../core/assets/sniff';
+import type { AssetKind } from '../core/assets/sniff';
 import { randomStart, sweepOrphans } from './sweep';
 
 const MEGA_BYTE = 1024 * 1024;

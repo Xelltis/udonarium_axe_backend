@@ -26,7 +26,7 @@ import {
   MAX_ROLL_COMMAND_LENGTH,
   MAX_ROLL_TARGET_NAME_LENGTH,
   PEER_ROLES,
-} from '../../contracts/protocol';
+} from '../../../contracts/protocol.js';
 
 // クライアントの MessagePack は undefined を nil にするので、省けるものは null も受ける
 

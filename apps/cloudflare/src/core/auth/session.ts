@@ -1,11 +1,7 @@
-import type { Context } from 'hono';
-
-import type { TokenResponse } from '../../contracts/protocol';
-import type { LoginConfig } from '../config';
-import type { AppEnv } from '../http/context';
-import type { Secret, Session } from './account';
-import { ACCESS_TOKEN_SECONDS, base64url, readToken, signToken } from './tokens';
-import type { Claims } from './tokens';
+import type { TokenResponse } from '../../../contracts/protocol.js';
+import type { LoginConfig } from '../config/login.js';
+import type { Secret, Session } from './secrets.js';
+import { ACCESS_TOKEN_SECONDS, base64url, signToken } from './tokens.js';
 
 // ログインから戻ったときのコードとリフレッシュトークンは「アカウントの鍵.行の ID.秘密」の形にする。
 // 鍵から、どのアカウントの Durable Object に尋ねればよいかがわかる。
@@ -31,9 +27,6 @@ export const unpackSecret = (text: string): { accountKey: string; secret: Secret
   }
 };
 
-/** アカウントの Durable Object */
-export const accountOf = (env: Env, accountKey: string) => env.ACCOUNTS.getByName(accountKey);
-
 /** Axe に渡すトークンの組。アクセストークンはここで署名する */
 export const tokensOf = (session: Session, login: LoginConfig): TokenResponse => ({
   accessToken: signToken<'access'>(
@@ -50,11 +43,3 @@ export const tokensOf = (session: Session, login: LoginConfig): TokenResponse =>
   refreshToken: packSecret(session.accountKey, session.refreshToken),
   account: session.account,
 });
-
-/** Authorization: Bearer のアクセストークンを確かめる。無いか無効なら null */
-export const bearerOf = (c: Context<AppEnv>, login: LoginConfig): Claims<'access'> | null => {
-  const header = c.req.header('Authorization') ?? '';
-  return header.startsWith('Bearer ')
-    ? readToken(header.slice('Bearer '.length), 'access', login.sessionSecret)
-    : null;
-};

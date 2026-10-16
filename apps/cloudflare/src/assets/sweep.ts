@@ -1,4 +1,4 @@
-import { ASSET_ID, ROOMS_PREFIX, roomAssetPrefix, roomKeyOf } from './keys';
+import { ASSET_ID, ROOMS_PREFIX, roomAssetPrefix, roomKeyOf } from '../core/assets/keys';
 
 /** 1回の掃除で見るオブジェクトの数。R2 の list と delete が一度に扱える上限 */
 const SWEEP_PAGE_SIZE = 1000;

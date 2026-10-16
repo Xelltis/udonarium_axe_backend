@@ -11,7 +11,7 @@ import {
   toBase62,
 } from '../contracts/protocol';
 import type { ObjectContext } from '../contracts/protocol';
-import { MAX_EVENTS_PER_MESSAGE } from '../src/rooms/messages';
+import { MAX_EVENTS_PER_MESSAGE } from '../src/core/rooms/messages';
 import {
   MAX_EVENTS_PER_WINDOW,
   MAX_OBJECTS,

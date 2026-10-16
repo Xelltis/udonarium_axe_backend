@@ -1,8 +1,8 @@
 import { exports } from 'cloudflare:workers';
 
 import type { PeerRole } from '../contracts/protocol';
-import { roomAssetKey } from '../src/assets/keys';
-import { ACCESS_TOKEN_SECONDS, ASSET_TOKEN_SECONDS, signToken } from '../src/auth/tokens';
+import { roomAssetKey } from '../src/core/assets/keys';
+import { ACCESS_TOKEN_SECONDS, ASSET_TOKEN_SECONDS, signToken } from '../src/core/auth/tokens';
 
 export const ORIGIN = 'https://app.example';
 /** アセットのテストで使う部屋。アセットの経路は部屋の Durable Object に尋ねないので、作らなくてよい */

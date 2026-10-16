@@ -7,10 +7,11 @@ import type { LoginConfig } from '../config';
 import type { AppEnv } from '../http/context';
 import { fail } from '../http/errors';
 import { networkOfRequest, withinLimits } from '../http/limits';
-import { isAllowedOrigin, tryParseUrl } from '../http/origin';
-import { authorizeUrl, fetchProfile } from './discord';
-import { accountOf, bearerOf, packSecret, tokensOf, unpackSecret } from './session';
-import { LOGIN_STATE_SECONDS, readToken, signToken } from './tokens';
+import { isAllowedOrigin, tryParseUrl } from '../core/http/origin';
+import { authorizeUrl, fetchProfile } from '../core/auth/discord';
+import { accountOf, bearerOf } from './request';
+import { packSecret, tokensOf, unpackSecret } from '../core/auth/session';
+import { LOGIN_STATE_SECONDS, readToken, signToken } from '../core/auth/tokens';
 
 /** PKCE の code_challenge（SHA-256 の base64url。43文字） */
 const CHALLENGE = /^[\w-]{43}$/;

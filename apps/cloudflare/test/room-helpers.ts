@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 
 import { CHAT_TAB_LIST_IDENTIFIER, PROTOCOL_VERSION } from '../contracts/protocol';
 import type { CreateRoomResponse, ServerMessage } from '../contracts/protocol';
-import { decodeFrame } from '../src/rooms/codec';
+import { decodeFrame } from '../src/core/rooms/codec';
 import { ORIGIN, OTHER_ROOM_KEY, ROOM_KEY, UPLOADER, accessTokenFor, freshIp } from './helpers';
 
 export const ROOMS = 'https://backend.example/v1/rooms';

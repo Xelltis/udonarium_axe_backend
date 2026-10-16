@@ -26,7 +26,7 @@ Cloudflare版の部屋のサーバーとAxeのあいだのやりとりは、`app
 Deployボタンが`apps/cloudflare`だけを複製するので、リポジトリの直下ではなく、その中に置いています。
 やりとりの形を変えたら、`PROTOCOL_VERSION`を上げ、Axe側にも知らせてください（→ [部屋のプロトコル](/cloudflare/protocol)）。
 
-Vercel版とCloudflare版では、Originの照合を同じ形で書いています（`apps/vercel/src/infra/url/origin.ts`と`apps/cloudflare/src/http/origin.ts`）。
+Vercel版とCloudflare版では、Originの照合を同じ形で書いています（`apps/vercel/src/infra/url/origin.ts`と`apps/cloudflare/src/core/http/origin.ts`）。
 この2つはCIで中身が同じかを確かめているので、片方を直したら、もう片方も同じように直してください。
 
 ## 準備

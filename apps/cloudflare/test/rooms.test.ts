@@ -19,7 +19,7 @@ import {
 } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { LOBBY_NAME } from '../src/rooms/lobby';
-import { ACCESS_TOKEN_SECONDS } from '../src/auth/tokens';
+import { ACCESS_TOKEN_SECONDS } from '../src/core/auth/tokens';
 import {
   MAX_FRAMES_PER_WINDOW,
   MAX_SOCKETS,

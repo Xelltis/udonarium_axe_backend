@@ -2,8 +2,8 @@ import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import { exports } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { roomAssetKey } from '../src/assets/keys';
-import { ASSET_TOKEN_SECONDS, readToken } from '../src/auth/tokens';
+import { roomAssetKey } from '../src/core/assets/keys';
+import { ASSET_TOKEN_SECONDS, readToken } from '../src/core/auth/tokens';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { ORIGIN, PNG_HEAD, SESSION_SECRET, accessTokenFor, freshFile, freshIp } from './helpers';
 import { ROOMS, createRoom, eventually, join, stubOf } from './room-helpers';

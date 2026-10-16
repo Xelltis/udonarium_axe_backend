@@ -1,6 +1,6 @@
-import { MASKED_CHAT_ATTRIBUTES } from '../../contracts/protocol';
-import type { ObjectContext, PeerRole } from '../../contracts/protocol';
-import { attributesOf, withAttributes } from './objects';
+import { MASKED_CHAT_ATTRIBUTES } from '../../../contracts/protocol.js';
+import type { ObjectContext, PeerRole } from '../../../contracts/protocol.js';
+import { attributesOf, withAttributes } from './objects.js';
 
 // 見てはいけない情報を、見てはいけない人に届けないための決まり。Axe が手元で見せる・見せないを
 // 決めている決まり（カードの向き、秘話、シークレットダイス、タブの閲覧、公開の範囲）を写したもの。

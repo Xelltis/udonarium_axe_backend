@@ -1,7 +1,7 @@
 import { decode, encode } from '@msgpack/msgpack';
 import { gunzipSync, gzipSync } from 'node:zlib';
 
-import type { ServerMessage } from '../../contracts/protocol';
+import type { ServerMessage } from '../../../contracts/protocol.js';
 
 /** これより大きいフレームは gzip を試す。クライアントの SkyWay の送り方と揃える */
 const COMPRESS_OVER_BYTES = 1024;

@@ -130,7 +130,7 @@ jobs:
 
       # Origin の照合は apps/vercel と同じものを写して使う。どちらかだけ直すとここで落ちる
       - name: Check that the origin matcher matches the Vercel app's
-        run: cmp src/http/origin.ts ../vercel/src/infra/url/origin.ts
+        run: cmp src/core/http/origin.ts ../vercel/src/infra/url/origin.ts
 
       - run: npm run lint
 

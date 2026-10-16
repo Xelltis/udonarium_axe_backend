@@ -5,7 +5,7 @@ import { ASSET_NAME_HEADER } from '../../contracts/protocol';
 
 import type { AppEnv } from './context';
 import { fail } from './errors';
-import { isAllowedOrigin } from './origin';
+import { isAllowedOrigin } from '../core/http/origin';
 
 const MAX_AGE_SECONDS = 86_400;
 

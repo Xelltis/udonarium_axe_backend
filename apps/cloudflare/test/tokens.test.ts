@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { packSecret, unpackSecret } from '../src/auth/session';
-import { base64url, readToken, signToken } from '../src/auth/tokens';
+import { packSecret, unpackSecret } from '../src/core/auth/session';
+import { base64url, readToken, signToken } from '../src/core/auth/tokens';
 
 const SECRET = 'a-secret-for-the-token-tests-only!';
 

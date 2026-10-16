@@ -1,4 +1,4 @@
-import { loadGameSystem } from './bcdice';
+import { loadGameSystem } from './bcdice.js';
 
 /** 知らないシステムのときに使う、ふつうのダイスボット。Axe と同じく、知らない ID はこれで振る */
 export const PLAIN_DICE_BOT = 'DiceBot';

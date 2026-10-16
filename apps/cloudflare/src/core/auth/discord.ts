@@ -1,7 +1,7 @@
 import { nullish, object, safeParse, string } from 'valibot';
 
-import type { LoginConfig } from '../config';
-import type { Profile } from './account';
+import type { LoginConfig } from '../config/login.js';
+import type { Profile } from './secrets.js';
 
 const AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
 const TOKEN_URL = 'https://discord.com/api/oauth2/token';

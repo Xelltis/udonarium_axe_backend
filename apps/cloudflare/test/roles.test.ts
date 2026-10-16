@@ -7,7 +7,7 @@ import {
   AuthorityEvent,
   SyncEvent,
 } from '../contracts/protocol';
-import { readToken, signToken } from '../src/auth/tokens';
+import { readToken, signToken } from '../src/core/auth/tokens';
 import app from '../src/index';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { ORIGIN, SESSION_SECRET, accessTokenFor } from './helpers';
