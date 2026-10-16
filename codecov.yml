@@ -3,13 +3,14 @@
 codecov:
   require_ci_to_pass: true
   notify:
-    # カバレッジを上げるのは PHP 8.5 ジョブと Vercel ジョブと Cloudflare ジョブの 3 つ
+    # Three jobs upload coverage: PHP 8.5, Vercel and Cloudflare.
     after_n_builds: 3
 
 coverage:
   precision: 2
   round: down
-  # apps/php/src/ と apps/vercel の src/・api/ と apps/cloudflare/src/ は現状 100%。低下が色で分かるよう下限を高めに置く
+  # apps/php/src/, apps/vercel's src/ and api/, and apps/cloudflare/src/ are at 100% today. The
+  # floor is set high, so that a drop shows in color.
   range: "90...100"
   status:
     project:
@@ -23,7 +24,7 @@ coverage:
         threshold: 0%
         only_pulls: true
 
-# アプリごとにフラグを分け、片方だけ変えた PR でももう片方の値を引き継ぐ
+# Each app has its own flag, so that a PR changing only one keeps the other's numbers.
 flags:
   php:
     paths:
@@ -41,14 +42,14 @@ flags:
 comment:
   layout: "header, diff, flags, files"
   behavior: default
-  # テスト結果はカバレッジコメントに同梱されるため、カバレッジ不変の PR で
-  # コメントを抑制するとテスト失敗も表に出ない。require_changes にテスト失敗の
-  # 条件は無いので false にする。
+  # Test results come inside the coverage comment, so holding the comment back on PRs
+  # that leave coverage as it was would hide failing tests too. require_changes has no
+  # condition for failing tests, so it is set to false.
   require_changes: false
 
-# PHP の計測対象は apps/php/phpunit.xml の <source> で src/ に限定済み。
-# Vercel と Cloudflare の除外は、それぞれの vitest.config.ts の coverage.exclude と対応させる。
-# どちらも、レポーターや <source> の設定が変わっても意図が崩れないよう明示する。
+# PHP's coverage is limited to src/ by the <source> in apps/php/phpunit.xml.
+# The Vercel and Cloudflare exclusions match coverage.exclude in each vitest.config.ts.
+# Both are spelled out, so that the intent holds even if the reporter or <source> settings change.
 ignore:
   - "apps/php/tests/**"
   - "apps/php/bin/**"

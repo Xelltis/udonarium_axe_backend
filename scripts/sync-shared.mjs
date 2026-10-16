@@ -1,12 +1,12 @@
 /* global console, process */
-// apps/cloudflare と apps/vercel が同じものを使うコード（部屋のサーバーの中身、やりとりの形、共有のテスト）を、
-// apps/cloudflare から apps/vercel へ写す。Deploy ボタンはアプリのディレクトリだけを複製するので、
-// 共有のコードもそれぞれのアプリの中に置く。直すのは apps/cloudflare の方で、直したらこれを流す。
+// Copies the code apps/cloudflare and apps/vercel both use (the room server's workings, the shape of the
+// exchanges with Axe, the shared tests) from apps/cloudflare to apps/vercel. The Deploy button copies only
+// the app's directory, so the shared code is kept inside each app. Change it in apps/cloudflare, then run this.
 //
-//   node scripts/sync-shared.mjs          写す（apps/vercel にだけあるものは消す）
-//   node scripts/sync-shared.mjs --check  写しが同じかを確かめる。違えば 1 で終わる（CI）
+//   node scripts/sync-shared.mjs          copies (and deletes what only apps/vercel has)
+//   node scripts/sync-shared.mjs --check  checks the copies are the same; exits with 1 if not (CI)
 //
-// 共有のコードが使う npm のパッケージは、両方の package.json で同じ版の指定にしておく。
+// The npm packages the shared code uses are given the same version range in both package.json files.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,7 @@ const DEPENDENCIES = ['@msgpack/msgpack', 'bcdice', 'hono', 'valibot'];
 
 const check = process.argv.includes('--check');
 
-/** dir の下のファイル（dir からの相対パス）。dir が無ければ空 */
+/** The files under dir, as paths relative to dir. None when dir does not exist. */
 const filesUnder = (dir) => {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((name) => {

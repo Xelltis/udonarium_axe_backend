@@ -1,8 +1,8 @@
 name: Docs
 
-# docs/ の VitePress サイトをビルドし、main では GitHub Pages へ配信する。
-# Pull Request ではビルドが通るか（存在しないページへのリンクが無いか）だけを確かめる。
-# 配信には、リポジトリの Settings → Pages → Source を "GitHub Actions" にしておくこと。
+# Builds the VitePress site in docs/, and on main publishes it to GitHub Pages.
+# On a pull request it only checks that the build passes (that no link leads to a page that does not exist).
+# Publishing needs the repository's Settings → Pages → Source set to "GitHub Actions".
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      # 「最終更新」の日付をコミットの履歴から取るので、履歴をすべて取ってくる
+      # The "last updated" dates come from the commit history, so the whole history is fetched.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0

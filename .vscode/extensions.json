@@ -1,14 +1,14 @@
 {
   "recommendations": [
-    // PHP 静的解析 (PHPStan) - インラインエラー表示
+    // PHP static analysis (PHPStan), with errors shown inline
     "sanderronde.phpstan-vscode",
-    // PHP 言語サポート (シンタックスハイライト・補完)
+    // PHP language support (syntax highlighting and completion)
     "bmewburn.vscode-intelephense-client",
-    // Docker ファイルサポート
+    // Docker file support
     "ms-azuretools.vscode-docker",
-    // PHP コードフォーマッター (php-cs-fixer)
+    // PHP code formatter (php-cs-fixer)
     "junstyle.php-cs-fixer",
-    // PHP テストランナー (PHPUnit)
+    // PHP test runner (PHPUnit)
     "recca0120.vscode-phpunit"
   ]
 }

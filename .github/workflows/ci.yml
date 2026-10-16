@@ -51,8 +51,8 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      # テストが落ちたときこそ結果を送りたいので、失敗後も実行する。
-      # 先行ステップの失敗で junit.xml が無い場合はエラー扱いにしない。
+      # Runs even after a failure, since the results matter most when a test fails.
+      # A missing junit.xml, after an earlier step failed, is not taken as an error.
       - name: Upload test results to Codecov
         uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
@@ -71,7 +71,7 @@ jobs:
     defaults:
       run:
         working-directory: apps/vercel
-    # 部屋のサーバーの置き場所（Redis）を使うテストのため
+    # For the tests that use the room server's store (Redis).
     services:
       redis:
         image: redis:7.4-alpine
@@ -91,7 +91,7 @@ jobs:
 
       - run: npm ci
 
-      # src/core・contracts・test/shared は apps/cloudflare から写したもの。写しが古いとここで落ちる
+      # src/core, contracts and test/shared are copied from apps/cloudflare. A stale copy fails here.
       - name: Check that the code shared with the Cloudflare app is in step
         run: node ../../scripts/sync-shared.mjs --check
 
@@ -99,19 +99,19 @@ jobs:
 
       - run: npm run format:check
 
-      # 相対 import の拡張子漏れはここでしか検出できない。
-      # Vercel は型チェックせずトランスパイルするため、抜けると本番で
-      # ERR_MODULE_NOT_FOUND になる (b0995cc 参照)。
+      # Only this step catches a relative import missing its extension.
+      # Vercel transpiles without checking types, so a missing one becomes
+      # ERR_MODULE_NOT_FOUND in production (see b0995cc).
       - run: npm run typecheck
 
-      # テストは Vite を通すので、素の Node で読めない import（JSON の import 属性の漏れなど）を
-      # 見逃す。tsc で出したものを素の Node で読み、BCDice を1回振る
+      # The tests go through Vite, so they miss imports that bare Node cannot read (a JSON import
+      # missing its attribute, say). Reads what tsc puts out with bare Node, and rolls BCDice once.
       - run: npm run check:esm
 
       - run: npm test
 
-      # カバレッジ閾値割れで npm test が落ちた場合も、どの行が落ちたかを
-      # Codecov 上で追えるようアップロードは実行する。
+      # Uploads even when npm test fails on the coverage threshold, so that the lines
+      # that fell short can be traced on Codecov.
       - name: Upload coverage to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
@@ -141,12 +141,13 @@ jobs:
 
       - run: npm ci
 
-      # テストは vitest-pool-workers が抱える wrangler と workerd で動く。dev と deploy の wrangler を
-      # 同じ版に揃え、テストと違うランタイムで動かさないようにする（wrangler だけ上げると落ちる）
+      # The tests run on the wrangler and workerd that vitest-pool-workers carries. The wrangler for dev
+      # and deploy is kept at the same version, so that nothing runs on a runtime other than the tests'
+      # (upgrading wrangler alone fails here).
       - name: Check that the tests and wrangler share one workerd
         run: test "$(npm query '#workerd' | jq '[.[].version] | unique | length')" = 1
 
-      # src/core・contracts・test/shared は apps/vercel に写して使う。写しが古いとここで落ちる
+      # src/core, contracts and test/shared are copied to apps/vercel. A stale copy fails here.
       - name: Check that the code shared with the Vercel app is in step
         run: node ../../scripts/sync-shared.mjs --check
 
@@ -156,12 +157,12 @@ jobs:
 
       - run: npm run typecheck
 
-      # Workers のランタイム（workerd）の中で、R2 とレート制限をローカルに立てて流す。
-      # カバレッジが 100% を切ると落ちる
+      # Runs in the Workers runtime (workerd), with R2 and the rate limits stood up locally.
+      # Fails when coverage drops below 100%.
       - run: npm test
 
-      # カバレッジ閾値割れで npm test が落ちた場合も、どの行が落ちたかを
-      # Codecov 上で追えるようアップロードは実行する。
+      # Uploads even when npm test fails on the coverage threshold, so that the lines
+      # that fell short can be traced on Codecov.
       - name: Upload coverage to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
@@ -171,17 +172,18 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  # main に入ったものを、Cloudflare のジョブが通ってから Worker に出す。
-  # 出し先はリポジトリの Variable CLOUDFLARE_DEPLOY_ENVIRONMENTS に、GitHub Environment の名前の
-  # JSON 配列で書く（例: ["cloudflare-production", "cloudflare-public"]）。無ければ何もしない。
-  # Environment ごとに、次の Secret を置く。
-  #   - WORKER_NAME（Worker の名前。R2 のバケットは最初のデプロイで「<この名前>-assets」が作られる）
-  #   - ACCESS_CONTROL_ALLOW_ORIGIN（アプリを配信している Origin。カンマ区切り）
-  #   - CLOUDFLARE_API_TOKEN（初回は Workers Admin と R2 Storage Write・Read、2回目からは
-  #     そのWorkerだけの Workers Editor に絞る。main だけが使える Environment に置く）
-  #   - CLOUDFLARE_ACCOUNT_ID（リポジトリの Secret に置いてもよい）
-  #   - DISCORD_CLIENT_ID・DISCORD_CLIENT_SECRET・SESSION_SECRET（ログインと部屋を使うとき。3つそろえる）
-  # ACCESS_CONTROL_ALLOW_ORIGIN とログインの3つは Worker のシークレットとして、デプロイのたびにコードと同じ版で入れ直す。
+  # Deploys what reached main to the Workers, once the Cloudflare job passes.
+  # The targets go in the repository Variable CLOUDFLARE_DEPLOY_ENVIRONMENTS, as a JSON array of
+  # GitHub Environment names (for example ["cloudflare-production", "cloudflare-public"]). Without it,
+  # nothing is deployed. Each Environment holds these Secrets:
+  #   - WORKER_NAME (the Worker's name. The first deploy creates the R2 bucket `<this name>-assets`)
+  #   - ACCESS_CONTROL_ALLOW_ORIGIN (the origins that serve the app, comma-separated)
+  #   - CLOUDFLARE_API_TOKEN (Workers Admin and R2 Storage Write and Read the first time, then narrowed
+  #     to Workers Editor for that Worker alone. Keep it in an Environment only main can use)
+  #   - CLOUDFLARE_ACCOUNT_ID (may be a repository Secret instead)
+  #   - DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET (for login and rooms; all three)
+  # ACCESS_CONTROL_ALLOW_ORIGIN and the three for login are put in as Worker secrets again on every
+  # deploy, at the same version as the code.
   deploy-cloudflare:
     name: Deploy Cloudflare (${{ matrix.environment }})
     needs: [cloudflare]
@@ -216,8 +218,9 @@ jobs:
 
       - run: npm ci
 
-      # シークレットはランナーの一時ディレクトリに JSON で書き、--secrets-file でコードと一緒に送る。
-      # wrangler.jsonc の vars にある手元用の Origin（localhost）は、同じ名前のシークレットで置き換わる
+      # The secrets are written as JSON to the runner's temporary directory and sent along with the code
+      # by --secrets-file. The local origin (localhost) in wrangler.jsonc's vars gives way to the secret of
+      # the same name.
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -235,7 +238,7 @@ jobs:
               exit 1
             fi
           done
-          # ログインの3つは、そろえて置くか、どれも置かないか。一部だけだと Worker が config-invalid を返す
+          # The three for login go in together or not at all. With only some, the Worker answers config-invalid.
           login=0
           for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET; do
             [ -n "${!name}" ] && login=$((login + 1))
@@ -276,7 +279,7 @@ jobs:
       - name: Build release archive
         run: |
           mkdir -p dist
-          # 展開した先がそのままドキュメントルートになるよう、apps/php の中身を zip の直下に置く
+          # Puts what is in apps/php at the top of the zip, so that where it is unpacked is the document root.
           (cd apps/php && zip -r ../../dist/udonarium-axe-backend.zip \
             index.php \
             .htaccess \
@@ -295,7 +298,7 @@ jobs:
       - name: Release
         run: npx semantic-release
         env:
-          # main の ruleset で PR 必須・必須ステータスチェックを課しているため、
-          # GITHUB_TOKEN では @semantic-release/git のリリースコミットが弾かれる。
-          # bypass 対象である Organization 管理者の PAT を使う。
+          # The main ruleset requires a PR and status checks, so GITHUB_TOKEN cannot push
+          # @semantic-release/git's release commit. Uses the PAT of an organization admin,
+          # who is on the bypass list.
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

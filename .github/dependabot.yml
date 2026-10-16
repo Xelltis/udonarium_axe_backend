@@ -16,7 +16,7 @@ updates:
       - dependencies
     open-pull-requests-limit: 10
 
-  # apps/vercel は lockfile を持つ独立した npm プロジェクト
+  # apps/vercel is a separate npm project with its own lockfile.
   - package-ecosystem: npm
     directory: /apps/vercel
     schedule:
@@ -25,7 +25,7 @@ updates:
       - dependencies
     open-pull-requests-limit: 10
 
-  # apps/cloudflare も lockfile を持つ独立した npm プロジェクト
+  # apps/cloudflare is a separate npm project with its own lockfile too.
   - package-ecosystem: npm
     directory: /apps/cloudflare
     schedule:
@@ -34,8 +34,8 @@ updates:
       - dependencies
     open-pull-requests-limit: 10
     ignore:
-      # @cloudflare/vitest-pool-workers が抱える版に揃えて手で上げる。単独で上げると
-      # テストと dev・deploy で workerd が分かれ、CI の「one workerd」チェックで落ちる
+      # Upgraded by hand, to the version @cloudflare/vitest-pool-workers carries. Upgraded alone,
+      # the tests and dev and deploy would run different workerd, failing CI's "one workerd" check.
       - dependency-name: wrangler
 
   - package-ecosystem: github-actions
