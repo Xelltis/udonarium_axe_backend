@@ -492,6 +492,8 @@ describe('writes that would uncover what is kept back', () => {
   it('has a player drop what it holds whose parent is not there, as it does what it may not see', async () => {
     const t = await table();
     t.gm.emit([update(contextOf('orphan', 1, 0.5, { parentIdentifier: 'later' }))]);
+    // 別の WebSocket どうしは、着く順が決まらない。GM の書き込みが着いてから
+    await t.gm.expectQuiet();
 
     t.alice.emit([
       { eventName: SyncEvent.CATALOG, data: [{ identifier: 'orphan', version: 1.5 }] },
