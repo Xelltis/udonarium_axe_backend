@@ -23,16 +23,16 @@ npm run docs:preview
 
 ## ファイルの置き場所
 
-| 場所                | 中身                                     |
-| ------------------- | ---------------------------------------- |
-| `docs/index.md`     | トップページ                             |
-| `docs/guide/`       | はじめに、選びかた、クイックスタートなど |
-| `docs/token/`       | SkyWayのトークン発行のしくみとAPI        |
-| `docs/php/`         | PHP版                                    |
-| `docs/vercel/`      | Vercel版                                 |
-| `docs/cloudflare/`  | Cloudflare版                             |
-| `docs/development/` | 開発に参加する人向け                     |
-| `docs/.vitepress/`  | 設定（`config.mts`）とテーマ             |
+| 場所                | 中身                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| `docs/index.md`     | トップページ                                                                            |
+| `docs/guide/`       | はじめに、選びかた、設置の準備、SkyWayとDiscordのアプリの作りかた、クイックスタートなど |
+| `docs/token/`       | SkyWayのトークン発行のしくみとAPI                                                       |
+| `docs/php/`         | PHP版                                                                                   |
+| `docs/vercel/`      | Vercel版                                                                                |
+| `docs/cloudflare/`  | Cloudflare版                                                                            |
+| `docs/development/` | 開発に参加する人向け                                                                    |
+| `docs/.vitepress/`  | 設定（`config.mts`）とテーマ                                                            |
 
 ページを足したら、`docs/.vitepress/config.mts`の`sidebar`にも足してください。
 

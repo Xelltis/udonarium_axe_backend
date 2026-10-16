@@ -15,7 +15,7 @@ Workerが作った応答は、CloudflareのCDNには自動では残りません�
 
 ::: warning `*.workers.dev`ではキャッシュが効きません
 Cache APIは、`*.workers.dev`のURLでは何もしません。
-本番では、Workerにカスタムドメインを付けてください（→ [デプロイする](/cloudflare/deploy#_3-カスタムドメインを付ける)）。
+本番では、Workerにカスタムドメインを付けてください（→ [デプロイする](/cloudflare/deploy#_12-カスタムドメインを付ける)）。
 :::
 
 ## 部屋のアセットを消すときと掃除

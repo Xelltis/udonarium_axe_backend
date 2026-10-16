@@ -1,54 +1,132 @@
-# Vercel版をデプロイする
+# Vercel版をデプロイする（トークン発行）
 
-Deployボタンを使って、Vercel版を自分のVercelアカウントに置くまでの手順です。
-SkyWayのトークン発行に使うなら、このまま手順1から進めます。
-部屋のサーバー（サーバー版）に使うなら、[部屋のサーバーとして置く](#部屋のサーバーとして置く)に進みます。
+SkyWay版のAxeで遊ぶためのトークン発行サーバーを、Vercelに置く手順です。
+サーバーを持っていなくても、ブラウザの操作だけで進められます。
+かかる時間は、アカウント作りを含めて30分ほどです。
 
-## 1. Deployボタンを押す
+部屋のサーバー（サーバー版）としてVercelに置くときは、[部屋のサーバーとして置く](/vercel/rooms)を見てください。
+
+::: info Vercelの画面は英語です
+Vercelの画面は英語だけで、日本語に切り替えられません。
+このページでは、ボタンやメニューの名前を、画面の表示のまま英語で書きます。
+ブラウザの翻訳を使うと名前が変わるので、見比べるときは翻訳を切ってください。
+:::
+
+## 0. 用意するもの
+
+- GitHubのアカウント（→ [設置の準備](/guide/prepare#githubのアカウントを作る)）
+- SkyWayのアプリケーションIDとシークレットキー（→ [SkyWayのアプリを作る](/guide/skyway)）
+- AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
+
+## 1. Vercelのアカウントを作る
+
+すでにVercelのアカウントがあれば、ログインして手順2に進みます。
+
+1. [Vercelの登録ページ](https://vercel.com/signup)を開きます。
+2. プランを尋ねられたら、個人で使う無料のプラン（**Hobby**）を選び、名前を入れて進みます。
+3. **Continue with GitHub**を押します。
+4. GitHubのログインの画面が出たらログインし、VercelにGitHubのアカウントを使わせてよいかを尋ねられたら、**Authorize Vercel**を押します。
+
+これで、VercelとGitHubがつながります。
+次からは、同じGitHubのアカウントでVercelにログインします。
+
+::: warning 無料のプラン（Hobby）は個人の非商用だけ
+Hobbyは、個人が自分のために使うためのプランです。
+広告を載せる、お金を受け取って運営するなど、誰かの収入につながる使いかたはできません。
+団体での運用や商用のときは、[Vercelのプランの説明](https://vercel.com/docs/plans/hobby)を確かめてください。
+:::
+
+## 2. Deployボタンを押す
+
+下のボタンを押します。
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=SKYWAY_APP_ID,SKYWAY_SECRET,ACCESS_CONTROL_ALLOW_ORIGIN&project-name=my-udonarium-backend-vercel&repository-name=my-udonarium-backend-vercel)
 
-ボタンを押すと、Vercelの「新しいプロジェクト」の画面が開きます。
-このリポジトリの`apps/vercel`だけが、あなたのGitHubに新しいリポジトリとして複製されます。
+Vercelの新しいプロジェクトを作る画面が開きます。
+このボタンは、このリポジトリの`apps/vercel`だけを、あなたのGitHubに新しいリポジトリとして複製し、そこからVercelにデプロイします。
+このリポジトリそのものは変わりません。
 
-## 2. リポジトリの名前を決める
+## 3. 複製先のリポジトリを決める
 
-1. 複製先のGitHubアカウントを選びます。
-2. リポジトリの名前を決めます。既定は`my-udonarium-backend-vercel`です。身内用と公開用など、複数置くときは名前を変えます。
-3. 非公開（Private）にするかを選びます。どちらでも動きます。
+**Create Git Repository**の欄で、複製先を決めます。
 
-## 3. 環境変数を入れる
+1. Gitのサービスを尋ねられたら、**GitHub**を選びます。
+2. 複製先のアカウントには、自分の個人のアカウントを選びます。無料のプランでは、GitHubの組織（Organization）の非公開リポジトリからはデプロイできません。
+3. リポジトリの名前には、`my-udonarium-backend-vercel`が入っています。そのままで構いません。身内用と公開用など、2つ以上置くときは、名前を変えます。
+4. 非公開（private）のリポジトリにするかを選ぶ欄があります。どちらでも動きます。迷ったら非公開のままにします。
+5. **Create**を押します。
 
-次の3つを入れます。
+## 4. 環境変数を入れる
 
-| 名前                          | 入れる値                                                 |
-| ----------------------------- | -------------------------------------------------------- |
-| `SKYWAY_APP_ID`               | SkyWayのアプリケーションID                               |
-| `SKYWAY_SECRET`               | SkyWayのシークレットキー                                 |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` | Axeを配信しているOrigin（例：`https://axe.example.com`） |
+続いて、環境変数（サーバーに渡す設定）を入れる欄が3つ出ます。
 
-ほかにも、トークンの有効期間とロビーの数を変えられます。
-あとから足すこともできるので、ここでは入れなくて構いません。
-詳しくは[設定項目](/vercel/configuration)にあります。
+| 名前                          | 入れる値                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `SKYWAY_APP_ID`               | SkyWayのアプリケーションID                                                    |
+| `SKYWAY_SECRET`               | SkyWayのシークレットキー                                                      |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` | AxeのOrigin（例：`https://axe.example.com`）。2つ以上あるときはカンマで区切る |
 
-## 4. デプロイする
+- 値は、コピーして貼り付けます。前後に空白や改行が入らないように気をつけてください。
+- Originの末尾には`/`を付けません。パス（`/udonarium/`など）も付けません。
 
-**Deploy**を押し、ビルドが終わるのを待ちます（1〜2分ほど）。
-完了すると、`https://my-udonarium-backend-vercel.vercel.app`のようなURLが出ます。
-これがトークン発行サーバーのURLです。
+ほかの設定（トークンの有効期間、ロビーの数）は、あとから足せます。
+ここでは入れなくて構いません（→ [設定項目](/vercel/configuration)）。
 
-## 5. 動いているか確かめる
+## 5. デプロイする
 
-ターミナルで次を実行します。
-Vercel版は`/v1/`の下でOriginを確かめるので、`Origin`ヘッダーを付けます。
+**Deploy**を押します。
+ビルドが始まり、1〜2分ほどで終わります。
+
+終わると、デプロイできたことを知らせる画面が出ます。
+そこからプロジェクトの画面（ダッシュボード）に進みます。
+
+ビルドが失敗したときは、画面に出るログの最後の数行を見てください。
+環境変数の欄を空のまま進めた、などの原因が書いてあります。
+
+## 6. サーバーのURLを控える
+
+プロジェクトの画面の最初のページ（Overview）に、本番のデプロイと、そのドメインが出ています。
+`my-udonarium-backend-vercel.vercel.app`のような名前です。
+同じ名前がすでに使われていると、後ろに文字が足されることがあるので、画面に出ているとおりに控えてください。
+
+このドメインの前に`https://`を付けたものが、**トークン発行サーバーのURL**です。
+このあとの手順では、`https://my-udonarium-backend-vercel.vercel.app`として書きます。
+
+## 7. 動いているか確かめる
+
+ブラウザで、次のURLを開きます。
+
+```text
+https://my-udonarium-backend-vercel.vercel.app/
+```
+
+次のように出れば、サーバーは動いています。
+
+```json
+{ "message": "Hello udonarium-backend-vercel!" }
+```
+
+続いて、環境変数が読めているかを確かめます。
+次のURLを開きます。
+
+```text
+https://my-udonarium-backend-vercel.vercel.app/v1/status
+```
+
+| 出たもの                    | 意味                                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `ORIGIN_REQUIRED`を含む文字 | 正しく動いています。ブラウザで直接開くとOriginが付かないので、サーバーが断っています。Axeから使うときは通ります |
+| `CONFIG_INVALID`を含む文字  | 環境変数が足りないか、形が違います。[設定を直す](#設定を直す)を見てください                                     |
+
+ターミナルが使えるなら、Originを付けて確かめることもできます（→ [設置の準備](/guide/prepare#ターミナルから確かめる-使える人だけ)）。
+`OK`と出れば成功です。
 
 ```sh
 curl -H "Origin: https://axe.example.com" https://my-udonarium-backend-vercel.vercel.app/v1/status
 ```
 
-`OK`と表示されれば成功です。
-
-トークンが発行できるかは、次で確かめられます。
+トークンが発行できるかは、Macのターミナルで次のように確かめられます。
+`{"token":"eyJ..."}`が返れば、Axeから使えます。
 
 ```sh
 curl -X POST https://my-udonarium-backend-vercel.vercel.app/v1/skyway/tokens \
@@ -57,9 +135,10 @@ curl -X POST https://my-udonarium-backend-vercel.vercel.app/v1/skyway/tokens \
   -d '{"formatVersion":1,"channelName":"test-room","peerId":"test-peer"}'
 ```
 
-## 6. Axeにつなぐ
+## 8. Axeにつなぐ
 
-Axeの`assets/config.json`の`backend.url`に、手順4のURLを書きます。
+Axeを配信している場所の`assets/config.json`を開き、`backend.url`に手順6のURLを書きます。
+書きかたは[設置の準備](/guide/prepare#テキストファイルを書く)にあります。
 
 ```json
 {
@@ -69,93 +148,43 @@ Axeの`assets/config.json`の`backend.url`に、手順4のURLを書きます。
 }
 ```
 
-詳しくは[Axe側の設定](/guide/client-config)を見てください。
+書き換えた`config.json`を配信先に置き直したら、Axeを開き、部屋を作ります。
+ほかのブラウザ（または別の人）から同じ部屋に入れれば、完成です。
+`config.json`のほかの項目は、[Axe側の設定](/guide/client-config)にあります。
 
-## 部屋のサーバーとして置く
+## 設定を直す
 
-部屋のサーバーには、Discordのアプリ、Redis、Vercel Blobのストアが要ります。
+環境変数は、あとから足したり直したりできます。
 
-### 1. Discordのアプリを作る
+1. [Vercelのダッシュボード](https://vercel.com/dashboard)で、プロジェクトを開きます。
+2. 左のサイドバーの**Environment Variables**を開きます。
+3. 直すときは、その変数の行の右の **…** から**Edit**を選びます。足すときは、上の欄に**Name**と**Value**を入れます。
+4. 値を見せない種類（**Secret**）と、あとから見られる種類（**Config**）を選ぶ欄があります。`SKYWAY_SECRET`は**Secret**にします。
+5. **Save**を押します。
 
-[Discord Developer Portal](https://discord.com/developers/applications)でアプリを作り、OAuth2のClient IDとClient Secretを控えます。
-**Redirects**には、次のURLを足します。`<デプロイのドメイン>`は、Axeの`backend.url`に書くのと同じドメインです。
+環境変数を変えても、いま動いているデプロイには反映されません。
+変えたあとは、デプロイし直します。
 
-```text
-https://<デプロイのドメイン>/v1/login/discord/callback
-```
-
-ドメインはデプロイしてから決まるので、Redirectsはあとから足しても構いません。
-プレビューのデプロイ（`*-git-*.vercel.app`など）はURLが毎回替わるので、そこからはログインできません。本番のURLか、独自ドメインを使います。
-くわしくは[ログインと役割](/cloudflare/login#ログインを使えるようにする)を見てください。
-
-### 2. Deployボタンを押す
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXelltis%2Fudonarium_axe_backend%2Ftree%2Fmain%2Fapps%2Fvercel&env=ACCESS_CONTROL_ALLOW_ORIGIN,DISCORD_CLIENT_ID,DISCORD_CLIENT_SECRET,SESSION_SECRET&project-name=my-udonarium-rooms-vercel&repository-name=my-udonarium-rooms-vercel)
-
-次の4つを入れます。
-
-| 名前                          | 入れる値                                                            |
-| ----------------------------- | ------------------------------------------------------------------- |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` | Axeを配信しているOrigin（例：`https://axe.example.com`）。`*`は不可 |
-| `DISCORD_CLIENT_ID`           | 手順1のClient ID                                                    |
-| `DISCORD_CLIENT_SECRET`       | 手順1のClient Secret                                                |
-| `SESSION_SECRET`              | 32文字以上の乱数（例：`openssl rand -base64 48`で作ったもの）       |
-
-この時点では、まだRedisとBlobが無いので、部屋のサーバーの経路は`500 config-invalid`を返します。
-
-### 3. RedisとBlobをつなぐ
-
-Vercelのプロジェクトの「Storage」から、次の2つを作ってプロジェクトにつなぎます。
-
-1. **Redis**：Vercel MarketplaceのRedis（Upstashなど）。つなぐと`REDIS_URL`か`KV_URL`が入ります。リージョンは東京に近いところを選びます。
-2. **Blob**：アクセスを**Private**にしたストア。つなぐと、Blobのストアを読み書きする設定が入ります。
-
-つないだら、「Deployments」から最新のデプロイを選び、**Redeploy**を押します。
-
-### 4. 動いているか確かめる
-
-```sh
-curl -H "Origin: https://axe.example.com" https://my-udonarium-rooms-vercel.vercel.app/v1/auth/config
-```
-
-`{"providers":["discord"]}`と返れば、ログインが使えます。
-`{"error":"config-invalid"}`なら、Functionの「Logs」に足りない設定の名前が出ています。
-
-### 5. Axeにつなぐ
-
-Axeの`assets/config.json`で、`transport`を`server`にし、`backend.url`にデプロイのURLを書きます。
-
-```json
-{
-  "transport": "server",
-  "backend": {
-    "url": "https://my-udonarium-rooms-vercel.vercel.app"
-  }
-}
-```
-
-詳しくは[Axe側の設定](/guide/client-config#サーバー版で配信するとき)を見てください。
-
-### 掃除の鍵
-
-時間が過ぎた部屋を消す掃除は、`vercel.json`の`crons`で1日1回呼ばれます（`/internal/sweep`）。
-環境変数`CRON_SECRET`に乱数を入れておくと、Vercel Cronのほかからは呼べなくなります。
-
-### SkyWayのトークン発行と一緒に置く
-
-同じデプロイに、SkyWayの`SKYWAY_APP_ID`と`SKYWAY_SECRET`も入れれば、トークン発行も受け持ちます。
-別々のデプロイに分けても構いません。
+1. 左のサイドバーの**Deployments**を開きます。
+2. いちばん上（最新）のデプロイの右の **…** から、**Redeploy**を選びます。
+3. 確かめる画面が出たら、**Redeploy**を押します。
 
 ## 独自ドメインで公開する
 
 `*.vercel.app`のURLのままでも使えます。
-自分のドメイン（例：`backend.example.com`）で公開したいときは、Vercelのプロジェクトの「Settings → Domains」から足します。
-足したら、Axeの`backend.url`も新しいURLに書き換えます。
+自分のドメイン（例：`backend.example.com`）で公開したいときは、プロジェクトの**Settings**の**Domains**から足します。
+画面に、ドメインの管理元（お名前.comなど）でDNSに足す値が出るので、そのとおりに設定します。
+足し終えたら、Axeの`backend.url`も新しいURLに書き換えます。
 
 ## 更新するとき
 
 Deployボタンで作ったリポジトリは、このリポジトリとは別のものです。
+このリポジトリが新しくなっても、あなたのサーバーは自動では変わりません。
 新しい版を取り込むには、次のどちらかをします。
 
-- このリポジトリの`apps/vercel`の変更を、自分のリポジトリに手で取り込む
-- もう一度Deployボタンで新しいプロジェクトを作り、環境変数を入れ直して、Axeの`backend.url`を差し替える
+- このリポジトリの`apps/vercel`の変更を、自分のリポジトリに取り込む。自分のリポジトリに変更が入ると、Vercelが自動でデプロイし直します。
+- もう一度Deployボタンで新しいプロジェクトを作り、環境変数を入れ直して、Axeの`backend.url`を新しいURLに差し替える。
+
+## うまくいかないとき
+
+[Vercel版で困ったとき](/vercel/troubleshooting)を見てください。

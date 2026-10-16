@@ -77,6 +77,7 @@ Fluid computeでは、1つのインスタンスが多くのWebSocketを受けま
 
 ## 次に読むもの
 
-- [デプロイする](/vercel/deploy)
+- [デプロイする（トークン発行）](/vercel/deploy)
+- [部屋のサーバーとして置く](/vercel/rooms)
 - [設定項目](/vercel/configuration)
 - [困ったとき](/vercel/troubleshooting)

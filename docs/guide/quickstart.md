@@ -1,6 +1,7 @@
 # クイックスタート
 
-いちばん手軽な組み合わせ（Vercel版のトークン発行サーバー）で、SkyWay版のAxeが遊べるようになるまでの手順です。
+いちばん手軽な組み合わせ（Vercel版のトークン発行サーバー）で、SkyWay版のAxeが遊べるようになるまでの手順を、短くまとめたページです。
+1つ1つの操作を詳しく知りたいときや、初めてサーバーを置くときは、[設置の準備](/guide/prepare)と[Vercel版をデプロイする](/vercel/deploy)を見てください。
 
 SkyWayを使わないサーバー版は、Axe v1.68.0からベータとして使えます（→ [今後の計画](/guide/roadmap)）。
 サーバー版で使うCloudflare版の手順は、[Cloudflare版をデプロイする](/cloudflare/deploy)にあります。
@@ -19,14 +20,8 @@ Axe本体の置きかたは、[Axeの利用ガイド](https://xelltis.github.io/
 
 ## 1. SkyWayのアプリを作る
 
-1. [SkyWayのコンソール](https://console.skyway.ntt.com/)にログインします。
-2. プロジェクトの中に**アプリケーション**を1つ作ります。名前は何でも構いません（例：`my-axe`）。
-3. 作ったアプリケーションの画面で、**アプリケーションID**と**シークレットキー**を控えます。
-
-::: warning シークレットキーは人に見せない
-シークレットキーがあれば、誰でもあなたのSkyWayアプリのトークンを作れてしまいます。
-チャットやリポジトリに貼らないでください。
-:::
+[SkyWayのアプリを作る](/guide/skyway)の手順で、アプリケーションを1つ作り、**アプリケーションID**と**シークレットキー**を控えます。
+シークレットキーは、人に見せないでください。
 
 ## 2. トークン発行サーバーをデプロイする
 
@@ -56,14 +51,17 @@ PHP版を使う場合は、この手順の代わりに[PHP版を設置する](/p
 
 ## 3. 動いているか確かめる
 
-ターミナルで次を実行します。
-`Origin`には、手順2で入れたOriginを書きます。
+ブラウザで、手順2のURLの後ろに`/v1/status`を付けたもの（例：`https://my-udonarium-backend-vercel.vercel.app/v1/status`）を開きます。
+`ORIGIN_REQUIRED`を含む文字が出れば、サーバーは環境変数を読めていて、正しく動いています（ブラウザで直接開くとOriginが付かないので、断られます）。
+`CONFIG_INVALID`が出たら、環境変数が足りないか、形が違います（→ [設定を直す](/vercel/deploy#設定を直す)）。
+
+ターミナルが使えるなら、Originを付けて確かめられます。
+`OK`と表示されれば成功です。
 
 ```sh
 curl -H "Origin: https://axe.example.com" https://my-udonarium-backend-vercel.vercel.app/v1/status
 ```
 
-`OK`と表示されれば成功です。
 `ORIGIN_FORBIDDEN`が出たら、`Origin`の値と環境変数`ACCESS_CONTROL_ALLOW_ORIGIN`が一致しているかを確かめてください。
 
 ## 4. Axeに接続先を書く

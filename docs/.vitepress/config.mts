@@ -171,6 +171,9 @@ export default defineConfig({
         items: [
           { text: 'はじめに', link: '/guide/' },
           { text: 'どれを使うか', link: '/guide/choose' },
+          { text: '設置の準備', link: '/guide/prepare' },
+          { text: 'SkyWayのアプリを作る', link: '/guide/skyway' },
+          { text: 'Discordのアプリを作る', link: '/guide/discord' },
           { text: 'クイックスタート', link: '/guide/quickstart' },
           { text: 'Axe側の設定', link: '/guide/client-config' },
           { text: 'よくある質問', link: '/guide/faq' },
@@ -199,7 +202,8 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: '概要', link: '/vercel/' },
-          { text: 'デプロイする', link: '/vercel/deploy' },
+          { text: 'デプロイする（トークン発行）', link: '/vercel/deploy' },
+          { text: '部屋のサーバーとして置く', link: '/vercel/rooms' },
           { text: '設定項目', link: '/vercel/configuration' },
           { text: '困ったとき', link: '/vercel/troubleshooting' },
         ],

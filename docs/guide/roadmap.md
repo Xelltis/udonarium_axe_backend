@@ -46,7 +46,7 @@ SkyWay版では、参加者全員がたがいに直接つながり（フルメ�
 - **SkyWay版**は、これまでどおり使えます。PHP版かVercel版のトークン発行サーバーがあれば遊べます。
 - **アセットサーバー**は、サーバー版の部屋のアセットに替えました。SkyWay版の配信には足せません。SkyWay版では、画像と音声はP2Pだけで配ります。
 - **サーバー版**をセルフホストするには、Cloudflareのアカウント（Workers、Durable Objects、R2）と、ログインに使うDiscordのアプリの登録が要ります。Durable Objectsは、Cloudflare版をデプロイすると一緒に作られます。D1は使いません。手順は[デプロイする](/cloudflare/deploy)と[ログインと役割](/cloudflare/login)にあります。
-- **サーバー版**は、Vercel版でも置けます（Vercel Functions、Redis、Vercel Blob）。手順は[Vercel版をデプロイする](/vercel/deploy#部屋のサーバーとして置く)にあります。PHP版には部屋のサーバーはありません。
+- **サーバー版**は、Vercel版でも置けます（Vercel Functions、Redis、Vercel Blob）。手順は[部屋のサーバーとして置く（Vercel版）](/vercel/rooms)にあります。PHP版には部屋のサーバーはありません。
 
 ## 費用の見込み
 

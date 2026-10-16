@@ -9,14 +9,14 @@ Cloudflare版の部屋のサーバーでは、GMとPLは**Discordでログイン
 ログインには、Discordのアプリ（OAuth2のクライアント）が1つ要ります。
 Workerを置く人が、1回だけ作ります。
 
-1. [Discord Developer Portal](https://discord.com/developers/applications)で**New Application**を押し、名前を付けて作ります。名前は、ログインの同意の画面に出ます。
-2. **OAuth2**の画面を開きます。
-3. **Redirects**に、次のURLを足します。`<Workerのドメイン>`は、Axeの`backend.url`に書くのと同じドメインです（カスタムドメインを付けたなら、そちら）。
-   ```text
-   https://<Workerのドメイン>/v1/login/discord/callback
-   ```
-4. **Client ID**と**Client Secret**（**Reset Secret**で出す）を控えます。
-5. Workerに、次の3つをシークレットとして入れます。
+作りかたの手順は、[Discordのアプリを作る](/guide/discord)にあります。
+アプリの**Redirects**には、次のURLを足します。`<Workerのドメイン>`は、Axeの`backend.url`に書くのと同じドメインです（カスタムドメインを付けたなら、そちら）。
+
+```text
+https://<Workerのドメイン>/v1/login/discord/callback
+```
+
+アプリができたら、Workerに次の3つをシークレットとして入れます。
 
 | 名前                    | 入れるもの                                                              |
 | ----------------------- | ----------------------------------------------------------------------- |

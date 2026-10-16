@@ -14,8 +14,8 @@ Cloudflare版は、SkyWayを使わないサーバー版で使うもので、SkyW
 ### SkyWayなしで遊べますか？
 
 Axe v1.68.0から、**サーバー版**（ベータ）で遊べます。
-Cloudflare版のWorkerを部屋のサーバーとして置き、Axeの`config.json`で`transport`を`"server"`にします。SkyWayのアプリもトークン発行サーバーも要りません。
-置きかたは[Cloudflare版](/cloudflare/)と[Axe側の設定](/guide/client-config#サーバー版で配信するとき)にあります。
+部屋のサーバー（Cloudflare版のWorkerか、Vercel版）を置き、Axeの`config.json`で`transport`を`"server"`にします。SkyWayのアプリもトークン発行サーバーも要りません。
+置きかたは[Cloudflare版をデプロイする](/cloudflare/deploy)か[部屋のサーバーとして置く（Vercel版）](/vercel/rooms)と、[Axe側の設定](/guide/client-config#サーバー版で配信するとき)にあります。
 
 ### 本家のユドナリウムでも使えますか？
 
