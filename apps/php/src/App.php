@@ -11,14 +11,14 @@ require_once __DIR__ . '/Util/UrlUtils.php';
 require_once __DIR__ . '/Middleware/CorsMiddleware.php';
 
 /**
- * アプリケーションのリクエスト処理パイプライン。
+ * The application's pipeline for handling requests.
  *
- * 全ルートを単一のルーターに登録し、CORS はミドルウェアとして適用する。
- * exit を呼ばないため、パイプライン全体をテスト可能にする。
+ * It registers every route on a single router, and applies CORS as middleware.
+ * It never calls exit, so the whole pipeline can be tested.
  */
 final class App
 {
-    /** channelName / peerId の最大バイト長 */
+    /** The most bytes a channelName or peerId may have. */
     private const int MAX_SCOPE_NAME_LENGTH = 200;
 
     private Router $router;
@@ -37,11 +37,11 @@ final class App
     }
 
     /**
-     * リクエストを処理してレスポンスを返す。
+     * Handles a request and returns the response.
      *
-     * @param Request $request リクエスト
+     * @param Request $request The request.
      *
-     * @return Response 処理結果のレスポンス
+     * @return Response The response that results.
      */
     public function handle(Request $request): Response
     {
@@ -57,9 +57,9 @@ final class App
     }
 
     /**
-     * CORS ミドルウェアを適用する。
+     * Applies the CORS middleware.
      *
-     * @param \Closure(): Response $next 次のハンドラ
+     * @param \Closure(): Response $next The next handler.
      */
     private function applyCors(\Closure $next): Response
     {
@@ -67,7 +67,7 @@ final class App
     }
 
     /**
-     * SkyWay トークン発行リクエストを処理する。
+     * Handles a request to issue a SkyWay token.
      */
     private function handleTokenRequest(): Response
     {
@@ -110,14 +110,14 @@ final class App
     }
 
     /**
-     * SkyWay スコープ名として安全な文字列か検証する。
+     * Checks whether the value is a string that is safe as a SkyWay scope name.
      *
-     * SkyWay はスコープ内の name に対してワイルドカードを解釈するため
-     * （"*" は 0 文字以上の任意文字列にマッチ、"\" はそのエスケープ文字）、
-     * クライアント入力にこれらが含まれるとトークンの権限が意図した
-     * チャンネル・メンバーを越えて拡大する。リテラルとして扱えないため拒否する。
+     * SkyWay reads wildcards in a name in a scope ("*" matches any string of zero or more
+     * characters, and "\" is its escape character), so when the client's input has them in it,
+     * the token's permissions reach past the intended channels and members.
+     * They cannot be taken literally, so they are refused.
      *
-     * @param mixed $value 検証対象の値
+     * @param mixed $value The value to check.
      *
      * @phpstan-assert-if-true string $value
      */

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// PHP エラーをブラウザに表示しない（情報漏洩防止）
+// Does not show PHP errors in the browser (so that no information leaks).
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 

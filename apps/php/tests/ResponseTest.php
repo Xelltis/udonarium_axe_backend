@@ -5,15 +5,15 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see Response} のテストケース。
+ * Test cases for {@see Response}.
  *
- * JSON・テキスト・204 の各ファクトリメソッド、ヘッダーのイミュータブル操作、
- * send() の戻り値型、および JSON エンコード不能値の例外を検証する。
+ * They test the factory methods for JSON, text and 204, the immutable handling of headers,
+ * the return type of send(), and the exception for a value that cannot be encoded as JSON.
  */
 class ResponseTest extends TestCase
 {
     /**
-     * json() がステータスコードと JSON ボディを正しく設定することを確認する。
+     * Checks that json() sets the status code and the JSON body correctly.
      */
     public function testJsonSetsStatusCodeAndBody(): void
     {
@@ -23,7 +23,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * json() が Unicode 文字をエスケープせずにそのまま出力することを確認する。
+     * Checks that json() writes Unicode characters out as they are, without escaping them.
      */
     public function testJsonEncodesUnicodeWithoutEscape(): void
     {
@@ -32,7 +32,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * text() がステータスコードとプレーンテキストボディを正しく設定することを確認する。
+     * Checks that text() sets the status code and the plain text body correctly.
      */
     public function testTextSetsStatusCodeAndBody(): void
     {
@@ -42,7 +42,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * noContent() が 204 ステータスと空ボディを返すことを確認する。
+     * Checks that noContent() returns a 204 status and an empty body.
      */
     public function testNoContentReturns204WithEmptyBody(): void
     {
@@ -52,7 +52,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * withHeaders() で指定したヘッダーがレスポンスにマージされることを確認する。
+     * Checks that the headers given to withHeaders() are merged into the response.
      */
     public function testWithHeadersMergesHeaders(): void
     {
@@ -65,7 +65,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * withHeaders() がイミュータブルで、元のインスタンスを変更しないことを確認する。
+     * Checks that withHeaders() is immutable and leaves the original instance unchanged.
      */
     public function testWithHeadersIsImmutable(): void
     {
@@ -77,7 +77,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * withHeaders() を連続で呼ぶと後の値が同名キーを上書きすることを確認する。
+     * Checks that calling withHeaders() twice in a row lets the later value overwrite the same key.
      */
     public function testWithHeadersOverridesExistingKey(): void
     {
@@ -89,7 +89,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * send() メソッドの戻り値型が void であることをリフレクションで確認する。
+     * Checks through reflection that the return type of the send() method is void.
      */
     public function testSendMethodIsVoidReturnType(): void
     {
@@ -101,7 +101,7 @@ class ResponseTest extends TestCase
     }
 
     /**
-     * json() に JSON エンコード不能な値（NAN）を渡すと JsonException がスローされることを確認する。
+     * Checks that json() throws a JsonException when given a value it cannot encode as JSON (NAN).
      */
     public function testJsonThrowsOnUnencodableValue(): void
     {

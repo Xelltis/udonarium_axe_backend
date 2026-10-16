@@ -1,14 +1,14 @@
 #!/bin/bash
-# php-cs-fixer を Docker コンテナ内で実行するラッパースクリプト。
-# VS Code の php-cs-fixer 拡張機能 (junstyle.php-cs-fixer) から
-# このスクリプトが呼び出される。
+# A wrapper script that runs php-cs-fixer inside a Docker container.
+# The VS Code php-cs-fixer extension (junstyle.php-cs-fixer) calls
+# this script.
 #
-# 使用方法:
-#   bin/php-cs-fixer [php-cs-fixer の引数...]
+# Usage:
+#   bin/php-cs-fixer [php-cs-fixer arguments...]
 #
-# 引数はそのまま vendor/bin/php-cs-fixer に渡される。
-# コンテナ内のパスとホストのパスを対応させるため
-# プロジェクトルートをマウントポイントとして固定する。
+# The arguments go to vendor/bin/php-cs-fixer as they are.
+# The project root is fixed as the mount point, so that paths
+# inside the container match paths on the host.
 
 set -euo pipefail
 
@@ -17,9 +17,9 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=bin/.config
 . "$(dirname "$0")/.config"
 
-# VS Code 拡張はホスト側絶対パスを引数で渡す。
-# コンテナ内には同じパスが存在しないため、すべての引数内の
-# ホスト側プロジェクトルートをコンテナ内マウントポイントに置換する。
+# The VS Code extension passes absolute paths on the host as arguments.
+# The same paths do not exist inside the container, so the host's project root
+# in every argument is replaced with the mount point inside the container.
 args=()
 for arg in "$@"; do
     args+=("${arg//${PROJECT_ROOT}/${DOCKER_CONTAINER_ROOT}}")

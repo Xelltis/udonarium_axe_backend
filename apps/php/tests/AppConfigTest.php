@@ -5,18 +5,18 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see AppConfig} のテストケース。
+ * Test cases for {@see AppConfig}.
  *
- * 環境変数配列からのインスタンス生成（fromEnv）と
- * .env ファイルからのロード（load）の両方を検証する。
+ * They test both creating an instance from an array of environment variables (fromEnv)
+ * and loading one from a .env file (load).
  */
 class AppConfigTest extends TestCase
 {
-    /** @var string テスト用一時ディレクトリのパス */
+    /** @var string The path of the temporary directory for the tests. */
     private string $tempDir;
 
     /**
-     * テスト用の一時ディレクトリを作成する。
+     * Creates a temporary directory for the test.
      */
     protected function setUp(): void
     {
@@ -25,9 +25,9 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * 一時ディレクトリ内のファイルを削除し、ディレクトリを破棄する。
+     * Deletes the files in the temporary directory, then the directory itself.
      *
-     * ENV_PATH 環境変数もリセットして他のテストへの影響を防ぐ。
+     * It also resets the ENV_PATH environment variable, so that other tests are not affected.
      */
     protected function tearDown(): void
     {
@@ -45,7 +45,7 @@ class AppConfigTest extends TestCase
     // ──────────────────────────────────────────────
 
     /**
-     * テスト用の有効な環境変数配列を返す。
+     * Returns a valid array of environment variables for tests.
      *
      * @return array<string, string>
      */
@@ -60,7 +60,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * 有効な環境変数からインスタンスが正しく生成されることを確認する。
+     * Checks that valid environment variables create a correct instance.
      */
     public function testFromEnvCreatesInstance(): void
     {
@@ -72,7 +72,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * SKYWAY_UDONARIUM_LOBBY_SIZE が未設定の場合、デフォルト値 3 が適用されることを確認する。
+     * Checks that the default of 3 is used when SKYWAY_UDONARIUM_LOBBY_SIZE is not set.
      */
     public function testFromEnvDefaultsLobbySizeTo3(): void
     {
@@ -83,7 +83,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * SKYWAY_APP_ID が欠落している場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when SKYWAY_APP_ID is missing.
      */
     public function testFromEnvThrowsWhenAppIdMissing(): void
     {
@@ -94,7 +94,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * SKYWAY_SECRET が欠落している場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when SKYWAY_SECRET is missing.
      */
     public function testFromEnvThrowsWhenSecretMissing(): void
     {
@@ -105,7 +105,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * カンマ区切りの複数オリジンが正しくパースされることを確認する。
+     * Checks that several comma-separated origins are parsed correctly.
      */
     public function testFromEnvParsesMultipleOrigins(): void
     {
@@ -117,7 +117,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * ロビーサイズが 0 の場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when the lobby size is 0.
      */
     public function testFromEnvThrowsWhenLobbySizeIsZero(): void
     {
@@ -128,7 +128,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * ロビーサイズが負の値の場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when the lobby size is negative.
      */
     public function testFromEnvThrowsWhenLobbySizeIsNegative(): void
     {
@@ -139,7 +139,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * ロビーサイズが数値以外の文字列の場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when the lobby size is a non-numeric string.
      */
     public function testFromEnvThrowsWhenLobbySizeIsNonNumeric(): void
     {
@@ -150,7 +150,8 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * ロビーサイズが数字で始まるが数値以外の文字を含む場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when the lobby size starts with a digit
+     * but has other characters in it.
      */
     public function testFromEnvThrowsWhenLobbySizeHasTrailingNonNumeric(): void
     {
@@ -161,7 +162,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * ロビーサイズが小数の場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when the lobby size is a decimal.
      */
     public function testFromEnvThrowsWhenLobbySizeIsFloat(): void
     {
@@ -176,7 +177,7 @@ class AppConfigTest extends TestCase
     // ──────────────────────────────────────────────
 
     /**
-     * 候補ファイルがすべて存在しない場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when none of the candidate files exist.
      */
     public function testLoadThrowsWhenNoFileFound(): void
     {
@@ -186,7 +187,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * 有効な .env ファイルからインスタンスが正しく生成されることを確認する。
+     * Checks that a valid .env file creates a correct instance.
      */
     public function testLoadParsesValidEnvFile(): void
     {
@@ -199,7 +200,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * 複数の候補が存在する場合、最初に見つかったファイルが使用されることを確認する。
+     * Checks that the first file found is used when there are several candidates.
      */
     public function testLoadUsesFirstFoundCandidate(): void
     {
@@ -213,7 +214,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * 存在しない候補ファイルをスキップして次の候補を読み込むことを確認する。
+     * Checks that a candidate file that does not exist is skipped and the next candidate is read.
      */
     public function testLoadSkipsNonExistentCandidates(): void
     {
@@ -225,7 +226,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * ENV_PATH 環境変数が設定されている場合、候補ファイルより優先されることを確認する。
+     * Checks that the ENV_PATH environment variable, when set, comes before the candidate files.
      */
     public function testLoadEnvPathTakesPriorityOverCandidates(): void
     {
@@ -241,7 +242,7 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * .env ファイルの文字列値が正しく型変換（lobbySize → int）されることを確認する。
+     * Checks that a string value in the .env file is converted to the right type (lobbySize → int).
      */
     public function testLoadPreservesStringValuesWithoutTypeConversion(): void
     {
@@ -253,13 +254,13 @@ class AppConfigTest extends TestCase
     }
 
     /**
-     * .env ファイルのパースに失敗した場合に InvalidArgumentException がスローされることを確認する。
+     * Checks that an InvalidArgumentException is thrown when the .env file cannot be parsed.
      */
     #[\PHPUnit\Framework\Attributes\WithoutErrorHandler]
     public function testLoadThrowsWhenEnvFileCannotBeParsed(): void
     {
         $envFile = $this->tempDir . '/.env';
-        // parse_ini_file が false を返す不正な構文（閉じられていないセクション）
+        // Bad syntax that makes parse_ini_file return false (a section that is never closed).
         file_put_contents($envFile, "[invalid\nKEY=value\n");
 
         $this->expectException(\InvalidArgumentException::class);

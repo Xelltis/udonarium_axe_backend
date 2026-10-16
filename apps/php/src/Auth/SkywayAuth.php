@@ -3,45 +3,45 @@
 declare(strict_types=1);
 
 /**
- * SkyWay 2023 用の認証トークン（JWT）を生成するユーティリティクラス。
+ * A utility class that creates auth tokens (JWTs) for SkyWay 2023.
  *
- * TypeScript 実装（udonarium-backend-vercel）と同一の構造・署名方式で
- * HS256 署名付き JWT を生成する。
+ * It creates HS256-signed JWTs with the same structure and signing method as the
+ * TypeScript implementation (udonarium-backend-vercel).
  */
 final class SkywayAuth
 {
     /** @codeCoverageIgnore */
     private function __construct() {}
 
-    /** トークンの有効期間（秒）: 24 時間 */
+    /** How long a token lasts, in seconds: 24 hours. */
     private const int EXPIRY_SECONDS = 86400;
 
     /**
-     * ロビーチャンネル名の予約プレフィックス。
+     * The reserved prefix for lobby channel names.
      *
-     * ロビースコープは publication / subscription を意図的に許可していないため、
-     * クライアントがこのプレフィックスのチャンネル名を要求してルームスコープ
-     * （publication / subscription = write）を得ることを防ぐ必要がある。
+     * The lobby scope does not allow publication / subscription, on purpose, so a client must be
+     * kept from asking for a channel name with this prefix and getting the room scope
+     * (publication / subscription = write).
      */
     public const string LOBBY_CHANNEL_PREFIX = 'udonarium-lobby-';
 
     /**
-     * SkyWay 2023 用の JWT トークンを生成する。
+     * Creates a JWT for SkyWay 2023.
      *
-     * ロビーチャンネルとルームチャンネルの両方に対するスコープを含む
-     * トークンを返す。有効期限は発行時刻から 24 時間。
+     * Returns a token with scopes for both the lobby channels and the room channel.
+     * It expires 24 hours after the time it is issued.
      *
-     * @param string      $appId       SkyWay アプリケーション ID
-     * @param string      $secret      HMAC-SHA256 署名に使用するシークレットキー
-     * @param int         $lobbySize   ロビーチャンネルの最大数
-     * @param string      $channelName ルームチャンネル名
-     * @param string      $peerId      ピア ID
-     * @param string|null $jti         JWT ID（null の場合は UUID v4 を自動生成）
-     * @param int|null    $iat         発行時刻 Unix タイムスタンプ（null の場合は現在時刻）
+     * @param string      $appId       The SkyWay application id.
+     * @param string      $secret      The secret key the HMAC-SHA256 signature is made with.
+     * @param int         $lobbySize   How many lobby channels there are at most.
+     * @param string      $channelName The name of the room channel.
+     * @param string      $peerId      The peer id.
+     * @param string|null $jti         The JWT id (a UUID v4 is created for it when null).
+     * @param int|null    $iat         When issued, as a Unix timestamp (the current time when null).
      *
-     * @return string Base64URL エンコードされた JWT 文字列
+     * @return string The Base64URL-encoded JWT string.
      *
-     * @throws \JsonException JSON エンコードに失敗した場合
+     * @throws \JsonException When JSON encoding fails.
      */
     public static function generate(
         string  $appId,
@@ -77,13 +77,13 @@ final class SkywayAuth
     }
 
     /**
-     * チャンネルスコープを構築する。
+     * Builds a channel scope.
      *
-     * @param string $name  チャンネル名
-     * @param string $peerId ピア ID
-     * @param bool   $lobby  ロビーチャンネルかどうか
+     * @param string $name  The channel name.
+     * @param string $peerId The peer id.
+     * @param bool   $lobby  Whether it is a lobby channel.
      *
-     * @return array<string, mixed> SkyWay チャンネルスコープ
+     * @return array<string, mixed> The SkyWay channel scope.
      */
     private static function buildChannelScope(string $name, string $peerId, bool $lobby): array
     {
@@ -113,14 +113,14 @@ final class SkywayAuth
     }
 
     /**
-     * ペイロードから HS256 署名付き JWT を生成する。
+     * Creates an HS256-signed JWT from a payload.
      *
-     * @param array<string, mixed> $payload JWT ペイロード
-     * @param string               $secret  HMAC-SHA256 署名キー
+     * @param array<string, mixed> $payload The JWT payload.
+     * @param string               $secret  The HMAC-SHA256 signing key.
      *
-     * @return string JWT 文字列
+     * @return string The JWT string.
      *
-     * @throws \JsonException JSON エンコードに失敗した場合
+     * @throws \JsonException When JSON encoding fails.
      */
     private static function encodeJwt(array $payload, string $secret): string
     {
@@ -136,13 +136,13 @@ final class SkywayAuth
     }
 
     /**
-     * Base64URL エンコードする。
+     * Encodes in Base64URL.
      *
-     * RFC 4648 §5 に従い、パディングを除去し "+" → "-"、"/" → "_" に置換する。
+     * Following RFC 4648 §5, it strips the padding and replaces "+" with "-" and "/" with "_".
      *
-     * @param string $data エンコード対象のバイナリデータ
+     * @param string $data The binary data to encode.
      *
-     * @return string Base64URL エンコードされた文字列
+     * @return string The Base64URL-encoded string.
      */
     private static function base64UrlEncode(string $data): string
     {
@@ -150,9 +150,9 @@ final class SkywayAuth
     }
 
     /**
-     * RFC 4122 v4 準拠の UUID を生成する。
+     * Creates a UUID that conforms to RFC 4122 v4.
      *
-     * @return string ハイフン区切りの 36 文字 UUID 文字列
+     * @return string The UUID as a 36-character string, with hyphens between its parts.
      */
     private static function generateUuid(): string
     {

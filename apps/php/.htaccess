@@ -1,4 +1,4 @@
-# 機密・開発用ファイルへの直接アクセスを遮断
+# Blocks direct access to secret files and files for development.
 
 <FilesMatch "^(\..+|Dockerfile(\..+)?|docker-compose(\..+)?|compose\.yml|composer\.(json|lock)|package(-lock)?\.json|.+\.lock|phpunit\.xml|phpstan\.neon)$">
 Require all denied
@@ -6,22 +6,22 @@ Require all denied
 
 RewriteEngine On
 
-# ドット始まりのディレクトリ・ファイルへのアクセスを遮断
-# （.git/.github/.vscode/.env 等。上の FilesMatch はファイル名しか見ないため
-#  .git/config のようなドットディレクトリ配下のファイルはここで遮断する）
-# ACME 等で使う .well-known/ のみ例外的に許可する
+# Blocks access to directories and files whose names start with a dot
+# (.git, .github, .vscode, .env and so on. The FilesMatch above looks only at file names, so
+#  files under a dot directory, such as .git/config, are blocked here).
+# Only .well-known/, which ACME and the like use, is let through, as an exception.
 
 RewriteRule (^|/)\.(?!well-known/) - [F,L]
 
-# vendor/ 等のディレクトリへのアクセスを遮断（実在ファイルチェックより前に処理）
+# Blocks access to directories such as vendor/ (handled before the check for files that exist).
 
 RewriteRule ^(vendor|tests|bin|docs|coverage-report|node_modules|stubs)(/|$) - [F,L]
 
-# 実在するファイルへのリクエストはそのまま通す（静的ファイル等）
+# Lets requests for files that exist straight through (static files and so on).
 
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
-# それ以外は index.php にルーティング
+# Routes everything else to index.php.
 
 RewriteRule ^ index.php [QSA,L]

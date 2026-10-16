@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 /**
- * URL・オリジン関連のユーティリティメソッドを提供するクラス。
+ * A class with utility methods for URLs and origins.
  *
- * CORS オリジン検証やオリジン文字列のパースを担当する。
+ * It checks origins for CORS and parses origin strings.
  */
 final class UrlUtils
 {
@@ -13,14 +13,14 @@ final class UrlUtils
     private function __construct() {}
 
     /**
-     * カンマ区切りのオリジン文字列を配列に変換する。
+     * Turns a comma-separated string of origins into an array.
      *
-     * 空文字列・空白のみの場合は空配列を返す。
-     * 各要素は前後の空白がトリミングされ、空要素は除外される。
+     * Returns an empty array for an empty string or a string of only whitespace.
+     * Each item has the whitespace around it trimmed, and empty items are left out.
      *
-     * @param string $origins カンマ区切りのオリジン文字列
+     * @param string $origins The origins, as a comma-separated string.
      *
-     * @return string[] トリミング済みオリジンの配列
+     * @return string[] The trimmed origins.
      */
     public static function parseAllowedOrigins(string $origins): array
     {
@@ -32,15 +32,15 @@ final class UrlUtils
     }
 
     /**
-     * リクエストオリジンが許可リストに含まれるか検証する。
+     * Checks whether the request's origin is on the allow list.
      *
-     * ホスト・スキーム・ポートがすべて一致したときのみ許可する。
-     * ワイルドカード "*" が含まれる場合はすべてのオリジンを許可する。
+     * It allows the origin only when the host, scheme and port all match.
+     * When the list has the wildcard "*" in it, every origin is allowed.
      *
-     * @param string   $requestOrigin  検証対象のリクエスト Origin ヘッダー値
-     * @param string[] $allowedOrigins 許可オリジンのリスト
+     * @param string   $requestOrigin  The value of the request's Origin header to check.
+     * @param string[] $allowedOrigins The list of allowed origins.
      *
-     * @return bool 許可される場合は true
+     * @return bool True when it is allowed.
      */
     public static function isAllowedOrigin(string $requestOrigin, array $allowedOrigins): bool
     {
@@ -48,16 +48,16 @@ final class UrlUtils
     }
 
     /**
-     * リクエストオリジンが許可リストに含まれる場合、許可リスト側のオリジン文字列を返す。
+     * When the request's origin is on the allow list, returns the allow list's string for it.
      *
-     * 一致しない場合は null を返す。
-     * レスポンスヘッダーには必ずこの戻り値（管理者が設定した文字列）を使用すること。
-     * リクエストの生文字列をそのままヘッダーに返すと HTTP ヘッダーインジェクションのリスクがある。
+     * Returns null when nothing matches.
+     * Always use this return value (the string the administrator set) in response headers.
+     * Sending the request's raw string back in a header as it is risks HTTP header injection.
      *
-     * @param string   $requestOrigin  検証対象のリクエスト Origin ヘッダー値
-     * @param string[] $allowedOrigins 許可オリジンのリスト
+     * @param string   $requestOrigin  The value of the request's Origin header to check.
+     * @param string[] $allowedOrigins The list of allowed origins.
      *
-     * @return string|null 一致した許可オリジン文字列、または null
+     * @return string|null The allowed origin string that matched, or null.
      */
     public static function findMatchedOrigin(string $requestOrigin, array $allowedOrigins): ?string
     {
@@ -72,7 +72,7 @@ final class UrlUtils
 
         foreach ($allowedOrigins as $allowed) {
             if (self::originMatches($requestParsed, $allowed)) {
-                // リクエストの生文字列ではなく、管理者が設定した文字列を返す
+                // Returns the string the administrator set, not the request's raw string.
                 return $allowed;
             }
         }
@@ -81,10 +81,10 @@ final class UrlUtils
     }
 
     /**
-     * パース済みリクエストオリジンが許可オリジン文字列と一致するか判定する。
+     * Tells whether a parsed request origin matches an allowed origin string.
      *
-     * @param array<string, int|string> $requestParsed parse_url() で分解済みのリクエストオリジン
-     * @param string                    $allowed       許可オリジン文字列
+     * @param array<string, int|string> $requestParsed The request origin, split up by parse_url().
+     * @param string                    $allowed       The allowed origin string.
      */
     private static function originMatches(array $requestParsed, string $allowed): bool
     {

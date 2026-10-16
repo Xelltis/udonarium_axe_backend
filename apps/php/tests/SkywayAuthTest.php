@@ -5,18 +5,18 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see SkywayAuth} のテストケース。
+ * Test cases for {@see SkywayAuth}.
  *
- * JWT の構造（3 パート）、ヘッダー、ペイロードの各フィールド、
- * HMAC-SHA256 署名の検証、チャネル/ロビー/ピアの設定を網羅的にテストする。
+ * They test thoroughly the JWT's structure (three parts), its header, each field of the payload,
+ * the check of the HMAC-SHA256 signature, and the settings for channels, the lobby and peers.
  */
 class SkywayAuthTest extends TestCase
 {
     /**
-     * Base64URL エンコードされた文字列をデコードする。
+     * Decodes a Base64URL-encoded string.
      *
-     * @param  string $input Base64URL エンコード文字列
-     * @return string デコード済みバイト列
+     * @param  string $input The Base64URL-encoded string.
+     * @return string The decoded bytes.
      */
     private function base64UrlDecode(string $input): string
     {
@@ -27,11 +27,11 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * JWT の指定部分（header=0, payload=1）をデコードして配列で返す。
+     * Decodes the given part of a JWT (header=0, payload=1) and returns it as an array.
      *
-     * @param  string $token JWT 文字列
-     * @param  int    $part  0=ヘッダー, 1=ペイロード
-     * @return array<string, mixed> デコードされた連想配列
+     * @param  string $token The JWT string.
+     * @param  int    $part  0=header, 1=payload.
+     * @return array<string, mixed> The decoded associative array.
      */
     private function decodeJwtPart(string $token, int $part): array
     {
@@ -41,7 +41,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * generate() が 3 パート（header.payload.signature）の JWT を返すことを確認する。
+     * Checks that generate() returns a JWT in three parts (header.payload.signature).
      */
     public function testGenerateReturnsThreePartJwt(): void
     {
@@ -58,7 +58,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * JWT ヘッダーの alg が HS256、typ が JWT であることを確認する。
+     * Checks that the JWT header's alg is HS256 and its typ is JWT.
      */
     public function testGenerateHeaderIsCorrect(): void
     {
@@ -78,7 +78,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * ペイロードに jti・iat・exp・version の必須フィールドが正しく含まれることを確認する。
+     * Checks that the payload correctly holds the required fields jti, iat, exp and version.
      */
     public function testGeneratePayloadHasRequiredFields(): void
     {
@@ -101,7 +101,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * JWT の署名部分が HMAC-SHA256 で正しく検証可能であることを確認する。
+     * Checks that the JWT's signature can be verified correctly with HMAC-SHA256.
      */
     public function testGenerateSignatureIsVerifiable(): void
     {
@@ -132,7 +132,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * 指定した channelName がルームチャネルスコープに含まれることを確認する。
+     * Checks that the given channelName is in the room channel scope.
      */
     public function testGenerateChannelNameIsInRoomChannelScope(): void
     {
@@ -154,7 +154,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * lobbySize がロビーチャネル名に反映されることを確認する。
+     * Checks that lobbySize shows in the lobby channel name.
      */
     public function testGenerateLobbySizeIsReflectedInLobbyChannelName(): void
     {
@@ -176,7 +176,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * 指定した peerId がすべてのチャネルのメンバーに含まれることを確認する。
+     * Checks that the given peerId is among the members of every channel.
      */
     public function testGeneratePeerIdAppearsInEveryChannel(): void
     {
@@ -200,7 +200,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * 指定した appId がスコープの app.id に設定されることを確認する。
+     * Checks that the given appId is set as app.id in the scope.
      */
     public function testGenerateAppIdIsInScope(): void
     {
@@ -220,7 +220,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * iat を省略した場合に現在時刻が自動的に使用されることを確認する。
+     * Checks that the current time is used automatically when iat is left out.
      */
     public function testGenerateUsesCurrentTimeWhenIatNotProvided(): void
     {
@@ -240,7 +240,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * 異なる secret を使用した場合に異なる署名が生成されることを確認する。
+     * Checks that different secrets give different signatures.
      */
     public function testGenerateDifferentSecretsProduceDifferentSignatures(): void
     {
@@ -269,7 +269,7 @@ class SkywayAuthTest extends TestCase
     }
 
     /**
-     * jti を null（デフォルト）で呼び出した場合に UUID v4 形式の jti が生成されることを確認する。
+     * Checks that a jti in UUID v4 form is created when jti is null (the default).
      */
     public function testGenerateAutoGeneratesUuidWhenJtiIsNull(): void
     {

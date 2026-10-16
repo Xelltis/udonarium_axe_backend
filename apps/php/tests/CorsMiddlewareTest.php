@@ -5,14 +5,14 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see CorsMiddleware} のテストケース。
+ * Test cases for {@see CorsMiddleware}.
  *
- * Origin 検証、プリフライト処理、CORS ヘッダー付与、
- * 設定読み込みエラー時の振る舞いを検証する。
+ * They test the Origin check, the handling of preflight requests, adding the CORS headers,
+ * and what happens when the settings fail to load.
  */
 class CorsMiddlewareTest extends TestCase
 {
-    /** @var \Closure(): Response 何もしないダミーハンドラ */
+    /** @var \Closure(): Response A dummy handler that does nothing. */
     private \Closure $dummyNext;
 
     protected function setUp(): void
@@ -21,9 +21,9 @@ class CorsMiddlewareTest extends TestCase
     }
 
     /**
-     * テスト用 AppConfig を生成する。
+     * Creates an AppConfig for tests.
      *
-     * @param list<string> $origins 許可オリジン
+     * @param list<string> $origins The allowed origins.
      */
     private static function config(array $origins = ['https://example.com']): AppConfig
     {
@@ -36,10 +36,10 @@ class CorsMiddlewareTest extends TestCase
     }
 
 
-    // ─── Origin 検証 ─────────────────────────────────────────────────────────
+    // ─── Origin check ────────────────────────────────────────────────────────
 
     /**
-     * Origin ヘッダー未送信で 400 を返すことを確認する。
+     * Checks that it returns 400 when no Origin header is sent.
      */
     public function testReturns400WhenOriginMissing(): void
     {
@@ -49,7 +49,7 @@ class CorsMiddlewareTest extends TestCase
     }
 
     /**
-     * 許可されていないオリジンで 403 を返すことを確認する。
+     * Checks that it returns 403 for an origin that is not allowed.
      */
     public function testReturns403WhenOriginForbidden(): void
     {
@@ -61,10 +61,10 @@ class CorsMiddlewareTest extends TestCase
         $this->assertSame(403, $cors($this->dummyNext)->statusCode);
     }
 
-    // ─── プリフライト ────────────────────────────────────────────────────────
+    // ─── Preflight ───────────────────────────────────────────────────────────
 
     /**
-     * OPTIONS リクエストが 204 と CORS ヘッダーを返すことを確認する。
+     * Checks that an OPTIONS request gets 204 and the CORS headers.
      */
     public function testPreflightReturns204WithCorsHeaders(): void
     {
@@ -82,10 +82,10 @@ class CorsMiddlewareTest extends TestCase
         $this->assertSame('Origin', $response->headers['Vary']);
     }
 
-    // ─── 正常系 ──────────────────────────────────────────────────────────────
+    // ─── Happy path ──────────────────────────────────────────────────────────
 
     /**
-     * 正常リクエストでハンドラのレスポンスに CORS ヘッダーが付与されることを確認する。
+     * Checks that, for a valid request, the CORS headers are added to the handler's response.
      */
     public function testAddsCorsHeadersToHandlerResponse(): void
     {

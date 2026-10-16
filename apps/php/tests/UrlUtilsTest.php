@@ -5,17 +5,17 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see UrlUtils} のテストケース。
+ * Test cases for {@see UrlUtils}.
  *
- * parseAllowedOrigins() によるオリジン文字列パース、
- * isAllowedOrigin() による許可判定、findMatchedOrigin() によるマッチ検索を検証する。
+ * They test parsing origin strings with parseAllowedOrigins(),
+ * deciding what is allowed with isAllowedOrigin(), and finding a match with findMatchedOrigin().
  */
 class UrlUtilsTest extends TestCase
 {
     // ─── parseAllowedOrigins ─────────────────────────────────────────────────
 
     /**
-     * 単一のオリジン文字列が 1 要素の配列として返されることを確認する。
+     * Checks that a single origin string comes back as an array of one item.
      */
     public function testParseAllowedOriginsReturnsSingleOrigin(): void
     {
@@ -24,7 +24,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * カンマ区切りの複数オリジンが配列として正しくパースされることを確認する。
+     * Checks that several comma-separated origins are parsed correctly into an array.
      */
     public function testParseAllowedOriginsReturnsMultipleOrigins(): void
     {
@@ -33,7 +33,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * カンマ前後の空白がトリムされることを確認する。
+     * Checks that whitespace around the commas is trimmed.
      */
     public function testParseAllowedOriginsTrimsWhitespace(): void
     {
@@ -44,7 +44,7 @@ class UrlUtilsTest extends TestCase
     // ─── isAllowedOrigin ─────────────────────────────────────────────────────
 
     /**
-     * 許可リストに含まれるオリジンで true を返すことを確認する。
+     * Checks that it returns true for an origin on the allow list.
      */
     public function testIsAllowedOriginReturnsTrueForMatchingOrigin(): void
     {
@@ -54,7 +54,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * 許可リストに含まれないオリジンで false を返すことを確認する。
+     * Checks that it returns false for an origin not on the allow list.
      */
     public function testIsAllowedOriginReturnsFalseForNonMatchingOrigin(): void
     {
@@ -64,7 +64,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * ワイルドカード '*' が任意のオリジンを許可することを確認する。
+     * Checks that the wildcard '*' allows any origin.
      */
     public function testIsAllowedOriginReturnsTrueForWildcard(): void
     {
@@ -76,11 +76,11 @@ class UrlUtilsTest extends TestCase
     // ─── findMatchedOrigin ───────────────────────────────────────────────────
 
     /**
-     * マッチした場合に許可リスト側の文字列がそのまま返されることを確認する。
+     * Checks that, on a match, the string from the allow list is returned as it is.
      */
     public function testFindMatchedOriginReturnsAllowedString(): void
     {
-        // レスポンスには管理者が設定した文字列が返ること
+        // What comes back must be the string the administrator set.
         $result = UrlUtils::findMatchedOrigin(
             'https://example.com',
             ['https://example.com'],
@@ -89,7 +89,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * どのオリジンにもマッチしない場合に null を返すことを確認する。
+     * Checks that it returns null when no origin matches.
      */
     public function testFindMatchedOriginReturnsNullForNoMatch(): void
     {
@@ -101,7 +101,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * ワイルドカードにマッチした場合にリテラル文字列 '*' が返されることを確認する。
+     * Checks that the literal string '*' is returned when the wildcard matches.
      */
     public function testFindMatchedOriginReturnsWildcardLiteralString(): void
     {
@@ -110,7 +110,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * 不正な URL が渡された場合に null を返すことを確認する。
+     * Checks that it returns null when given an invalid URL.
      */
     public function testFindMatchedOriginRejectsInvalidUrl(): void
     {
@@ -119,7 +119,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * スキーム（http vs https）が異なる場合にマッチしないことを確認する。
+     * Checks that it does not match when the scheme differs (http vs https).
      */
     public function testFindMatchedOriginDistinguishesByScheme(): void
     {
@@ -131,7 +131,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * ポート番号が異なる場合にマッチしないことを確認する。
+     * Checks that it does not match when the port number differs.
      */
     public function testFindMatchedOriginDistinguishesByPort(): void
     {
@@ -143,7 +143,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * 明示的なポート番号が一致する場合にマッチすることを確認する。
+     * Checks that it matches when an explicit port number is the same.
      */
     public function testFindMatchedOriginMatchesWithExplicitPort(): void
     {
@@ -155,7 +155,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * 空文字列を渡した場合に空配列が返されることを確認する。
+     * Checks that an empty string gives an empty array.
      */
     public function testParseAllowedOriginsReturnsEmptyArrayForEmptyString(): void
     {
@@ -164,7 +164,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * 空白のみの文字列を渡した場合に空配列が返されることを確認する。
+     * Checks that a string of only whitespace gives an empty array.
      */
     public function testParseAllowedOriginsReturnsEmptyArrayForWhitespaceOnly(): void
     {
@@ -173,7 +173,7 @@ class UrlUtilsTest extends TestCase
     }
 
     /**
-     * カンマ間の空エントリがフィルタされることを確認する。
+     * Checks that empty entries between commas are filtered out.
      */
     public function testParseAllowedOriginsFiltersEmptyEntries(): void
     {
@@ -184,11 +184,11 @@ class UrlUtilsTest extends TestCase
     // ─── findMatchedOrigin: malformed allowed origin ─────────────────────────
 
     /**
-     * 許可リスト側に不正な URL が含まれていてもスキップして正常にマッチすることを確認する。
+     * Checks that an invalid URL on the allow list is skipped and the match still works.
      */
     public function testFindMatchedOriginSkipsMalformedAllowedOrigin(): void
     {
-        // 許可リスト側のオリジンが不正な URL でも他のエントリが評価される
+        // Even when an origin on the allow list is an invalid URL, the other entries are evaluated.
         $result = UrlUtils::findMatchedOrigin(
             'https://example.com',
             ['not-valid', 'https://example.com'],

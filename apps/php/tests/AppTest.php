@@ -6,10 +6,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see App} のテストケース。
+ * Test cases for {@see App}.
  *
- * パブリックルート、CORS 検証、トークン発行エンドポイントを含む
- * リクエスト→レスポンスのパイプライン全体を検証する。
+ * They test the whole pipeline from request to response, including the public routes,
+ * the CORS check and the endpoint that issues tokens.
  */
 class AppTest extends TestCase
 {
@@ -40,10 +40,10 @@ class AppTest extends TestCase
         }
     }
 
-    // ─── パブリックルート ────────────────────────────────────────────────────
+    // ─── Public routes ───────────────────────────────────────────────────────
 
     /**
-     * GET / がウェルカム JSON を返すことを確認する。
+     * Checks that GET / returns the welcome JSON.
      */
     public function testRootEndpointReturnsWelcomeJson(): void
     {
@@ -54,7 +54,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * GET /v1/status が "OK" を返すことを確認する。
+     * Checks that GET /v1/status returns "OK".
      */
     public function testStatusEndpointReturnsOk(): void
     {
@@ -65,7 +65,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * パブリックルートに未登録のメソッドで 405 を返すことを確認する。
+     * Checks that a public route returns 405 for a method not registered on it.
      */
     public function testPublicRouteReturnsMethodNotAllowed(): void
     {
@@ -74,10 +74,10 @@ class AppTest extends TestCase
         $this->assertSame(405, $response->statusCode);
     }
 
-    // ─── 設定エラー ──────────────────────────────────────────────────────────
+    // ─── Config errors ───────────────────────────────────────────────────────
 
     /**
-     * .env が見つからない場合にコンストラクタで例外を投げることを確認する。
+     * Checks that the constructor throws an exception when no .env is found.
      */
     public function testMissingConfigThrowsException(): void
     {
@@ -86,10 +86,10 @@ class AppTest extends TestCase
         new App('/nonexistent/dir');
     }
 
-    // ─── Origin 検証 ─────────────────────────────────────────────────────────
+    // ─── Origin check ────────────────────────────────────────────────────────
 
     /**
-     * Origin ヘッダー未送信で 400 を返すことを確認する。
+     * Checks that it returns 400 when no Origin header is sent.
      */
     public function testMissingOriginReturns400(): void
     {
@@ -101,7 +101,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * 許可されていないオリジンで 403 を返すことを確認する。
+     * Checks that it returns 403 for an origin that is not allowed.
      */
     public function testForbiddenOriginReturns403(): void
     {
@@ -112,10 +112,10 @@ class AppTest extends TestCase
         $this->assertSame(403, $response->statusCode);
     }
 
-    // ─── CORS プリフライト ───────────────────────────────────────────────────
+    // ─── CORS preflight ──────────────────────────────────────────────────────
 
     /**
-     * OPTIONS リクエストが 204 と CORS ヘッダーを返すことを確認する。
+     * Checks that an OPTIONS request gets 204 and the CORS headers.
      */
     public function testPreflightReturnsNoContentWithCorsHeaders(): void
     {
@@ -128,10 +128,10 @@ class AppTest extends TestCase
         $this->assertSame('Origin', $response->headers['Vary']);
     }
 
-    // ─── ルーティング ────────────────────────────────────────────────────────
+    // ─── Routing ─────────────────────────────────────────────────────────────
 
     /**
-     * 未登録パスが 404 を CORS ヘッダー付きで返すことを確認する。
+     * Checks that a path not registered returns 404 with the CORS headers.
      */
     public function testNotFoundIncludesCorsHeaders(): void
     {
@@ -144,7 +144,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * API ルートに未登録のメソッドで 405 を CORS ヘッダー付きで返すことを確認する。
+     * Checks that an API route returns 405 with the CORS headers for a method not registered on it.
      */
     public function testApiRouteMethodNotAllowedIncludesCorsHeaders(): void
     {
@@ -157,10 +157,10 @@ class AppTest extends TestCase
         $this->assertArrayHasKey('Access-Control-Allow-Origin', $response->headers);
     }
 
-    // ─── トークンエンドポイント ──────────────────────────────────────────────
+    // ─── Token endpoint ──────────────────────────────────────────────────────
 
     /**
-     * 正常なリクエストでトークンを含む 200 を返すことを確認する。
+     * Checks that a valid request gets 200 with a token.
      */
     public function testTokenEndpointReturnsToken(): void
     {
@@ -185,7 +185,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * レスポンスに CORS ヘッダーが付与されていることを確認する。
+     * Checks that the response has the CORS headers added.
      */
     public function testTokenResponseIncludesCorsHeaders(): void
     {
@@ -208,7 +208,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * Content-Type が application/json でない場合に 415 を返すことを確認する。
+     * Checks that it returns 415 when Content-Type is not application/json.
      */
     public function testTokenEndpointRejectsWrongContentType(): void
     {
@@ -226,7 +226,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * ボディが 64KB を超える場合に 413 を返すことを確認する。
+     * Checks that it returns 413 when the body is over 64KB.
      */
     public function testTokenEndpointRejectsOversizedBody(): void
     {
@@ -244,7 +244,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * 不正な JSON で 400 を返すことを確認する。
+     * Checks that it returns 400 for invalid JSON.
      */
     public function testTokenEndpointRejectsInvalidJson(): void
     {
@@ -262,7 +262,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * 必須フィールドが欠けている場合に 400 を返すことを確認する。
+     * Checks that it returns 400 when a required field is missing.
      */
     public function testTokenEndpointRejectsMissingFields(): void
     {
@@ -280,7 +280,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * formatVersion が不正な場合に 400 を返すことを確認する。
+     * Checks that it returns 400 when formatVersion is wrong.
      */
     public function testTokenEndpointRejectsWrongFormatVersion(): void
     {
@@ -302,7 +302,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * channelName が上限 (200文字) を超える場合に 400 を返すことを確認する。
+     * Checks that it returns 400 when channelName is over the limit (200 characters).
      */
     public function testTokenEndpointRejectsOversizedChannelName(): void
     {
@@ -324,13 +324,13 @@ class AppTest extends TestCase
     }
 
     /**
-     * スコープ名にワイルドカード等が含まれる場合に 400 を返すことを確認する。
+     * Checks that it returns 400 when a scope name has a wildcard or the like in it.
      *
-     * SkyWay はスコープ内の name で "*" をワイルドカードとして解釈するため、
-     * これを許すとトークンの権限が全チャンネル・全メンバーに拡大する。
+     * SkyWay reads "*" in a name in a scope as a wildcard, so letting it through
+     * would widen the token's permissions to every channel and every member.
      *
-     * @param string $channelName リクエストの channelName
-     * @param string $peerId      リクエストの peerId
+     * @param string $channelName The request's channelName.
+     * @param string $peerId      The request's peerId.
      */
     #[DataProvider('unsafeScopeNameProvider')]
     public function testTokenEndpointRejectsUnsafeScopeNames(string $channelName, string $peerId): void
@@ -353,7 +353,7 @@ class AppTest extends TestCase
     }
 
     /**
-     * @return array<string, array{string, string}> ケース名 => [channelName, peerId]
+     * @return array<string, array{string, string}> Case name => [channelName, peerId].
      */
     public static function unsafeScopeNameProvider(): array
     {

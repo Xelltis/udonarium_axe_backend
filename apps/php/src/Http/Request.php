@@ -3,26 +3,26 @@
 declare(strict_types=1);
 
 /**
- * HTTP リクエストを表すイミュータブルな値オブジェクト。
+ * An immutable value object that stands for an HTTP request.
  *
- * グローバル変数（$_SERVER, php://input）から生成するか、
- * テスト用に任意の値で生成できる。
+ * It can be created from the globals ($_SERVER, php://input),
+ * or from any values for tests.
  */
 final readonly class Request
 {
     /**
-     * php://input の読み取り上限 (64KB + 1 byte)。
+     * The limit on how much of php://input is read (64KB + 1 byte).
      *
-     * 1 byte 多く読むことで上限超過を検出できる。
+     * Reading 1 byte more shows when the body is over the limit.
      */
     private const int MAX_BODY_READ = 65537;
 
     /**
-     * @param string $method      HTTP メソッド（大文字正規化済み）
-     * @param string $path        リクエストパス（スクリプトディレクトリ除去済み）
-     * @param string $origin      Origin ヘッダーの値（空文字列 = 未送信）
-     * @param string $contentType Content-Type のメディアタイプ部分（空文字列 = 未送信）
-     * @param string $rawBody     リクエストボディの生データ
+     * @param string $method      The HTTP method (already normalized to upper case).
+     * @param string $path        The request path (with the script directory already taken off).
+     * @param string $origin      The value of the Origin header (empty when not sent).
+     * @param string $contentType The media type part of Content-Type (empty when not sent).
+     * @param string $rawBody     The raw request body.
      */
     private function __construct(
         public string $method,
@@ -33,12 +33,12 @@ final readonly class Request
     ) {}
 
     /**
-     * 実行環境のグローバル変数からリクエストを生成する。
+     * Creates a request from the globals of the environment it runs in.
      *
-     * サブディレクトリ運用にも対応し、SCRIPT_NAME のディレクトリ部分を
-     * REQUEST_URI から除去したパスを生成する。
+     * It also works when the app runs in a subdirectory: the path is REQUEST_URI with the
+     * directory part of SCRIPT_NAME taken off.
      *
-     * @return self 現在の HTTP リクエストを表すインスタンス
+     * @return self An instance for the current HTTP request.
      */
     public static function fromGlobals(): self
     {
@@ -55,17 +55,17 @@ final readonly class Request
     }
 
     /**
-     * 任意の値からリクエストを生成する。
+     * Creates a request from any values.
      *
-     * 主にテストで使用する。
+     * It is used mostly in tests.
      *
-     * @param string $method      HTTP メソッド（自動的に大文字に正規化される）
-     * @param string $path        リクエストパス
-     * @param string $origin      Origin ヘッダーの値
-     * @param string $contentType Content-Type のメディアタイプ部分
-     * @param string $body        リクエストボディ
+     * @param string $method      The HTTP method (normalized to upper case automatically).
+     * @param string $path        The request path.
+     * @param string $origin      The value of the Origin header.
+     * @param string $contentType The media type part of Content-Type.
+     * @param string $body        The request body.
      *
-     * @return self 指定した値を持つインスタンス
+     * @return self An instance with the given values.
      */
     public static function create(
         string $method,
@@ -78,11 +78,11 @@ final readonly class Request
     }
 
     /**
-     * リクエストボディを返す。
+     * Returns the request body.
      *
-     * @param int $maxBytes ボディの最大許容バイト数
+     * @param int $maxBytes The most bytes the body may have.
      *
-     * @return string|false ボディ文字列。$maxBytes を超える場合は false
+     * @return string|false The body string, or false when it is over $maxBytes.
      */
     public function body(int $maxBytes): string|false
     {
@@ -94,10 +94,10 @@ final readonly class Request
     }
 
     /**
-     * サブディレクトリ配置を考慮したリクエストパスを解決する。
+     * Works out the request path, allowing for the app being placed in a subdirectory.
      *
-     * SCRIPT_NAME のディレクトリ部（例: "/backend"）を REQUEST_URI から除去し、
-     * ドキュメントルート直下でもサブディレクトリ配下でも同じパス比較を可能にする。
+     * It takes the directory part of SCRIPT_NAME (for example "/backend") off REQUEST_URI, so that
+     * paths compare the same way right under the document root and in a subdirectory.
      */
     private static function resolvePath(string $scriptName, string $requestUri): string
     {
@@ -113,7 +113,7 @@ final readonly class Request
     }
 
     /**
-     * Content-Type ヘッダーからメディアタイプ部分を抽出する。
+     * Takes the media type part out of a Content-Type header.
      *
      * "application/json; charset=utf-8" → "application/json"
      */

@@ -5,17 +5,17 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see Router} のテストケース。
+ * Test cases for {@see Router}.
  *
- * メソッドチェーンによるルート登録、ミドルウェアのパスパターンマッチ、
- * notFound フォールバック、メソッド不一致時の 405 応答を検証する。
+ * They test registering routes by method chaining, matching middleware by path pattern,
+ * the notFound fallback, and the 405 answer when the method does not match.
  */
 class RouterTest extends TestCase
 {
-    // ─── ルートディスパッチ ──────────────────────────────────────────────────
+    // ─── Route dispatch ──────────────────────────────────────────────────────
 
     /**
-     * 登録済みハンドラが正しくディスパッチされ、レスポンスを返すことを確認する。
+     * Checks that a registered handler is dispatched correctly and returns its response.
      */
     public function testDispatchCallsRegisteredHandler(): void
     {
@@ -27,7 +27,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * dispatch() のメソッド比較が大文字小文字を区別しないことを確認する。
+     * Checks that dispatch() compares methods without regard to case.
      */
     public function testDispatchIsMethodCaseInsensitive(): void
     {
@@ -39,7 +39,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * 未登録のパスに対してデフォルト 404 を返すことを確認する。
+     * Checks that it returns the default 404 for a path not registered.
      */
     public function testDispatchReturnsDefault404ForUnknownPath(): void
     {
@@ -50,7 +50,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * パスは登録済みだがメソッドが異なる場合に 405 を返すことを確認する。
+     * Checks that it returns 405 when the path is registered but the method is different.
      */
     public function testDispatchReturns405ForWrongMethod(): void
     {
@@ -61,7 +61,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * 405 レスポンスに Allow ヘッダーが含まれ、許可メソッドが列挙されることを確認する。
+     * Checks that a 405 response has an Allow header that lists the allowed methods.
      */
     public function testDispatchReturnsAllowHeaderIn405(): void
     {
@@ -79,7 +79,7 @@ class RouterTest extends TestCase
     // ─── notFound ────────────────────────────────────────────────────────────
 
     /**
-     * notFound() で登録したハンドラが呼ばれることを確認する。
+     * Checks that the handler registered with notFound() is called.
      */
     public function testNotFoundHandlerIsCalled(): void
     {
@@ -91,10 +91,10 @@ class RouterTest extends TestCase
         $this->assertSame('Custom Not Found', $response->body);
     }
 
-    // ─── ミドルウェア（use） ─────────────────────────────────────────────────
+    // ─── Middleware (use) ────────────────────────────────────────────────────
 
     /**
-     * use() で登録したミドルウェアがプレフィックスマッチでハンドラをラップすることを確認する。
+     * Checks that middleware registered with use() wraps the handler when the prefix matches.
      */
     public function testUseAppliesMiddlewareToMatchingPrefix(): void
     {
@@ -110,7 +110,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * use() で登録したミドルウェアが 405 レスポンスもラップすることを確認する。
+     * Checks that middleware registered with use() wraps a 405 response too.
      */
     public function testUseAppliesMiddlewareTo405(): void
     {
@@ -126,7 +126,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * パターンに一致しないパスにはミドルウェアが適用されないことを確認する。
+     * Checks that middleware is not applied to paths that do not match its pattern.
      */
     public function testUseDoesNotApplyToNonMatchingPaths(): void
     {
@@ -142,7 +142,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * ワイルドカード * が全パスにマッチすることを確認する。
+     * Checks that the wildcard * matches every path.
      */
     public function testUseWildcardMatchesAllPaths(): void
     {
@@ -158,7 +158,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * ミドルウェアがハンドラを呼ばずに短絡復帰できることを確認する。
+     * Checks that middleware can short-circuit and return without calling the handler.
      */
     public function testMiddlewareCanShortCircuit(): void
     {
@@ -172,7 +172,7 @@ class RouterTest extends TestCase
     }
 
     /**
-     * use() で完全一致パターンがマッチすることを確認する。
+     * Checks that an exact pattern given to use() matches.
      */
     public function testUseExactPathMatch(): void
     {

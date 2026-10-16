@@ -1,12 +1,12 @@
 FROM php:8.5.9-apache
 
-# mod_rewrite を有効化
+# Enables mod_rewrite.
 RUN a2enmod rewrite
 
-# .htaccess による設定変更を許可する Apache バーチャルホスト設定
+# The Apache virtual host setting that lets .htaccess change the configuration.
 RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
-# Composer が必要とするパッケージをインストール
+# Installs the packages Composer needs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     unzip \
@@ -14,11 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && docker-php-ext-install zip \
     && rm -rf /var/lib/apt/lists/*
 
-# PCOV をインストール（コードカバレッジ計測用・テスト時のみ有効化）
+# Installs PCOV (for measuring code coverage, enabled only for tests).
 RUN pecl install pcov && docker-php-ext-enable pcov
 
-# Composer をインストール
+# Installs Composer.
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# ドキュメントルートをプロジェクトルートに設定
+# Sets the document root to the project root.
 ENV APACHE_DOCUMENT_ROOT=/var/www/html

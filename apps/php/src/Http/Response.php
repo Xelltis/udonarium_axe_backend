@@ -3,18 +3,18 @@
 declare(strict_types=1);
 
 /**
- * HTTP レスポンスを表すイミュータブルな値オブジェクト。
+ * An immutable value object that stands for an HTTP response.
  *
- * ファクトリメソッドで JSON・テキスト・204 のレスポンスを生成し、
- * {@see send()} で実際に送出する。
+ * The factory methods create JSON, text and 204 responses,
+ * and {@see send()} actually sends them out.
  */
 final readonly class Response
 {
     /**
-     * @param int                  $statusCode  HTTP ステータスコード
-     * @param string               $contentType Content-Type ヘッダー値（空文字列 = 省略）
-     * @param string               $body        レスポンスボディ
-     * @param array<string, string> $headers     追加レスポンスヘッダー
+     * @param int                  $statusCode  The HTTP status code.
+     * @param string               $contentType The Content-Type header value (empty to leave it out).
+     * @param string               $body        The response body.
+     * @param array<string, string> $headers     Extra response headers.
      */
     private function __construct(
         public int    $statusCode,
@@ -24,14 +24,14 @@ final readonly class Response
     ) {}
 
     /**
-     * JSON レスポンスを生成する。
+     * Creates a JSON response.
      *
-     * @param int   $code HTTP ステータスコード
-     * @param mixed $data JSON エンコード対象のデータ
+     * @param int   $code The HTTP status code.
+     * @param mixed $data The data to encode as JSON.
      *
-     * @return self Content-Type: application/json のレスポンス
+     * @return self A response with Content-Type: application/json.
      *
-     * @throws \JsonException エンコードに失敗した場合
+     * @throws \JsonException When encoding fails.
      */
     public static function json(int $code, mixed $data): self
     {
@@ -43,12 +43,12 @@ final readonly class Response
     }
 
     /**
-     * プレーンテキストレスポンスを生成する。
+     * Creates a plain text response.
      *
-     * @param int    $code HTTP ステータスコード
-     * @param string $body レスポンスボディ
+     * @param int    $code The HTTP status code.
+     * @param string $body The response body.
      *
-     * @return self Content-Type: text/plain のレスポンス
+     * @return self A response with Content-Type: text/plain.
      */
     public static function text(int $code, string $body): self
     {
@@ -60,9 +60,9 @@ final readonly class Response
     }
 
     /**
-     * 204 No Content レスポンスを生成する。
+     * Creates a 204 No Content response.
      *
-     * @return self ボディ・Content-Type のない 204 レスポンス
+     * @return self A 204 response with no body and no Content-Type.
      */
     public static function noContent(): self
     {
@@ -70,11 +70,11 @@ final readonly class Response
     }
 
     /**
-     * 追加ヘッダーをマージした新しいインスタンスを返す。
+     * Returns a new instance with extra headers merged in.
      *
-     * @param array<string, string> $extra マージする追加ヘッダー
+     * @param array<string, string> $extra The extra headers to merge.
      *
-     * @return self ヘッダーが追加された新しいインスタンス
+     * @return self A new instance with the headers added.
      */
     public function withHeaders(array $extra): self
     {
@@ -82,10 +82,10 @@ final readonly class Response
     }
 
     /**
-     * レスポンスを送出する。
+     * Sends the response.
      *
-     * ステータスコード・Content-Type・セキュリティヘッダー・追加ヘッダーを
-     * 送出し、ボディを出力する。
+     * It sends the status code, Content-Type, the security headers and the extra headers,
+     * then writes out the body.
      *
      * @codeCoverageIgnore
      */

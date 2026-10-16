@@ -5,10 +5,10 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * index.php の結合テスト。
+ * Integration tests for index.php.
  *
- * PHP ビルトインサーバーで index.php を起動し、
- * 実際の HTTP リクエストを送ってレスポンスを検証する。
+ * They start index.php on PHP's built-in server,
+ * send it real HTTP requests and check the responses.
  */
 class IndexTest extends TestCase
 {
@@ -33,7 +33,7 @@ class IndexTest extends TestCase
             'ACCESS_CONTROL_ALLOW_ORIGIN=https://example.com',
         ]));
 
-        // index.php のコピーを作成（baseDir をテスト用ディレクトリに差し替え）
+        // Creates a copy of index.php (with baseDir swapped for the test directory).
         $projectRoot = dirname(__DIR__);
         $entrypoint  = $this->envDir . '/index.php';
         file_put_contents($entrypoint, strtr(
@@ -41,7 +41,7 @@ class IndexTest extends TestCase
             ['__DIR__' => var_export($this->envDir, true)],
         ));
 
-        // src/ へのシンボリックリンクを作成
+        // Creates a symbolic link to src/.
         symlink($projectRoot . '/src', $this->envDir . '/src');
 
         $port           = $this->findAvailablePort();
@@ -53,7 +53,7 @@ class IndexTest extends TestCase
             $pipes,
         );
 
-        // サーバー起動待ち
+        // Waits for the server to start.
         $this->waitForServer($port);
     }
 
@@ -67,10 +67,10 @@ class IndexTest extends TestCase
         $this->cleanup($this->envDir);
     }
 
-    // ─── テストケース ────────────────────────────────────────────────────────
+    // ─── Test cases ──────────────────────────────────────────────────────────
 
     /**
-     * GET / がウェルカム JSON を返すことを確認する。
+     * Checks that GET / returns the welcome JSON.
      */
     public function testRootEndpointReturnsWelcomeJson(): void
     {
@@ -82,7 +82,7 @@ class IndexTest extends TestCase
     }
 
     /**
-     * GET /v1/status が "OK" を返すことを確認する。
+     * Checks that GET /v1/status returns "OK".
      */
     public function testStatusEndpointReturnsOk(): void
     {
@@ -93,7 +93,7 @@ class IndexTest extends TestCase
     }
 
     /**
-     * 未登録パスが 404 を返すことを確認する。
+     * Checks that a path not registered returns 404.
      */
     public function testNotFoundReturns404(): void
     {
@@ -103,7 +103,7 @@ class IndexTest extends TestCase
     }
 
     /**
-     * POST /v1/skyway2023/token が正常にトークンを返すことを確認する。
+     * Checks that POST /v1/skyway2023/token returns a token.
      */
     public function testTokenEndpointReturnsToken(): void
     {
@@ -124,7 +124,7 @@ class IndexTest extends TestCase
         $this->assertArrayHasKey('token', $decoded);
     }
 
-    // ─── ヘルパー ────────────────────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private function findAvailablePort(): int
     {

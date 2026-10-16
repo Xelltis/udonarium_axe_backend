@@ -3,15 +3,15 @@
 declare(strict_types=1);
 
 /**
- * Hono ライクなメソッドチェーン HTTP ルーター。
+ * An HTTP router with method chaining, in the style of Hono.
  *
- * {@see get()} / {@see post()} でルートを、{@see use()} でパスパターン付きミドルウェアを、
- * {@see notFound()} でフォールバックハンドラを宣言的に登録し、
- * {@see dispatch()} でリクエストに一致するハンドラを実行する。
+ * Routes are registered with {@see get()} / {@see post()}, middleware for a path pattern with
+ * {@see use()} and the fallback handler with {@see notFound()}, all declaratively, and
+ * {@see dispatch()} runs the handler that matches the request.
  */
 final class Router
 {
-    /** @var array<string, array<string, \Closure(): Response>> パス → メソッド → ハンドラ */
+    /** @var array<string, array<string, \Closure(): Response>> Path → method → handler. */
     private array $routes = [];
 
     /** @var list<array{pattern: string, middleware: \Closure(\Closure(): Response): Response}> */
@@ -21,9 +21,9 @@ final class Router
     private ?\Closure $notFoundHandler = null;
 
     /**
-     * GET ルートを登録する。
+     * Registers a GET route.
      *
-     * @param \Closure(): Response $handler ハンドラ
+     * @param \Closure(): Response $handler The handler.
      */
     public function get(string $path, \Closure $handler): self
     {
@@ -31,9 +31,9 @@ final class Router
     }
 
     /**
-     * POST ルートを登録する。
+     * Registers a POST route.
      *
-     * @param \Closure(): Response $handler ハンドラ
+     * @param \Closure(): Response $handler The handler.
      */
     public function post(string $path, \Closure $handler): self
     {
@@ -41,13 +41,13 @@ final class Router
     }
 
     /**
-     * パスパターンにミドルウェアを登録する。
+     * Registers middleware for a path pattern.
      *
-     * パターン末尾が /* の場合はプレフィックスマッチ、
-     * * は全パスマッチ、それ以外は完全一致。
-     * 登録順がそのまま実行順となる（先に登録したものが外側）。
+     * A pattern that ends in /* matches by prefix,
+     * * matches every path, and any other pattern must match exactly.
+     * Middleware runs in the order it is registered (what is registered first is on the outside).
      *
-     * @param \Closure(\Closure(): Response): Response $middleware ミドルウェア
+     * @param \Closure(\Closure(): Response): Response $middleware The middleware.
      */
     public function use(string $pattern, \Closure $middleware): self
     {
@@ -57,9 +57,9 @@ final class Router
     }
 
     /**
-     * パスが未登録の場合のフォールバックハンドラを登録する。
+     * Registers the fallback handler for when the path is not registered.
      *
-     * @param \Closure(): Response $handler ハンドラ
+     * @param \Closure(): Response $handler The handler.
      */
     public function notFound(\Closure $handler): self
     {
@@ -69,14 +69,14 @@ final class Router
     }
 
     /**
-     * リクエストをディスパッチしてレスポンスを返す。
+     * Dispatches a request and returns the response.
      *
-     * パスが未登録なら notFound ハンドラまたはデフォルト 404 を返す。
-     * パスは存在するがメソッドが未登録なら 405 を返す。
-     * パスパターンに一致するミドルウェアがあれば、ハンドラ・405 の両方に適用する。
+     * For a path not registered, it returns the notFound handler's response or the default 404.
+     * When the path is there but the method is not registered, it returns 405.
+     * Middleware whose path pattern matches is applied to both the handler and the 405.
      *
-     * @param string $method HTTP メソッド（大文字・小文字は問わない）
-     * @param string $path   リクエストパス
+     * @param string $method The HTTP method (case does not matter).
+     * @param string $path   The request path.
      */
     public function dispatch(string $method, string $path): Response
     {

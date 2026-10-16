@@ -8,10 +8,10 @@ require_once __DIR__ . '/../Http/Response.php';
 require_once __DIR__ . '/../Util/UrlUtils.php';
 
 /**
- * CORS ミドルウェア。
+ * The CORS middleware.
  *
- * Origin 検証、プリフライト処理、CORS ヘッダー付与を一括で行う。
- * 検証に失敗した場合はハンドラを呼ばずにエラーレスポンスを返す。
+ * It checks the Origin, answers preflight requests and adds the CORS headers, all in one place.
+ * When the check fails, it returns an error response without calling the handler.
  */
 final readonly class CorsMiddleware
 {
@@ -21,9 +21,9 @@ final readonly class CorsMiddleware
     ) {}
 
     /**
-     * ミドルウェアとしてハンドラをラップする。
+     * Wraps a handler, as middleware.
      *
-     * @param \Closure(): Response $next 次のハンドラ
+     * @param \Closure(): Response $next The next handler.
      */
     public function __invoke(\Closure $next): Response
     {

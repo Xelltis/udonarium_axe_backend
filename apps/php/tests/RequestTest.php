@@ -5,18 +5,18 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * {@see Request} のテストケース。
+ * Test cases for {@see Request}.
  *
- * ファクトリメソッド create() による手動生成と、
- * fromGlobals() によるグローバル変数からの生成の両方を検証する。
+ * They test both creating one by hand with the factory method create(),
+ * and creating one from the globals with fromGlobals().
  */
 class RequestTest extends TestCase
 {
-    /** @var array<string, mixed> setUp 時に退避した $_SERVER の状態 */
+    /** @var array<string, mixed> The state of $_SERVER, put aside in setUp. */
     private array $savedServer;
 
     /**
-     * テスト前に $_SERVER を退避する。
+     * Puts $_SERVER aside before each test.
      */
     protected function setUp(): void
     {
@@ -24,7 +24,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * テスト後に $_SERVER を復元して副作用を防ぐ。
+     * Puts $_SERVER back after each test, so it leaves no side effects.
      */
     protected function tearDown(): void
     {
@@ -34,7 +34,7 @@ class RequestTest extends TestCase
     // ─── create() ────────────────────────────────────────────────────────────
 
     /**
-     * create() で生成したリクエストの method が大文字化されることを確認する。
+     * Checks that the method of a request created with create() is turned into upper case.
      */
     public function testCreateSetsMethodUppercased(): void
     {
@@ -43,7 +43,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * create() で指定したパスがそのまま設定されることを確認する。
+     * Checks that the path given to create() is set as it is.
      */
     public function testCreateSetsPath(): void
     {
@@ -52,7 +52,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * create() で指定したオリジンがそのまま設定されることを確認する。
+     * Checks that the origin given to create() is set as it is.
      */
     public function testCreateSetsOrigin(): void
     {
@@ -61,7 +61,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * create() でオリジンを省略した場合、空文字列がデフォルトになることを確認する。
+     * Checks that the origin defaults to an empty string when create() is not given one.
      */
     public function testCreateDefaultsOriginToEmptyString(): void
     {
@@ -70,7 +70,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * create() で指定した contentType がそのまま設定されることを確認する。
+     * Checks that the contentType given to create() is set as it is.
      */
     public function testCreateSetsContentType(): void
     {
@@ -79,7 +79,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * create() で contentType を省略した場合、空文字列がデフォルトになることを確認する。
+     * Checks that contentType defaults to an empty string when create() is not given one.
      */
     public function testCreateDefaultsContentTypeToEmptyString(): void
     {
@@ -88,7 +88,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * body() がサイズ上限以内のとき、ボディ文字列をそのまま返すことを確認する。
+     * Checks that body() returns the body as it is when it is within the size limit.
      */
     public function testBodyReturnsBodyWhenUnderLimit(): void
     {
@@ -98,7 +98,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * body() がサイズ上限を超えるとき、false を返すことを確認する。
+     * Checks that body() returns false when the body is over the size limit.
      */
     public function testBodyReturnsFalseWhenOverLimit(): void
     {
@@ -108,7 +108,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * body() がちょうどサイズ上限のとき、ボディ文字列を返すことを確認する。
+     * Checks that body() returns the body when it is exactly at the size limit.
      */
     public function testBodyReturnsBodyAtExactLimit(): void
     {
@@ -120,7 +120,7 @@ class RequestTest extends TestCase
     // ─── fromGlobals() ───────────────────────────────────────────────────────
 
     /**
-     * fromGlobals() が $_SERVER からメソッド・パス・オリジンを正しく読み取ることを確認する。
+     * Checks that fromGlobals() reads the method, path and origin from $_SERVER correctly.
      */
     public function testFromGlobalsReadsMethodPathAndOrigin(): void
     {
@@ -136,7 +136,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * SCRIPT_NAME のサブディレクトリプレフィックスが REQUEST_URI から除去されることを確認する。
+     * Checks that the subdirectory prefix from SCRIPT_NAME is taken off REQUEST_URI.
      */
     public function testFromGlobalsStripsSubdirectoryPrefix(): void
     {
@@ -149,7 +149,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * プレフィックス除去後にパスが空になる場合、'/' に正規化されることを確認する。
+     * Checks that a path left empty once the prefix is taken off is normalized to '/'.
      */
     public function testFromGlobalsEmptyPathAfterStripBecomesSlash(): void
     {
@@ -162,7 +162,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * REQUEST_URI が SCRIPT_NAME のディレクトリと一致しない場合、パスがそのまま残ることを確認する。
+     * Checks that the path stays as it is when REQUEST_URI does not match SCRIPT_NAME's directory.
      */
     public function testFromGlobalsDoesNotStripWhenPathDoesNotMatchScriptDir(): void
     {
@@ -175,7 +175,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * REQUEST_METHOD が未設定の場合、デフォルトで 'GET' になることを確認する。
+     * Checks that the method defaults to 'GET' when REQUEST_METHOD is not set.
      */
     public function testFromGlobalsDefaultsMethodToGetWhenMissing(): void
     {
@@ -188,7 +188,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * HTTP_ORIGIN が未設定の場合、origin が空文字列になることを確認する。
+     * Checks that origin is an empty string when HTTP_ORIGIN is not set.
      */
     public function testFromGlobalsDefaultsOriginToEmptyWhenMissing(): void
     {
@@ -202,7 +202,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * fromGlobals() でも method が大文字化されることを確認する。
+     * Checks that fromGlobals() also turns the method into upper case.
      */
     public function testFromGlobalsUppercasesMethod(): void
     {
@@ -215,7 +215,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * fromGlobals() が CONTENT_TYPE からメディアタイプ部分を抽出することを確認する。
+     * Checks that fromGlobals() takes the media type part out of CONTENT_TYPE.
      */
     public function testFromGlobalsExtractsContentType(): void
     {
@@ -229,7 +229,7 @@ class RequestTest extends TestCase
     }
 
     /**
-     * CONTENT_TYPE が未設定の場合、contentType が空文字列になることを確認する。
+     * Checks that contentType is an empty string when CONTENT_TYPE is not set.
      */
     public function testFromGlobalsDefaultsContentTypeToEmptyWhenMissing(): void
     {

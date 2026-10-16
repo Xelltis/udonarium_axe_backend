@@ -3,18 +3,18 @@
 declare(strict_types=1);
 
 /**
- * アプリケーション設定を保持するイミュータブルな値オブジェクト。
+ * An immutable value object that holds the application's settings.
  *
- * .env ファイルまたは環境変数配列から SkyWay 認証に必要な設定値を読み込み、
- * バリデーション済みのインスタンスを生成する。
+ * It reads the settings that SkyWay authentication needs from a .env file or an array of
+ * environment variables, and creates a validated instance.
  */
 final readonly class AppConfig
 {
     /**
-     * @param string   $appId          SkyWay アプリケーション ID
-     * @param string   $secret         SkyWay シークレットキー
-     * @param int      $lobbySize      ロビーチャンネルの最大数
-     * @param string[] $allowedOrigins CORS で許可するオリジンのリスト
+     * @param string   $appId          The SkyWay application id.
+     * @param string   $secret         The SkyWay secret key.
+     * @param int      $lobbySize      How many lobby channels there are at most.
+     * @param string[] $allowedOrigins The list of origins that CORS allows.
      */
     public function __construct(
         public string $appId,
@@ -24,16 +24,16 @@ final readonly class AppConfig
     ) {}
 
     /**
-     * .env ファイルを読み込んでインスタンスを生成する。
+     * Reads a .env file and creates an instance from it.
      *
-     * 候補パスを先頭から順に探し、最初に見つかった .env を使用する。
-     * 環境変数 ENV_PATH を設定すると任意のパスを最優先で使用できる。
+     * It looks through the candidate paths in order and uses the first .env it finds.
+     * Setting the environment variable ENV_PATH puts any path ahead of all the others.
      *
-     * @param string ...$candidates .env ファイルの候補パス（優先順）
+     * @param string ...$candidates The candidate paths for the .env file (in order of preference).
      *
-     * @return self バリデーション済みの設定インスタンス
+     * @return self The validated settings instance.
      *
-     * @throws \InvalidArgumentException .env が見つからない場合、または必須キーが欠けている場合
+     * @throws \InvalidArgumentException When no .env is found, or a required key is missing.
      */
     public static function load(string ...$candidates): self
     {
@@ -62,13 +62,13 @@ final readonly class AppConfig
     }
 
     /**
-     * 環境変数配列からインスタンスを生成する。
+     * Creates an instance from an array of environment variables.
      *
-     * @param array<string, string> $env キーと値のペアからなる環境変数配列
+     * @param array<string, string> $env The environment variables, as pairs of key and value.
      *
-     * @return self バリデーション済みの設定インスタンス
+     * @return self The validated settings instance.
      *
-     * @throws \InvalidArgumentException SKYWAY_APP_ID または SKYWAY_SECRET が未設定の場合
+     * @throws \InvalidArgumentException When SKYWAY_APP_ID or SKYWAY_SECRET is not set.
      */
     public static function fromEnv(array $env): self
     {
@@ -89,13 +89,13 @@ final readonly class AppConfig
     }
 
     /**
-     * ロビーサイズ文字列を正の整数にパースする。
+     * Parses a lobby size string into a positive integer.
      *
-     * @param string $value パース対象の文字列
+     * @param string $value The string to parse.
      *
-     * @return int 1 以上の整数
+     * @return int An integer of 1 or more.
      *
-     * @throws \InvalidArgumentException 値が正の整数でない場合
+     * @throws \InvalidArgumentException When the value is not a positive integer.
      */
     private static function parseLobbySize(string $value): int
     {

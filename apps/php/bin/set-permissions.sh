@@ -1,13 +1,13 @@
 #!/bin/bash
 # ------------------------------------------------------------------
-# さくらのレンタルサーバー向けパーミッション設定スクリプト
+# A script that sets file permissions for Sakura Rental Server.
 #
-# CGI / FastCGI (suEXEC) 環境を想定。
-# デプロイ先ディレクトリのルートで実行してください。
+# It assumes a CGI / FastCGI (suEXEC) setup.
+# Run it at the root of the directory deployed to.
 #
-# 使い方:
-#   bash bin/set-permissions.sh            # カレントディレクトリに適用
-#   bash bin/set-permissions.sh /path/to   # 指定ディレクトリに適用
+# Usage:
+#   bash bin/set-permissions.sh            # Applies to the current directory.
+#   bash bin/set-permissions.sh /path/to   # Applies to the given directory.
 # ------------------------------------------------------------------
 
 set -euo pipefail
@@ -21,13 +21,13 @@ fi
 
 echo "==> パーミッションを設定します: ${TARGET}"
 
-# ── ディレクトリ: 755 ─────────────────────────────────────────────
+# ── Directories: 755 ──────────────────────────────────────────────
 find "${TARGET}" -type d -exec chmod 755 {} +
 
-# ── 一般ファイル: 644 ────────────────────────────────────────────
+# ── Regular files: 644 ───────────────────────────────────────────
 find "${TARGET}" -type f -exec chmod 644 {} +
 
-# ── .env（機密情報）: 600 ────────────────────────────────────────
+# ── .env (secrets): 600 ──────────────────────────────────────────
 if [[ -f "${TARGET}/.env" ]]; then
     chmod 600 "${TARGET}/.env"
     echo "    .env                -> 600"

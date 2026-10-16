@@ -1,4 +1,4 @@
-# apps/php に移す前と同じプロジェクト名にして、コンテナ名を変えない
+# Keeps the project name from before the move to apps/php, so the container names stay the same.
 name: udonarium_axe_backend
 
 services:
@@ -8,11 +8,11 @@ services:
     ports:
       - "3000:80"
     volumes:
-      # ソースコードをマウント（ホットリロード対応）
+      # Mounts the source code (for hot reloading).
       - .:/var/www/html
     environment:
-      # .env ファイルから読み込む（compose の env_file とは別に PHP 側で読む）
+      # Settings are read from the .env file (PHP reads it itself, apart from compose's env_file).
       APACHE_LOG_DIR: /var/log/apache2
-    # 起動時に composer install を実行してから Apache を起動する
+    # Runs composer install on start, then starts Apache.
     command: >-
       bash -c "composer install --no-interaction --quiet && apache2-foreground"
