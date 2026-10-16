@@ -1,4 +1,4 @@
-import { pbkdf2Sync } from 'node:crypto';
+import { pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 
 /** Workers の PBKDF2 が受ける回数の上限 */
 const ITERATIONS = 100_000;
@@ -24,4 +24,4 @@ export const hashPassword = (password: string): PasswordHash => {
 
 /** パスワードがハッシュと合うか。比べる時間は、どこで違っても同じにする */
 export const verifyPassword = (password: string, stored: PasswordHash): boolean =>
-  crypto.subtle.timingSafeEqual(derive(password, stored.salt), stored.hash);
+  timingSafeEqual(new Uint8Array(derive(password, stored.salt)), new Uint8Array(stored.hash));

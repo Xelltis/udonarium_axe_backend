@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { timingSafeEqual } from 'node:crypto';
 
 import { ACCOUNT_USER_ID_PREFIX } from '../../contracts/protocol';
 import type { Account } from '../../contracts/protocol';
@@ -48,7 +49,7 @@ const sha256 = async (text: string): Promise<string> =>
 const sameText = (a: string, b: string): boolean => {
   const left = new TextEncoder().encode(a);
   const right = new TextEncoder().encode(b);
-  return left.length === right.length && crypto.subtle.timingSafeEqual(left, right);
+  return left.length === right.length && timingSafeEqual(left, right);
 };
 
 /**
