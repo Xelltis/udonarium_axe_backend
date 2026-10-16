@@ -396,12 +396,18 @@ describe('joining a room', () => {
     // hello と、最後の time も数に入る
     for (let i = 0; i < MAX_FRAMES_PER_WINDOW - 2; i++) steady.client.emit([]);
     await steady.client.expectQuiet();
-    await harness.inside(roomKey, ({ engine, host }) => {
-      const { rates } = engine as unknown as { rates: WeakMap<object, { start: number }> };
-      const conn = host.connections().find((other) => host.seatOf(other)?.peerId === 'steady');
-      (rates.get(conn as object) as { start: number }).start -= RATE_WINDOW_MS;
-    });
+    /** その人の窓の始まりを動かす */
+    const moveWindow = (peerId: string, to: (start: number) => number) =>
+      harness.inside(roomKey, ({ engine, host }) => {
+        const { rates } = engine as unknown as { rates: WeakMap<object, { start: number }> };
+        const conn = host.connections().find((other) => host.seatOf(other)?.peerId === peerId);
+        const rate = rates.get(conn as object) as { start: number };
+        rate.start = to(rate.start);
+      });
+    await moveWindow('steady', (start) => start - RATE_WINDOW_MS);
     await steady.client.expectQuiet();
+    // 混んでいて送り終えるのに窓より長くかかっても、窓が改まらないように、窓の始まりを先へ置く
+    await moveWindow('noisy', () => Date.now() + RATE_WINDOW_MS);
     for (let i = 0; i < MAX_FRAMES_PER_WINDOW; i++) noisy.client.emit([]);
 
     expect((await noisy.client.next('error')).code).toBe('too-many-messages');

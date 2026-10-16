@@ -50,12 +50,8 @@ export abstract class ObjectIndex {
 
   /** 置いてあるものすべての索引 */
   protected abstract loadEntries(): Iterable<[string, StoredEntry]>;
-  /** 置いてあるものの索引の1つ。無ければ null */
-  protected abstract storedEntry(identifier: string): StoredEntry | null;
   /** 置いてある消した印すべて */
   protected abstract loadTombstones(): Iterable<string>;
-  /** 消した印が置いてあるか */
-  protected abstract storedTombstone(identifier: string): boolean;
   /** 置いてある中身。索引にあるものについてだけ尋ねる */
   protected abstract readData(identifier: string): unknown;
 
@@ -72,18 +68,17 @@ export abstract class ObjectIndex {
   }
 
   /**
-   * 書けなかったものの索引を、置き場所にあるとおりに戻す。戻さないと、索引は新しい版のまま中身は古い
-   * （または無い）ので、読むと版と中身が食い違うか、中身が見つからずに止まる
+   * 書けなかったものの索引を、置き場所にあるとおり（entry と、消した印があるか）に戻す。戻さないと、
+   * 索引は新しい版のまま中身は古い（または無い）ので、読むと版と中身が食い違うか、中身が見つからずに止まる
    */
-  protected resync(identifier: string): void {
-    const entry = this.storedEntry(identifier);
+  protected resync(identifier: string, entry: StoredEntry | null, tombstone: boolean): void {
     if (entry) {
       this.remember(identifier, entry);
     } else {
       this.forgetRelations(identifier);
       this.index.delete(identifier);
     }
-    if (this.storedTombstone(identifier)) this.deleted.add(identifier);
+    if (tombstone) this.deleted.add(identifier);
     else this.deleted.delete(identifier);
   }
 

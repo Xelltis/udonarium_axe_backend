@@ -49,11 +49,6 @@ export class RoomStore extends ObjectIndex {
     return this.indexRows().map((row) => [row.identifier, entryOf(row)]);
   }
 
-  protected storedEntry(identifier: string): StoredEntry | null {
-    const [row] = this.indexRows(identifier);
-    return row ? entryOf(row) : null;
-  }
-
   /** 索引に置く列。identifier を渡せば、その1行だけ */
   private indexRows(identifier?: string): IndexRow[] {
     const columns = 'SELECT identifier, alias, major, minor, owner, parent, view FROM objects';
@@ -67,13 +62,6 @@ export class RoomStore extends ObjectIndex {
       .exec<{ identifier: string }>('SELECT identifier FROM tombstones')
       .toArray()
       .map((row) => row.identifier);
-  }
-
-  protected storedTombstone(identifier: string): boolean {
-    return (
-      this.storage.sql.exec('SELECT 1 FROM tombstones WHERE identifier = ?', identifier).toArray()
-        .length > 0
-    );
   }
 
   protected readData(identifier: string): unknown {
@@ -123,7 +111,12 @@ export class RoomStore extends ObjectIndex {
           rows += this.storage.transactionSync(() => this.writePending(identifier, write));
         } catch (err) {
           console.error('Could not keep an object:', identifier, err);
-          this.resync(identifier);
+          const [row] = this.indexRows(identifier);
+          const marked =
+            this.storage.sql
+              .exec('SELECT 1 FROM tombstones WHERE identifier = ?', identifier)
+              .toArray().length > 0;
+          this.resync(identifier, row ? entryOf(row) : null, marked);
         }
       }
     }
