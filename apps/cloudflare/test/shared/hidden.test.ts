@@ -457,6 +457,16 @@ describe('writes that would uncover what is kept back', () => {
     await expectRefused(t, 'd2');
   });
 
+  it('refuses a player making a card in a deck that it owns, which it would follow through a shuffle', async () => {
+    const t = await deckTable();
+    const made = contextOf('d5', 1, 0.5, { parentIdentifier: 'deck-root', attributes: owned }, 'card');
+
+    t.alice.emit([update(made)]);
+
+    expect(ids(await t.alice.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'd5']]);
+    await t.bob.expectQuiet();
+  });
+
   it('lets a player rewrite, or move the deck of, a card the GM gave an owner in the deck', async () => {
     const t = await deckTable('deck-root', { owner: 'user-bob' });
     await place(t, [contextOf('shelf', 1, 0.5, { attributes: {} }, 'node')]);

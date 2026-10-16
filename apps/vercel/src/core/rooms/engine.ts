@@ -781,12 +781,12 @@ export class RoomEngine<C extends object> {
   /**
    * Whether a write leaves a card in a deck seen by someone who did not see it there before: by giving
    * a card in the deck an owner, or marking it as in someone's hand, or by moving into the deck a card
-   * with either, or what holds such a card. A new object counts for the cards moved under it before it
-   * came. The owner and the one whose hand a card is in see its face, which a deck keeps from
-   * everyone, so only the GM may. Axe takes the owner off a card it puts in a deck and gives it the
-   * deck's place, and taking a card out of the deck, as into a hand, is not this. Writes sent
-   * together are taken one by one, so drawing a card as its owner and putting it back would
-   * otherwise go through.
+   * with either, or what holds such a card, or by making such a card there. A new object also counts
+   * for the cards moved under it before it came. The owner and the one whose hand a card is in see
+   * its face, which a deck keeps from everyone, so only the GM may. Axe takes the owner off a card it
+   * puts in a deck and gives it the deck's place, and taking a card out of the deck, as into a hand,
+   * is not this. Writes sent together are taken one by one, so drawing a card as its owner and
+   * putting it back would otherwise go through.
    */
   private peeksIntoDeck(context: ObjectContext, existing: StoredEntry | null): boolean {
     const identifier = context.identifier;
@@ -794,7 +794,7 @@ export class RoomEngine<C extends object> {
     const written: DeckRow = { alias: context.aliasName, parent: next.parent, view: next.view };
     const after = (other: string) => (other === identifier ? written : this.store.lookup(other));
     const reached = existing?.parent === next.parent ? [] : this.store.descendantsOf(identifier);
-    return [...(existing ? [identifier] : []), ...reached].some((other) => {
+    return [identifier, ...reached].some((other) => {
       const before = this.seersInDeck(other, this.store.lookup);
       return this.seersInDeck(other, after).some((seer) => !before.includes(seer));
     });
