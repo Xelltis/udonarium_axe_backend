@@ -15,6 +15,7 @@ Axeは、部屋の画像と音声を置くときと受け取るときに、こ�
 | `OPTIONS` | `/v1/rooms/:roomKey/assets/:sha256` | ブラウザのプリフライトに答える                                         |
 | `POST`    | `/v1/rooms`                         | 部屋を作る（→ [部屋のプロトコル](/cloudflare/protocol#post-v1-rooms)） |
 | `GET`     | `/v1/rooms`                         | 部屋の一覧（新しい順に1000件まで）                                     |
+| `GET`     | `/v1/rooms/:roomKey`                | 部屋を鍵で1つ引く（一覧に入らない古い部屋も）                          |
 | `DELETE`  | `/v1/rooms/:roomKey`                | 部屋を削除する（その部屋のGMだけ）                                     |
 | `GET`     | `/v1/rooms/:roomKey/ws`             | 部屋に入る（WebSocket）                                                |
 

@@ -11,6 +11,7 @@
 | -------- | ----------------------------------- | -------------------------------------------- |
 | `POST`   | `/v1/rooms`                         | 部屋を作る                                   |
 | `GET`    | `/v1/rooms`                         | 部屋の一覧                                   |
+| `GET`    | `/v1/rooms/:roomKey`                | 部屋を鍵で1つ引く                            |
 | `DELETE` | `/v1/rooms/:roomKey`                | 部屋を削除する（その部屋のGMだけ）           |
 | `GET`    | `/v1/rooms/:roomKey/ws`             | 部屋に入る（WebSocketにつなぎ替える）        |
 | `HEAD`   | `/v1/rooms/:roomKey/assets/:sha256` | 部屋のアセットが置かれているか               |
@@ -20,7 +21,7 @@
 
 どれも、`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのページからしか受けません。
 ほかのOriginには`403 origin-not-allowed`を返します。
-`POST`・`DELETE`と`GET`の一覧、部屋のアセットは、CORSのプリフライトにも答えます。
+`POST`・`DELETE`と、`GET`の一覧と1つの部屋、部屋のアセットは、CORSのプリフライトにも答えます。
 
 ### `POST /v1/rooms`
 

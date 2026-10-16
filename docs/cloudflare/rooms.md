@@ -29,6 +29,7 @@ Axeの`assets/config.json`で`transport`を`"server"`にし、`backend.url`を�
 Axe（参加者ごと）
  │  POST /v1/rooms          … 部屋を作る
  │  GET  /v1/rooms          … 部屋の一覧
+ │  GET  /v1/rooms/<鍵>     … 部屋を鍵で1つ引く
  │  DELETE /v1/rooms/<鍵>   … 部屋を削除する（GMだけ）
  │  GET  /v1/rooms/<鍵>/ws  … 部屋に入る（WebSocket）
  └─ HEAD・GET・PUT /v1/rooms/<鍵>/assets/<SHA-256>
