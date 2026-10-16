@@ -27,12 +27,9 @@ pre-commit:
       run: npx eslint {staged_files}
 
     # The shared code is changed in apps/cloudflare and copied to apps/vercel; a copy left behind fails CI.
+    # It runs on every commit, in well under a second: a file moved out of the shared code is staged under
+    # its new name alone, which no pattern for the shared code would match.
     - name: shared code in step
-      glob:
-        - 'apps/{cloudflare,vercel}/src/core/**'
-        - 'apps/{cloudflare,vercel}/contracts/**'
-        - 'apps/{cloudflare,vercel}/test/shared/**'
-        - 'apps/{cloudflare,vercel}/package.json'
       run: node scripts/sync-shared.mjs --staged
 
 pre-push:

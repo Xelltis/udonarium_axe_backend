@@ -31,7 +31,7 @@ node scripts/sync-shared.mjs
 ```
 
 CIは、写しが正本と同じかと、共有のコードが使うパッケージ（hono・valibot・@msgpack/msgpack・bcdice）とPrettierの版が両方のアプリでそろっているかを確かめます。
-コミットのときも、共有のコードを変えていれば、stagedの写しが正本と同じかをlefthookが確かめます。
+コミットのたびに、stagedの写しが正本と同じかをlefthookが確かめます。食い違うときは、写したあと両方のアプリをステージし直してください。
 共有のコードは、Vercel版ではNodeがバンドルせずにそのまま読むので、相対`import`は`.js`まで書き、JSONの`import`には`with { type: 'json' }`を付けます。
 抜けたときに見つけるものは、それぞれ違います。
 
@@ -72,11 +72,11 @@ Vercel版を直すときは、テストが使うRedisも立てておきます（
 
 lefthookは、コミットとpushのときに次のことを確かめます。
 
-| フック       | 確かめること                                                                                                                                               |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `commit-msg` | コミットメッセージが[Conventional Commits](https://www.conventionalcommits.org/ja/)の形か（commitlint）                                                    |
-| `pre-commit` | stagedのTypeScriptにESLint（アプリごと。整形の崩れも見る）、PHPにPHP-CS-FixerとPHPStan（Dockerで動かす）、共有のコードを変えたらstagedの写しが正本と同じか |
-| `pre-push`   | pushに変更が入っているアプリの型検査とテスト（Vercel版は`check:esm`も。Redisが要る）                                                                       |
+| フック       | 確かめること                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commit-msg` | コミットメッセージが[Conventional Commits](https://www.conventionalcommits.org/ja/)の形か（commitlint）                                      |
+| `pre-commit` | stagedのTypeScriptにESLint（アプリごと。整形の崩れも見る）、PHPにPHP-CS-FixerとPHPStan（Dockerで動かす）、stagedの写しが正本と同じか（毎回） |
+| `pre-push`   | pushに変更が入っているアプリの型検査とテスト（Vercel版は`check:esm`も。Redisが要る）                                                         |
 
 フックは、手段を問わず迂回しないでください（`--no-verify`、`LEFTHOOK=0`、`core.hooksPath`の変更、設定の一時的な無効化）。
 落ちたら原因を直してから、もう一度コミットします。
