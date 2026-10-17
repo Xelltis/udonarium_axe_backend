@@ -47,10 +47,17 @@ export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
   });
 
   server.on('upgrade', (incoming: IncomingMessage, socket: Duplex, head: Buffer) => {
-    // The Node HTTP server does not take a request without a Host.
-    const request = new Request(`http://${incoming.headers.host as string}${incoming.url as string}`, {
-      headers: headersOf(incoming),
-    });
+    let request: Request;
+    try {
+      // The Node HTTP server does not take a request without a Host.
+      request = new Request(`http://${incoming.headers.host as string}${incoming.url as string}`, {
+        headers: headersOf(incoming),
+      });
+    } catch {
+      // A Host that makes no URL. Thrown out of this listener, it would take the whole process down.
+      void answer(socket, new Response(null, { status: 400 }));
+      return;
+    }
     let upgraded = false;
     upgrades.set(request, (onSocket) => {
       upgraded = true;

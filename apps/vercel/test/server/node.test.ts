@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { connect } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
@@ -63,6 +64,27 @@ describe('the Node server', () => {
     expect(answer).toEqual({ open: false, status: 403, body: '{"error":"origin-not-allowed"}' });
     expect(seen[0].headers.get('x-real-ip')).toBe('192.0.2.1');
     expect(seen[0].url).toBe(`http://127.0.0.1:${port}/v1/rooms/r/ws`);
+  });
+
+  it('answers 400 to a socket whose Host makes no URL, and keeps serving', async () => {
+    const fetchApp = vi.fn(() => new Response('hello'));
+    const port = await listen(fetchApp);
+
+    const reply = await new Promise<string>((resolve) => {
+      const socket = connect(port, '127.0.0.1', () =>
+        socket.write(
+          'GET /v1/rooms/r/ws HTTP/1.1\r\nHost: [\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n' +
+            'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n'
+        )
+      );
+      let text = '';
+      socket.on('data', (chunk: Buffer) => (text += chunk.toString()));
+      socket.on('end', () => resolve(text));
+    });
+
+    expect(reply).toMatch(/^HTTP\/1\.1 400 Bad Request\r\n/);
+    expect(fetchApp).not.toHaveBeenCalled();
+    expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('hello');
   });
 
   it('answers a status it has no words for', async () => {
