@@ -35,7 +35,7 @@ features:
   - icon:
       src: /icons/operate.svg
     title: 公開して運営する
-    details: 身内の外にも開くときに、料金の目安、安全のしくみ、預かるもの、申し立てへの応えかた、規約のひな形を確かめます。
+    details: 身内の外にも開くときに、費用の目安、安全のしくみ、預かるもの、申し立てへの応えかた、規約のひな形を確かめます。
     link: /operate/
     linkText: 運営するへ
 ---

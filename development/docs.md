@@ -41,7 +41,7 @@ npm run docs:check     # 見出しへのリンクが、どれもある見出し�
 | `docs/guide/`      | はじめに、どれを置くか、設置の準備、Axeの設定、よくある質問                           |
 | `docs/skyway/`     | SkyWay版のしくみ、SkyWayのアプリ、置きかた（Vercel・PHP）、設定、困ったとき           |
 | `docs/server/`     | サーバー版のしくみ、Discordのアプリ、置きかた（Cloudflare・Vercel）、設定、困ったとき |
-| `docs/operate/`    | 運用、料金と上限、安全のしくみ、運営の方針、規約のひな形、自動デプロイ                |
+| `docs/operate/`    | 運用、費用と上限、安全のしくみ、運営の方針、規約のひな形、自動デプロイ                |
 | `docs/reference/`  | トークン発行サーバーと部屋のサーバーのAPIと、エラーのコード                           |
 | `docs/.vitepress/` | 設定（`config.mts`）、見出しのidの作りかた（`slugify.mjs`）、テーマ                   |
 

@@ -236,7 +236,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: '運用', link: '/operate/' },
-          { text: '料金と上限', link: '/operate/costs' },
+          { text: '費用と上限', link: '/operate/costs' },
           { text: '安全のしくみ', link: '/operate/security' },
           { text: '運営の方針', link: '/operate/policies' },
           { text: 'プライバシーポリシーのひな形', link: '/operate/privacy-template' },

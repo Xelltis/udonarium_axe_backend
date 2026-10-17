@@ -329,5 +329,5 @@ Deployボタンで作ったリポジトリは、このリポジトリとは別�
 ## 次に読むもの
 
 - [設定項目](/server/configuration)
-- [運用](/operate/)と[料金と上限](/operate/costs)
+- [運用](/operate/)と[費用と上限](/operate/costs)
 - [困ったとき](/server/troubleshooting)

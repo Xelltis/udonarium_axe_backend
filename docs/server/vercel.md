@@ -19,7 +19,7 @@ Cloudflare版との違いは、次のとおりです。
 | 画像と音声のキャッシュ | データセンターに置く（カスタムドメインのとき） | 無い                                                                                                     |
 
 つなぎ直しのあいだも、ほかの人には、出たことも入ったことも見えません。
-料金の目安は[料金と上限](/operate/costs#vercel版)にあります。
+費用の目安は[費用と上限](/operate/costs#vercel版)にあります。
 
 ::: warning VercelのWebSocketはベータです
 部屋のサーバーは、VercelのWebSocketを使います。
@@ -112,7 +112,7 @@ VercelのMarketplaceから、Upstashの無料のRedis（**Upstash for Redis**）
 11. **Connect**を押します。
 
 Freeのプランで作れるデータベースは、1つのUpstashのアカウントに1つまでです。
-1か月に使えるコマンドの数などにも上限があります（→ [料金と上限](/operate/costs#vercel版)）。
+1か月に使えるコマンドの数などにも上限があります（→ [費用と上限](/operate/costs#vercel版)）。
 
 つないだら、変数が入ったかを確かめます。
 

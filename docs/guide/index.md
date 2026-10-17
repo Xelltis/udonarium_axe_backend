@@ -31,7 +31,7 @@ Axeの配信には、2つの方式があります。
   { title: '準備する', text: 'アカウントとOriginを確かめる', link: '/guide/prepare' },
   { title: 'サーバーを置く', text: '選んだものの手順で' },
   { title: 'Axeにつなぐ', text: 'config.jsonにURLを書く', link: '/guide/client-config' },
-  { title: '公開するなら', text: '料金・安全・規約を確かめる', link: '/operate/' },
+  { title: '公開するなら', text: '費用・安全・規約を確かめる', link: '/operate/' },
 ]" />
 
 1. [どれを置くか](/guide/choose)で、方式と置き場所を決めます。
@@ -46,7 +46,7 @@ Axeの配信には、2つの方式があります。
    | Vercel版（部屋のサーバー） | [Discordのアプリを作る](/server/discord) → [Vercelに置く](/server/vercel)         |
 
 4. [Axeの設定](/guide/client-config)で、Axeの`config.json`にサーバーのURLを書きます。
-5. 身内の外にも開くなら、[運営する](/operate/)の章で、料金、安全のしくみ、預かるもの、規約を確かめます。
+5. 身内の外にも開くなら、[運営する](/operate/)の章で、費用、安全のしくみ、預かるもの、規約を確かめます。
 
 うまくいかないときは、[SkyWay版で困ったとき](/skyway/troubleshooting)か[サーバー版で困ったとき](/server/troubleshooting)を見てください。
 
