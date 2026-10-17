@@ -832,8 +832,9 @@ export class RoomEngine<C extends object> {
       reply(SyncEvent.DELETE, { aliasName, identifier });
     } else if (verdict === 'accept') {
       const before = this.store.lookup(identifier);
-      const again = this.madeAgain(seat.peerId, identifier);
       this.store.put(context, owner);
+      // What waits for its parent is handed back once the parent comes, as it is seen then.
+      const again = delivered(this.kindOf(identifier, seat)) && this.madeAgain(seat.peerId, identifier);
       this.spread(context, before, seat, sender, push, corrected || again);
     }
   }
@@ -959,7 +960,8 @@ export class RoomEngine<C extends object> {
    * When something that waited for its parent (pending) comes into view, it is not handed to writer.
    * Only someone who has the parent (the one who sent the parent) can make a child that waits for
    * it, so writer has it already. But what a catalog had taken back while it waited for its parent
-   * is handed to writer too.
+   * is handed to writer too, and so is what writer was told had gone and made again before the
+   * word came, which the word took from it.
    */
   private revisit(
     identifiers: string[],
@@ -973,7 +975,12 @@ export class RoomEngine<C extends object> {
         const then = viewKind(identifier, seat, was);
         const now = viewKind(identifier, seat, this.store.lookup);
         const withdrawn = then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
-        if (conn === writer && then === 'pending' && !withdrawn) continue;
+        const remade =
+          conn === writer &&
+          then === 'pending' &&
+          delivered(now) &&
+          this.madeAgain((this.host.seatOf(conn) as Seat).peerId, identifier);
+        if (conn === writer && then === 'pending' && !withdrawn && !remade) continue;
         this.resend(conn, identifier, then, now, push);
         // While a parent one step further up has still not come, it has not been handed over yet, so
         // it stays remembered.

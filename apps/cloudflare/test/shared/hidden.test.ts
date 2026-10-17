@@ -924,6 +924,40 @@ describe('what is handed back and then deleted', () => {
     ]);
   });
 
+  it('hands a player back the face of a card it loads again, once the card it waited for comes', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('c8', { state: 1 });
+    await place(t, [card, ...elements]);
+    t.gm.emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId: 'bob', role: 'gm' } }]);
+    expect(ids(await t.bob.events())).toEqual([
+      ['AUTHORITATIVE_OBJECT', 'front_c8'],
+      ['AUTHORITATIVE_OBJECT', 'name_c8'],
+    ]);
+    await t.bob.next('asset-token');
+
+    const loaded = cardTree('c8', { state: 1 }, 5);
+    const tree = [loaded.card, ...loaded.elements];
+    t.bob.emit([
+      ...tree.map((context) => ({
+        eventName: SyncEvent.DELETE,
+        data: { aliasName: context.aliasName, identifier: context.identifier },
+      })),
+      { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: tree.map((context) => context.identifier) } },
+      ...[...loaded.elements].reverse().map(update),
+      update(loaded.card),
+    ]);
+
+    const back = ids(await t.bob.events());
+    expect(back.filter(([eventName]) => eventName === 'DELETE_GAME_OBJECT').sort()).toEqual([
+      ['DELETE_GAME_OBJECT', 'front_c8'],
+      ['DELETE_GAME_OBJECT', 'name_c8'],
+    ]);
+    expect(back.filter(([eventName]) => eventName === 'AUTHORITATIVE_OBJECT').sort()).toEqual([
+      ['AUTHORITATIVE_OBJECT', 'front_c8'],
+      ['AUTHORITATIVE_OBJECT', 'name_c8'],
+    ]);
+  });
+
   it('tells a player no deletion once the while for what was handed back is up', async () => {
     const t = await table();
     await handedBackToBob(t, 'd3');
