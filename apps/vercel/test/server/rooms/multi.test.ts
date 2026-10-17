@@ -384,6 +384,37 @@ describe('a room whose sockets reach different instances', () => {
     await vi.waitFor(() => expect(heard(SyncEvent.DELETE)).toBe(true), { timeout: 4000 });
   }, 15_000);
 
+  it('stops hearing a room it let go while it was still setting the room up', async () => {
+    const { a } = await twoInstances();
+    const subscribe = vi.spyOn(a.relay, 'subscribe');
+    const unsubscribe = vi.spyOn(a.relay, 'unsubscribe');
+    const own = a.relay.ownerControlOf('room');
+    const inbound = a.relay.inboundOf('room');
+    const named = (spy: typeof subscribe | typeof unsubscribe, channel: string) =>
+      spy.mock.calls.filter(([called]) => called === channel).length;
+
+    attach(a).close(1000, 'bye');
+
+    await vi.waitFor(() => expect([named(subscribe, own), named(unsubscribe, own)]).toEqual([1, 1]));
+    await Promise.all([...subscribe.mock.results, ...unsubscribe.mock.results].map((result) => result.value));
+    expect(await a.redis.pubSubNumSub([inbound, own])).toEqual({ [inbound]: 0, [own]: 0 });
+  });
+
+  it('claims afresh a room let go while a second socket waited for it, rather than seat that one alone', async () => {
+    const { a, b } = await twoInstances();
+    const first = attach(a);
+    const alice = attach(a);
+
+    first.close(1000, 'bye');
+    alice.hello('alice');
+    await welcomed(alice);
+    await enter(b, 'bob');
+
+    await vi.waitFor(() =>
+      expect(alice.messages().some((message) => message.type === 'join' && message.member.peerId === 'bob')).toBe(true)
+    );
+  });
+
   it('asks a socket to come back when the instance holding the room does not hear it', async () => {
     const { a, b } = await twoInstances({ leaseMsOfB: 400 });
     await enter(a, 'alice');

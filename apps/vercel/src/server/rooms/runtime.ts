@@ -130,14 +130,16 @@ export class RoomRuntime {
             return;
           }
           const { room } = claim;
-          room.onRelease = () => {
-            if (this.rooms.get(roomKey) === claiming) this.rooms.delete(roomKey);
-            const unserving = this.unserve(room).finally(() => this.unserving.delete(unserving));
-            this.unserving.add(unserving);
-          };
-          this.serve(room).catch((err: unknown) =>
+          const serving = this.serve(room).catch((err: unknown) =>
             console.error('Could not hear the room’s sockets on other instances:', err)
           );
+          // Stops hearing the room only once it has started to, so that a room let go while it
+          // was still being set up is not left heard on this instance.
+          room.onRelease = () => {
+            if (this.rooms.get(roomKey) === claiming) this.rooms.delete(roomKey);
+            const unserving = serving.then(() => this.unserve(room)).finally(() => this.unserving.delete(unserving));
+            this.unserving.add(unserving);
+          };
         },
         () => this.rooms.delete(roomKey)
       );
@@ -270,6 +272,9 @@ export class RoomRuntime {
     const until = Date.now() + 2 * (this.deps.timing?.leaseMs ?? LEASE_MS);
     for (;;) {
       const claim = await this.claim(roomKey);
+      // A room let go since it was handed over, as by a socket that left while it was loading, is
+      // claimed afresh rather than joined alone.
+      if ('room' in claim && claim.room.isReleased) continue;
       if ('room' in claim) {
         const { room } = claim;
         link.route = (message) => room.receive(conn, message);
