@@ -58,6 +58,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
     ['leaves the sweeping to other uploads mostly', 0.99, 0],
   ])('%s', async (_name, random, lists) => {
     vi.spyOn(Math, 'random').mockReturnValue(random);
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => array);
     const list = vi.spyOn(env.ASSETS, 'list');
     const { file, id } = await freshFile();
     const ctx = createExecutionContext();
@@ -80,6 +81,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
 
     expect(res.status).toBe(201);
     expect(list).toHaveBeenCalledTimes(lists);
+    expect(await env.ASSETS.head(storedKeyOf(id))).not.toBeNull();
   });
 
   it.each([

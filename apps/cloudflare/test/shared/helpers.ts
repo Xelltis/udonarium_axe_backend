@@ -63,6 +63,22 @@ let lastIp = 0;
 /** A different IP for each test, so that the rate limit counts do not mix. */
 export const freshIp = () => `198.51.${Math.floor(++lastIp / 250)}.${lastIp % 250}`;
 
+/** The span of a rate limit's window in the tests (milliseconds). */
+const RATE_WINDOW_MS = 60_000;
+
+/**
+ * Runs calls that count against a rate limit within one of its windows. The windows are aligned to
+ * the wall clock, so calls that cross into the next one are counted afresh there; they are run once
+ * more then, from a new address. `run` is handed the address to call from.
+ */
+export const withinOneWindow = async <T>(run: (ip: string) => Promise<T>): Promise<T> => {
+  for (let tries = 0; ; tries++) {
+    const window = Math.floor(Date.now() / RATE_WINDOW_MS);
+    const result = await run(freshIp());
+    if (tries > 0 || Math.floor(Date.now() / RATE_WINDOW_MS) === window) return result;
+  }
+};
+
 /**
  * Calls an asset of the ROOM_KEY room. Unless told otherwise, it calls each time from a new IP, as a
  * page of an allowed Origin, with a guest's token.

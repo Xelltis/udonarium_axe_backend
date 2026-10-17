@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthorityEvent } from '../../contracts/protocol.js';
 import type { ErrorMessage, RoomSummary } from '../../contracts/protocol.js';
 import { harness } from '../harness.js';
-import { ORIGIN, accessTokenFor, freshIp, jsonOf } from './helpers.js';
+import { ORIGIN, accessTokenFor, freshIp, jsonOf, withinOneWindow } from './helpers.js';
 import { Client, connect, createRoom, eventually, HOST, join, listRooms, refusalOf, ROOMS } from './room-helpers.js';
 
 // A GM deleting a room, and the list marking the rooms that can be deleted.
@@ -116,9 +116,11 @@ describe('deleting a room', () => {
   });
 
   it('stops one address that deletes too often', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) statuses.push((await deleteRoom('b'.repeat(32), HOST, ip)).status);
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) seen.push((await deleteRoom('b'.repeat(32), HOST, ip)).status);
+      return seen;
+    });
 
     expect(statuses).toEqual([404, 404, 404, 404, 404, 429]);
   });
@@ -214,25 +216,29 @@ describe('the room list', () => {
   });
 
   it('stops one address that asks for the list too often', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const res = await harness.fetch(new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }));
-      statuses.push(res.status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const res = await harness.fetch(new Request(ROOMS, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } }));
+        seen.push(res.status);
+      }
+      return seen;
+    });
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
   });
 
   it('counts finding one room by its key with the list', async () => {
     const roomKey = await createRoom({}, 'counted-gm');
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const res = await harness.fetch(
-        new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } })
-      );
-      statuses.push(res.status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const res = await harness.fetch(
+          new Request(`${ROOMS}/${roomKey}`, { headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip } })
+        );
+        seen.push(res.status);
+      }
+      return seen;
+    });
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
   });
 

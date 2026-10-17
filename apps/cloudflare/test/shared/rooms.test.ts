@@ -11,9 +11,9 @@ import {
   PROTOCOL_VERSION,
   SyncEvent,
 } from '../../contracts/protocol.js';
-import { MAX_FRAMES_PER_WINDOW, MAX_SOCKETS, RATE_WINDOW_MS } from '../../src/core/rooms/limits.js';
+import { HELLO_TIMEOUT_MS, MAX_FRAMES_PER_WINDOW, MAX_SOCKETS, RATE_WINDOW_MS } from '../../src/core/rooms/limits.js';
 import { harness } from '../harness.js';
-import { ORIGIN, freshIp, jsonOf } from './helpers.js';
+import { ORIGIN, jsonOf, withinOneWindow } from './helpers.js';
 import {
   ROOMS,
   connect,
@@ -112,11 +112,11 @@ describe('POST /v1/rooms', () => {
   });
 
   it('stops one address once it has opened its share of rooms', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      statuses.push((await postRoom({ name: 'room' }, { 'CF-Connecting-IP': ip })).status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) seen.push((await postRoom({ name: 'room' }, { 'CF-Connecting-IP': ip })).status);
+      return seen;
+    });
     expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
   });
 });
@@ -138,18 +138,23 @@ describe('GET /v1/rooms/:roomKey/ws', () => {
 
   it('stops one address once it has connected its share of times', async () => {
     const roomKey = await createRoom();
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const res = await upgrade(roomKey, { 'CF-Connecting-IP': ip });
-      statuses.push(res.status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) seen.push((await upgrade(roomKey, { 'CF-Connecting-IP': ip })).status);
+      return seen;
+    });
     expect(statuses).toEqual([101, 101, 101, 101, 101, 429]);
   });
 
   it('turns away a socket past the limit, counting ones that have not said hello', async () => {
-    const roomKey = await createRoom();
-    for (let i = 0; i < MAX_SOCKETS; i++) await connect(roomKey);
+    const filled = async () => {
+      const roomKey = await createRoom();
+      const started = Date.now();
+      await Promise.all(Array.from({ length: MAX_SOCKETS }, () => connect(roomKey)));
+      return { roomKey, inTime: Date.now() - started < HELLO_TIMEOUT_MS / 2 };
+    };
+    const first = await filled();
+    const { roomKey } = first.inTime ? first : await filled();
 
     expect(await refusalOf(roomKey)).toBe('room-full');
   });

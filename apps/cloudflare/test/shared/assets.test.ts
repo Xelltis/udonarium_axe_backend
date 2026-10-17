@@ -20,6 +20,7 @@ import {
   sha256Hex,
   jsonOf,
   textOf,
+  withinOneWindow,
 } from './helpers.js';
 import { prepareAssetRooms } from './room-helpers.js';
 
@@ -297,31 +298,37 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
     };
 
     it('stops one address once it has uploaded its share', async () => {
-      const ip = freshIp();
-      expect(await uploadSix(() => ({ 'CF-Connecting-IP': ip }))).toEqual([201, 201, 201, 201, 201, 429]);
+      const statuses = await withinOneWindow((ip) => uploadSix(() => ({ 'CF-Connecting-IP': ip })));
+      expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
     });
 
     it('counts every IPv6 address in a /64 as one sender', async () => {
-      const statuses = await uploadSix((i) => ({ 'CF-Connecting-IP': `2001:db8:1:2::${i + 1}` }));
+      let network = 0;
+      const statuses = await withinOneWindow(() => {
+        const prefix = `2001:db8:${++network}:2::`;
+        return uploadSix((i) => ({ 'CF-Connecting-IP': `${prefix}${i + 1}` }));
+      });
       expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
     });
 
     it('counts apart from another instance on the same account', async () => {
-      const ip = freshIp();
-      const statuses = await uploadSix(() => ({ 'CF-Connecting-IP': ip }));
-      const { file, id } = await freshFile(PNG_HEAD, 64);
-      const elsewhere = await harness.fetch(
-        new Request(`https://other-instance.example/v1/rooms/${ROOM_KEY}/assets/${id}`, {
-          method: 'PUT',
-          body: file,
-          headers: {
-            Origin: ORIGIN,
-            'Content-Length': String(file.byteLength),
-            'CF-Connecting-IP': ip,
-            Authorization: `Bearer ${assetTokenFor('pl')}`,
-          },
-        })
-      );
+      const [statuses, elsewhere] = await withinOneWindow(async (ip) => {
+        const here = await uploadSix(() => ({ 'CF-Connecting-IP': ip }));
+        const { file, id } = await freshFile(PNG_HEAD, 64);
+        const there = await harness.fetch(
+          new Request(`https://other-instance.example/v1/rooms/${ROOM_KEY}/assets/${id}`, {
+            method: 'PUT',
+            body: file,
+            headers: {
+              Origin: ORIGIN,
+              'Content-Length': String(file.byteLength),
+              'CF-Connecting-IP': ip,
+              Authorization: `Bearer ${assetTokenFor('pl')}`,
+            },
+          })
+        );
+        return [here, there] as const;
+      });
 
       expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
       expect(elsewhere.status).toBe(201);
@@ -480,12 +487,14 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
   });
 
   it('stops one address once it has read its share from R2', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const { id } = await freshFile();
-      statuses.push((await call(id, { headers: { 'CF-Connecting-IP': ip } })).status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const { id } = await freshFile();
+        seen.push((await call(id, { headers: { 'CF-Connecting-IP': ip } })).status);
+      }
+      return seen;
+    });
     expect(statuses).toEqual([404, 404, 404, 404, 404, 429]);
   });
 
@@ -524,13 +533,14 @@ describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
   });
 
   it('stops one address once it has asked R2 its share', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const { id } = await freshFile();
-      const res = await call(id, { method: 'HEAD', headers: { 'CF-Connecting-IP': ip } });
-      statuses.push(res.status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const { id } = await freshFile();
+        seen.push((await call(id, { method: 'HEAD', headers: { 'CF-Connecting-IP': ip } })).status);
+      }
+      return seen;
+    });
     expect(statuses).toEqual([404, 404, 404, 404, 404, 429]);
   });
 });
@@ -600,9 +610,11 @@ describe('GET /v1/rooms/:roomKey/assets', () => {
   });
 
   it('stops one address once it has listed its share', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) statuses.push((await list({ 'CF-Connecting-IP': ip })).status);
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) seen.push((await list({ 'CF-Connecting-IP': ip })).status);
+      return seen;
+    });
     expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
   });
 });

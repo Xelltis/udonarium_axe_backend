@@ -16,7 +16,7 @@ import {
   navigate,
   signInWithDiscord,
 } from './auth-helpers.js';
-import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp, jsonOf } from './helpers.js';
+import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp, jsonOf, withinOneWindow } from './helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -302,16 +302,18 @@ describe('POST /v1/auth/token', () => {
   });
 
   it('stops one address once it has asked too often', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const res = await callApi('/v1/auth/token', {
-        method: 'POST',
-        body: { grant_type: 'refresh_token', refresh_token: 'a.b.c' },
-        headers: { 'CF-Connecting-IP': ip },
-      });
-      statuses.push(res.status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const res = await callApi('/v1/auth/token', {
+          method: 'POST',
+          body: { grant_type: 'refresh_token', refresh_token: 'a.b.c' },
+          headers: { 'CF-Connecting-IP': ip },
+        });
+        seen.push(res.status);
+      }
+      return seen;
+    });
     expect(statuses).toEqual([400, 400, 400, 400, 400, 429]);
   });
 
@@ -360,16 +362,18 @@ describe('POST /v1/auth/logout', () => {
   });
 
   it('stops one address once it has asked too often, since each key wakes an account', async () => {
-    const ip = freshIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const res = await callApi('/v1/auth/logout', {
-        method: 'POST',
-        body: { refresh_token: 'whatever' },
-        headers: { 'CF-Connecting-IP': ip },
-      });
-      statuses.push(res.status);
-    }
+    const statuses = await withinOneWindow(async (ip) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const res = await callApi('/v1/auth/logout', {
+          method: 'POST',
+          body: { refresh_token: 'whatever' },
+          headers: { 'CF-Connecting-IP': ip },
+        });
+        seen.push(res.status);
+      }
+      return seen;
+    });
     expect(statuses).toEqual([204, 204, 204, 204, 204, 429]);
   });
 });
