@@ -13,9 +13,11 @@ import type { Op } from './fence.js';
 // Keeps the room's objects in Redis.
 //
 //   r:<key>:obj          HASH  identifier → MessagePack of {alias, major, minor, owner, parent, view,
-//                              chunks, data}.
-//   r:<key>:chunk:<ID>   HASH  Contents over 1MiB, split up (number → bytes).
-//   r:<key>:chunked      SET   The identifiers of what was kept split up (for when the room is deleted).
+//                              chunks, parts, data}.
+//   r:<key>:chunk:<P>    HASH  Contents over 1MiB, split up (number → bytes). P is the row's parts, a
+//                              new name each time they are written ("<ID>#<UUID>", or <ID> for rows
+//                              written before that).
+//   r:<key>:chunked      SET   The P of every set of parts (for when the room is deleted).
 //   r:<key>:tomb         ZSET  The tombstones (identifier → when it was deleted).
 //
 // The instance that owns the room reads everything into memory when it takes the room, and answers
@@ -34,9 +36,14 @@ interface Row {
   parent: string;
   view: View | null;
   data: Uint8Array;
+  /** The name of the key the contents are split up under, or null when they are kept whole. */
+  parts: string | null;
 }
 
-/** One row kept in Redis. When the contents are split up, chunks holds how many parts, and data is left out. */
+/**
+ * One row kept in Redis. When the contents are split up, chunks holds how many parts and parts
+ * where they are, and data is left out.
+ */
 interface Stored {
   alias: string;
   major: number;
@@ -45,6 +52,7 @@ interface Stored {
   parent: string;
   view: View | null;
   chunks: number;
+  parts?: string;
   data?: Uint8Array;
 }
 
@@ -71,6 +79,15 @@ const entryOf = (row: Row): StoredEntry => ({
   view: row.view,
 });
 
+/** Deletes a set of split-up contents, when there is one. */
+const dropPartsOps = (keys: StoreKeys, parts: string | null): Op[] =>
+  parts
+    ? [
+        { command: 'DEL', key: keys.chunks(parts), args: [] },
+        { command: 'SREM', key: keys.chunked, args: [parts] },
+      ]
+    : [];
+
 const joinParts = (parts: Uint8Array[]): Uint8Array => {
   const joined = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
   let offset = 0;
@@ -89,6 +106,7 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     private readonly rows: Map<string, Row>,
     private readonly deletedAt: Map<string, number>,
     private readonly persist: (ops: Op[]) => Promise<void>,
+    private readonly strays: Op[],
     tombstoneLimits?: TombstoneLimits
   ) {
     super(tombstoneLimits);
@@ -109,25 +127,28 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
       redis.zRangeWithScores(keys.tombstones, 0, -1),
     ]);
     const rows = new Map<string, Row>();
+    const strays: Op[] = [];
     for (const [identifier, value] of Object.entries(objects)) {
       const stored = decode(value) as Stored;
       let data = stored.data as Uint8Array;
-      if (stored.chunks > 0) {
-        const parts = await redis.hGetAll(keys.chunks(identifier));
-        const pieces = Array.from({ length: stored.chunks }, (_, seq) => parts[String(seq)]);
-        // A write cut short partway can leave an object's parts missing. That object is left out,
-        // rather than the room never opening again.
+      const parts = stored.chunks > 0 ? (stored.parts ?? identifier) : null;
+      if (parts) {
+        const held = await redis.hGetAll(keys.chunks(parts));
+        const pieces = Array.from({ length: stored.chunks }, (_, seq) => held[String(seq)]);
+        // An object whose parts are missing is left out, rather than the room never opening again,
+        // and taken away with the next write.
         if (pieces.some((part) => part === undefined)) {
           console.error('An object’s parts are missing; it is left out:', identifier);
+          strays.push({ command: 'HDEL', key: keys.objects, args: [identifier] }, ...dropPartsOps(keys, parts));
           continue;
         }
         data = joinParts(pieces as Uint8Array[]);
       }
       const { alias, major, minor, owner, parent, view } = stored;
-      rows.set(identifier, { alias, major, minor, owner, parent, view, data });
+      rows.set(identifier, { alias, major, minor, owner, parent, view, data, parts });
     }
     const deletedAt = new Map(tombstones.map(({ value, score }) => [value.toString(), score] as [string, number]));
-    return new RedisRoomStore(keys, rows, deletedAt, persist, tombstoneLimits);
+    return new RedisRoomStore(keys, rows, deletedAt, persist, strays, tombstoneLimits);
   }
 
   protected loadEntries(): [string, StoredEntry][] {
@@ -149,15 +170,12 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
    * room's owner changes, the next owner reads everything again).
    */
   flush(): number {
-    const ops: Op[] = [];
+    const ops: Op[] = this.strays.splice(0);
     for (const [identifier, write] of this.pending) {
       if (write.context === null) {
+        const parts = this.rows.get(identifier)?.parts ?? null;
         this.rows.delete(identifier);
-        ops.push(
-          { command: 'HDEL', key: this.keys.objects, args: [identifier] },
-          { command: 'DEL', key: this.keys.chunks(identifier), args: [] },
-          { command: 'SREM', key: this.keys.chunked, args: [identifier] }
-        );
+        ops.push({ command: 'HDEL', key: this.keys.objects, args: [identifier] }, ...dropPartsOps(this.keys, parts));
       } else if (write.context !== undefined) {
         ops.push(...this.writeOps(write.context, write.owner ?? null));
       }
@@ -176,9 +194,17 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
     return this.writing;
   }
 
+  /**
+   * The writes of one object. Split-up contents go under a new name first, then the row is changed
+   * over to them, then the old parts are deleted. The writes go in batches, so even when they stop
+   * partway, the row still points at parts that are all there.
+   */
   private writeOps(context: ObjectContext, owner: string | null): Op[] {
     const data = new Uint8Array(encodeData(context.syncData));
     const { parent, view } = describe(context);
+    const chunks = data.byteLength > CHUNK_BYTES ? Math.ceil(data.byteLength / CHUNK_BYTES) : 0;
+    const parts = chunks > 0 ? `${context.identifier}#${crypto.randomUUID()}` : null;
+    const previous = this.rows.get(context.identifier)?.parts ?? null;
     const row: Row = {
       alias: context.aliasName,
       major: context.majorVersion,
@@ -187,9 +213,9 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
       parent,
       view,
       data,
+      parts,
     };
     this.rows.set(context.identifier, row);
-    const chunks = data.byteLength > CHUNK_BYTES ? Math.ceil(data.byteLength / CHUNK_BYTES) : 0;
     const stored: Stored = {
       alias: row.alias,
       major: row.major,
@@ -198,27 +224,24 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
       parent,
       view,
       chunks,
-      ...(chunks === 0 ? { data } : {}),
+      ...(parts ? { parts } : { data }),
     };
-    const chunkKey = this.keys.chunks(context.identifier);
-    const ops: Op[] = [
-      { command: 'DEL', key: chunkKey, args: [] },
-      {
-        command: chunks > 0 ? 'SADD' : 'SREM',
-        key: this.keys.chunked,
-        args: [context.identifier],
-      },
-      ...Array.from({ length: chunks }, (_, seq): Op => ({
-        command: 'HSET',
-        key: chunkKey,
-        args: [String(seq), Buffer.from(data.subarray(seq * CHUNK_BYTES, (seq + 1) * CHUNK_BYTES))],
-      })),
-      {
-        command: 'HSET',
-        key: this.keys.objects,
-        args: [context.identifier, Buffer.from(encode(stored))],
-      },
-    ];
+    const ops: Op[] = [];
+    if (parts) {
+      const partsKey = this.keys.chunks(parts);
+      ops.push(
+        { command: 'SADD', key: this.keys.chunked, args: [parts] },
+        ...Array.from({ length: chunks }, (_, seq): Op => ({
+          command: 'HSET',
+          key: partsKey,
+          args: [String(seq), Buffer.from(data.subarray(seq * CHUNK_BYTES, (seq + 1) * CHUNK_BYTES))],
+        }))
+      );
+    }
+    ops.push(
+      { command: 'HSET', key: this.keys.objects, args: [context.identifier, Buffer.from(encode(stored))] },
+      ...dropPartsOps(this.keys, previous)
+    );
     return ops;
   }
 

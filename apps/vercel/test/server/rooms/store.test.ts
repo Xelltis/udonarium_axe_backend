@@ -1,4 +1,7 @@
+import { encode } from '@msgpack/msgpack';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { encodeData } from '../../../src/core/rooms/codec.js';
 
 import { MAX_BATCH_BYTES, batchesOf, fencedWrite } from '../../../src/server/rooms/fence.js';
 import type { Op } from '../../../src/server/rooms/fence.js';
@@ -29,11 +32,21 @@ const room = async (limits?: { most: number; prunedTo: number }) => {
   const fence = { lease: leaseKey, meta: key('r', 'room', 'meta') };
   await connection.redis.set(leaseKey, LEASE);
   await connection.redis.hSet(fence.meta, 'roomKey', 'room');
+  let cut = false;
   const persist = async (ops: Op[]) => {
+    if (cut) {
+      cut = false;
+      await fencedWrite(connection.redis, fence, LEASE, batchesOf(ops)[0]);
+      throw new Error('cut short');
+    }
     if (!(await fencedWrite(connection.redis, fence, LEASE, ops))) throw new Error('fenced');
   };
   const open = () => RedisRoomStore.load(binaryOf(connection.redis), keys, persist, limits);
-  return { open, store: await open(), leaseKey, keys };
+  /** Makes the next write stop after its first batch. */
+  const cutShort = () => {
+    cut = true;
+  };
+  return { open, store: await open(), leaseKey, keys, cutShort };
 };
 
 describe('a room store in Redis', () => {
@@ -67,14 +80,15 @@ describe('a room store in Redis', () => {
     store.put(contextOf('scene', 1, big), null);
     store.flush();
     await store.settle();
-    expect(await connection.redis.hLen(keys.chunks('scene'))).toBe(3);
-    expect(await connection.redis.sMembers(keys.chunked)).toEqual(['scene']);
+    const [parts] = await connection.redis.sMembers(keys.chunked);
+    expect(parts).toMatch(/^scene#/);
+    expect(await connection.redis.hLen(keys.chunks(parts))).toBe(3);
 
     store.put(contextOf('scene', 2, { scene: 'small' }), null);
     store.flush();
     await store.settle();
 
-    expect(await connection.redis.exists(keys.chunks('scene'))).toBe(0);
+    expect(await connection.redis.exists(keys.chunks(parts))).toBe(0);
     expect(await connection.redis.sMembers(keys.chunked)).toEqual([]);
     expect((await open()).get('scene')?.syncData).toEqual({ scene: 'small' });
 
@@ -84,20 +98,65 @@ describe('a room store in Redis', () => {
     expect((await open()).get('scene')?.syncData).toEqual(big);
   });
 
-  it('leaves out an object whose parts a write cut short left missing, and opens the rest', async () => {
+  it('keeps the older version whole when a write of a split-up object stops partway', async () => {
+    const { open, store, keys, cutShort } = await room();
+    const older = { scene: 'x'.repeat(5 * CHUNK_BYTES) };
+    store.put(contextOf('scene', 1, older), null);
+    store.flush();
+    await store.settle();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    cutShort();
+
+    store.put(contextOf('scene', 2, { scene: 'y'.repeat(5 * CHUNK_BYTES) }), null);
+    store.flush();
+    await store.settle();
+
+    expect((await open()).get('scene')).toEqual(contextOf('scene', 1, older));
+    expect(await connection.redis.sCard(keys.chunked)).toBe(2);
+  });
+
+  it('leaves out an object whose parts are missing, opens the rest, and takes it away with the next write', async () => {
     const { open, store, keys } = await room();
     store.put(contextOf('scene', 1, { scene: 'x'.repeat(2 * CHUNK_BYTES + 10) }), null);
     store.put(contextOf('piece', 1), null);
     store.flush();
     await store.settle();
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await connection.redis.hDel(keys.chunks('scene'), '1');
+    const [parts] = await connection.redis.sMembers(keys.chunked);
+    await connection.redis.hDel(keys.chunks(parts), '1');
 
     const again = await open();
+    again.flush();
+    await again.settle();
 
     expect(again.get('scene')).toBeNull();
     expect(again.get('piece')?.syncData).toEqual({ value: 'piece' });
     expect(error).toHaveBeenCalledWith('An object’s parts are missing; it is left out:', 'scene');
+    expect(await connection.redis.hExists(keys.objects, 'scene')).toBe(0);
+    expect(await connection.redis.exists(keys.chunks(parts))).toBe(0);
+    expect(await connection.redis.sMembers(keys.chunked)).toEqual([]);
+  });
+
+  it('reads a split-up object kept under its own name, and moves it to a new name when written again', async () => {
+    const { open, keys } = await room();
+    const data = Buffer.from(encodeData({ scene: 'x'.repeat(CHUNK_BYTES + 10) }));
+    const stored = { alias: 'character', major: 1, minor: 0.5, owner: null, parent: '', view: null, chunks: 2 };
+    await connection.redis.hSet(keys.objects, 'scene', Buffer.from(encode(stored)));
+    await connection.redis.hSet(keys.chunks('scene'), {
+      0: data.subarray(0, CHUNK_BYTES),
+      1: data.subarray(CHUNK_BYTES),
+    });
+    await connection.redis.sAdd(keys.chunked, 'scene');
+
+    const store = await open();
+    expect(store.get('scene')?.syncData).toEqual({ scene: 'x'.repeat(CHUNK_BYTES + 10) });
+    store.put(contextOf('scene', 2, { scene: 'y'.repeat(CHUNK_BYTES + 10) }), null);
+    store.flush();
+    await store.settle();
+
+    expect(await connection.redis.exists(keys.chunks('scene'))).toBe(0);
+    expect(await connection.redis.sMembers(keys.chunked)).toEqual([expect.stringMatching(/^scene#/)]);
+    expect((await open()).get('scene')?.syncData).toEqual({ scene: 'y'.repeat(CHUNK_BYTES + 10) });
   });
 
   it('keeps the mark of what was deleted, and drops it when told to forget', async () => {
