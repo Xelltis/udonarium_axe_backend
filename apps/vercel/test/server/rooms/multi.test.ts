@@ -113,6 +113,30 @@ describe('a room whose sockets reach different instances', () => {
     await vi.waitFor(() => expect(bob.sent).toContain('pong'));
   });
 
+  it('lets nobody who left put assets in from an instance that does not hold the room', async () => {
+    const { a, b } = await twoInstances();
+    await enter(a, 'gm');
+    const alice = await enter(a, 'alice');
+    await vi.waitFor(async () => expect(await vercelBackend(b).rooms.canUpload('room', 'user-alice')).toBe('ok'));
+
+    alice.close(1000, 'bye');
+
+    await vi.waitFor(async () =>
+      expect(await vercelBackend(b).rooms.canUpload('room', 'user-alice')).toBe('not-a-player')
+    );
+  });
+
+  it('clears the seats an owner that went away left behind, on taking the room', async () => {
+    const { b } = await twoInstances();
+    const seats = roomKeysOf(b.key, 'room').seats;
+    await b.redis.hSet(seats, 'gone-conn', JSON.stringify({ userId: 'user-ghost', account: true, role: 'pl' }));
+
+    const room = await b.runtime.room('room');
+    await room.settle();
+
+    expect(await b.redis.hVals(seats)).toEqual([]);
+  });
+
   it('has the instance holding the room answer a ping relayed to it', async () => {
     const { a, b } = await twoInstances();
     await enter(a, 'alice');

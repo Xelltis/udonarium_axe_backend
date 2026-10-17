@@ -152,6 +152,8 @@ export class VercelRoom implements RoomHost<Conn> {
       new Map(Object.entries(roles) as [string, PeerRole][]),
       objects
     );
+    // The seats an owner that went away left behind are nobody's now: everybody gets back in here.
+    room.persist([{ command: 'DEL', key: keys.seats, args: [] }]);
     room.start();
     return { room };
   }
@@ -220,11 +222,14 @@ export class VercelRoom implements RoomHost<Conn> {
   }
 
   /**
-   * A connection dropped. When this instance has no connections left, lets the room go. The owner
-   * runs only while it holds WebSockets of its own (Vercel stops an instance with no calls).
+   * A connection dropped. Its seat leaves the copy of the seats other instances read, so that
+   * somebody who left may not put assets in from one of them. When this instance has no connections
+   * left, lets the room go. The owner runs only while it holds WebSockets of its own (Vercel stops an
+   * instance with no calls).
    */
   closed(conn: Conn): void {
     this.engine.closed(conn);
+    this.persist([{ command: 'HDEL', key: this.keys.seats, args: [conn.id] }]);
     this.conns.delete(conn);
     if (![...this.conns].some((other) => !other.instance)) this.letGo();
   }
