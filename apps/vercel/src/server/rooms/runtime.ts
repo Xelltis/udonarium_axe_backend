@@ -32,6 +32,8 @@ interface Link {
   leave: (() => void) | null;
   rotated: boolean;
   gone: boolean;
+  /** Whether it is relayed to another instance, which then answers its pings. */
+  relayed: boolean;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -204,7 +206,7 @@ export class RoomRuntime {
   /** Takes a WebSocket that connected to a room. */
   attach(ws: WebSocket, roomKey: string): void {
     const conn: Conn = { id: crypto.randomUUID(), socket: socketOf(ws), seat: null };
-    const link: Link = { waiting: [], route: null, leave: null, rotated: false, gone: false };
+    const link: Link = { waiting: [], route: null, leave: null, rotated: false, gone: false, relayed: false };
 
     // Before the Vercel Function's maximum duration cuts it off, the server closes it itself and
     // has it reconnect.
@@ -217,8 +219,9 @@ export class RoomRuntime {
     ws.on('message', (data, isBinary) => {
       const message = isBinary ? new Uint8Array(data as Buffer) : String(data);
       // Answers PING without passing it to the room (the Cloudflare version answers without waking
-      // the room).
-      if (message === PING) return conn.socket.send(PONG);
+      // the room). A relayed one goes on to the owner, so a socket whose owner went silent hears no
+      // answer and gets back in elsewhere rather than seeming connected.
+      if (message === PING && !link.relayed) return conn.socket.send(PONG);
       if (link.route) link.route(message);
       else link.waiting.push(message);
     });
@@ -272,6 +275,7 @@ export class RoomRuntime {
       return false;
     }
     this.proxies.set(conn.id, conn.socket);
+    link.relayed = true;
     // The owner can no longer be reached (it went down). Has the connection reconnect.
     const moved = () => conn.socket.close(COME_BACK_CODE, 'moved');
     // What comes from one WebSocket is sent in the order it came.
@@ -355,7 +359,7 @@ export class RoomRuntime {
       }
       const conn = remotes.get(message.c);
       if (!conn) return;
-      if (message.t === 'frame') return room.receive(conn, message.d);
+      if (message.t === 'frame') return message.d === PING ? conn.socket.send(PONG) : room.receive(conn, message.d);
       remotes.delete(message.c);
       if (message.rotated) setTimeout(() => room.closed(conn), this.parkMs).unref();
       else room.closed(conn);

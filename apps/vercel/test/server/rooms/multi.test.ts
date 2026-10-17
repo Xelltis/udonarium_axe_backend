@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 
-import { SyncEvent } from '../../../contracts/protocol.js';
+import { COME_BACK_CODE, SyncEvent } from '../../../contracts/protocol.js';
 import { memoryBucket } from '../../../src/server/assets/bucket.js';
 import { vercelBackend } from '../../../src/server/backend.js';
 import { createServerDeps } from '../../../src/server/deps.js';
@@ -110,7 +110,31 @@ describe('a room whose sockets reach different instances', () => {
     await vi.waitFor(() => expect(pieces()).toHaveLength(20));
     expect(pieces()).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
     bob.emit('message', Buffer.from('ping'), false);
-    expect(bob.sent).toContain('pong');
+    await vi.waitFor(() => expect(bob.sent).toContain('pong'));
+  });
+
+  it('has the instance holding the room answer a ping relayed to it', async () => {
+    const { a, b } = await twoInstances();
+    await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    const publish = vi.spyOn(b.relay, 'publish');
+
+    bob.emit('message', Buffer.from('ping'), false);
+
+    await vi.waitFor(() => expect(bob.sent).toContain('pong'));
+    expect(publish).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ t: 'frame', d: 'ping' }));
+  });
+
+  it('asks a socket to come back at its ping once the instance holding the room is gone', async () => {
+    const { a, b } = await twoInstances();
+    await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    await a.relay.stop();
+
+    bob.emit('message', Buffer.from('ping'), false);
+
+    await vi.waitFor(() => expect(bob.closedWith).toEqual({ code: COME_BACK_CODE, reason: 'moved' }));
+    expect(bob.sent).not.toContain('pong');
   });
 
   it('carries a frame larger than one message can', async () => {
