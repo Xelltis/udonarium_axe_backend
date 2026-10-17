@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 
 import { COME_BACK_CODE, PING, PONG } from '../../../contracts/protocol.js';
 import { expiryKeyOf, readRoomMeta, roomKeysOf } from './keys.js';
-import type { Control, Inbound, Outbound, Relay } from './relay.js';
+import type { Control, Inbound, Outbound, OwnerControl, Relay } from './relay.js';
 import { LEASE_MS, VercelRoom } from './room.js';
 import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
 
@@ -190,8 +190,8 @@ export class RoomRuntime {
       return 'not-game-master';
     }
     const relay = this.relay as Relay;
-    const control: Control = { t: 'delete' };
-    if ((await relay.publish(relay.controlOf(roomKey), control)) === 0) {
+    const control: OwnerControl = { t: 'delete' };
+    if ((await relay.publish(relay.ownerControlOf(roomKey), control)) === 0) {
       // The owner had gone down. Marks the room to be deleted and leaves the rest to the sweep.
       await redis
         .multi()
@@ -316,8 +316,7 @@ export class RoomRuntime {
     const sockets = new Set([socket]);
     this.watched.set(roomKey, sockets);
     const relay = this.relay as Relay;
-    await relay.subscribe<Control>(relay.controlOf(roomKey), (message) => {
-      if (message.t !== 'moved') return;
+    await relay.subscribe<Control>(relay.controlOf(roomKey), () => {
       for (const each of sockets) each.close(COME_BACK_CODE, 'moved');
     });
   }
@@ -364,9 +363,7 @@ export class RoomRuntime {
       if (message.rotated) setTimeout(() => room.closed(conn), this.parkMs).unref();
       else room.closed(conn);
     });
-    await relay.subscribe<Control>(relay.controlOf(room.roomKey), (message) => {
-      if (message.t === 'delete') void room.deletedElsewhere();
-    });
+    await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), () => void room.deletedElsewhere());
   }
 
   /** Stepped down as owner. Has the WebSockets that landed on other instances reconnect. */
@@ -374,7 +371,7 @@ export class RoomRuntime {
     const relay = this.relay;
     if (!relay || !this.served.has(room)) return;
     await relay.unsubscribe(relay.inboundOf(room.roomKey));
-    await relay.unsubscribe(relay.controlOf(room.roomKey));
+    await relay.unsubscribe(relay.ownerControlOf(room.roomKey));
     if (room.remotes.length > 0) await relay.publish(relay.controlOf(room.roomKey), { t: 'moved' });
   }
 }

@@ -32,7 +32,14 @@ export type Outbound =
   { t: 'frame'; c: string; d: Uint8Array | string } | { t: 'close'; c: string; code: number; reason: string };
 
 /** To the instances with a WebSocket for the room. */
-export type Control = { t: 'moved' } | { t: 'delete' };
+export interface Control {
+  t: 'moved';
+}
+
+/** To the owner alone. */
+export interface OwnerControl {
+  t: 'delete';
+}
 
 /** One of the parts. m is the number the sender gives each message. */
 interface Part {
@@ -62,6 +69,8 @@ export class Relay {
   inboundOf = (roomKey: string) => this.key('r', roomKey, 'in');
   outboundOf = (instance: string) => this.key('i', instance, 'out');
   controlOf = (roomKey: string) => this.key('r', roomKey, 'ctl');
+  /** Heard by the owner alone, so that one instance answering means the owner is there. */
+  ownerControlOf = (roomKey: string) => this.key('r', roomKey, 'own');
   aliveOf = (instance: string) => this.key('i', instance);
 
   /** Opens the connection for listening, and starts putting up the mark that this instance is alive. */
@@ -97,7 +106,7 @@ export class Relay {
   }
 
   /** Sends. Returns how many instances got it. When it is sent in parts, the count for the last part. */
-  async publish(channel: string, message: Inbound | Outbound | Control): Promise<number> {
+  async publish(channel: string, message: Inbound | Outbound | Control | OwnerControl): Promise<number> {
     const bytes = Buffer.from(encode(message));
     if (bytes.byteLength <= PART_BYTES) return this.redis.publish(channel, bytes);
     const id = ++this.sent;

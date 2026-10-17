@@ -245,7 +245,7 @@ describe('a room whose sockets reach different instances', () => {
     await welcomed(bob);
     // Stops only the listeners of a. Instance a still holds the lease, so b keeps trying to send to it.
     await a.relay.unsubscribe(a.relay.inboundOf('room'));
-    await a.relay.unsubscribe(a.relay.controlOf('room'));
+    await a.relay.unsubscribe(a.relay.ownerControlOf('room'));
 
     bob.emitMessage({ type: 'time' });
     expect(await b.runtime.deleteRoom('room', 'user-gm')).toBe('deleted');
@@ -253,6 +253,18 @@ describe('a room whose sockets reach different instances', () => {
     await vi.waitFor(() => expect(bob.closedWith).toEqual({ code: 1012, reason: 'moved' }));
     expect(await b.redis.hGet(roomKeysOf(b.key, 'room').meta, 'deleting')).toBe('1');
     alice.close(1000, 'bye');
+  });
+
+  it('marks a room for deleting when its holder is gone, though a socket is still relayed there', async () => {
+    const { a, b } = await twoInstances();
+    await enter(a, 'alice');
+    await enter(b, 'bob');
+    await a.relay.unsubscribe(a.relay.inboundOf('room'));
+    await a.relay.unsubscribe(a.relay.ownerControlOf('room'));
+
+    expect(await b.runtime.deleteRoom('room', 'user-gm')).toBe('deleted');
+
+    expect(await b.redis.hGet(roomKeysOf(b.key, 'room').meta, 'deleting')).toBe('1');
   });
 
   it('keeps hearing about the room while any socket it forwards there is open', async () => {
