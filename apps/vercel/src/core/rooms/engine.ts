@@ -151,6 +151,12 @@ export class RoomEngine<C extends object> {
    * long the load in between. It lasts until then, or until the seat leaves.
    */
   private toldGone = new Map<string, Set<string>>();
+  /**
+   * Who wrote what waits for its parent. It is handed to the one who sends the parent once the
+   * parent comes, unless that one wrote it: a line said into a tab while it was deleted reaches the
+   * one who brings the tab back only so.
+   */
+  private pendingWriters = new Map<string, string>();
 
   constructor(private readonly host: RoomHost<C>) {}
 
@@ -833,8 +839,11 @@ export class RoomEngine<C extends object> {
     } else if (verdict === 'accept') {
       const before = this.store.lookup(identifier);
       this.store.put(context, owner);
+      const mine = this.kindOf(identifier, seat);
+      if (mine === 'pending') this.pendingWriters.set(identifier, seat.peerId);
+      else this.pendingWriters.delete(identifier);
       // What waits for its parent is handed back once the parent comes, as it is seen then.
-      const again = delivered(this.kindOf(identifier, seat)) && this.madeAgain(seat.peerId, identifier);
+      const again = delivered(mine) && this.madeAgain(seat.peerId, identifier);
       this.spread(context, before, seat, sender, push, corrected || again);
     }
   }
@@ -961,7 +970,7 @@ export class RoomEngine<C extends object> {
    * Only someone who has the parent (the one who sent the parent) can make a child that waits for
    * it, so writer has it already. But what a catalog had taken back while it waited for its parent
    * is handed to writer too, and so is what writer was told had gone and made again before the
-   * word came, which the word took from it.
+   * word came, which the word took from it, and what somebody else wrote while it waited.
    */
   private revisit(
     identifiers: string[],
@@ -975,12 +984,10 @@ export class RoomEngine<C extends object> {
         const then = viewKind(identifier, seat, was);
         const now = viewKind(identifier, seat, this.store.lookup);
         const withdrawn = then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
-        const remade =
-          conn === writer &&
-          then === 'pending' &&
-          delivered(now) &&
-          this.madeAgain((this.host.seatOf(conn) as Seat).peerId, identifier);
-        if (conn === writer && then === 'pending' && !withdrawn && !remade) continue;
+        const writerPeerId = conn === writer ? (this.host.seatOf(conn) as Seat).peerId : '';
+        const remade = then === 'pending' && delivered(now) && this.madeAgain(writerPeerId, identifier);
+        const own = this.pendingWriters.get(identifier) === writerPeerId;
+        if (conn === writer && then === 'pending' && own && !withdrawn && !remade) continue;
         this.resend(conn, identifier, then, now, push);
         // While a parent one step further up has still not come, it has not been handed over yet, so
         // it stays remembered.
@@ -1256,7 +1263,10 @@ export class RoomEngine<C extends object> {
     // could be deleted without a tombstone by passing it off as a cursor, and it would come back from
     // someone holding an old copy.
     const cursor = entry ? entry.alias === PEER_CURSOR_ALIAS : aliasName === PEER_CURSOR_ALIAS;
-    for (const id of doomed) this.store.delete(id, !cursor);
+    for (const id of doomed) {
+      this.store.delete(id, !cursor);
+      this.pendingWriters.delete(id);
+    }
     const handed = this.handedBackTo(seat.peerId);
     doomed.forEach((id, index) => {
       if (!handed?.ids.delete(id)) return;

@@ -958,6 +958,38 @@ describe('what is handed back and then deleted', () => {
     ]);
   });
 
+  it('hands the GM bringing a tab back a line a player said into it while it was deleted', async () => {
+    const t = await table();
+    const tab = (majorVersion: number) => ({
+      ...listedTabOf('tab-back', { plCanView: true, plCanSpeak: true }),
+      majorVersion,
+    });
+    const line = (identifier: string, majorVersion: number, from: string) =>
+      contextOf(
+        identifier,
+        majorVersion,
+        0.5,
+        { parentIdentifier: 'tab-back', value: 'hello', attributes: { from } },
+        'chat'
+      );
+    await place(t, [chatTabList(), tab(1), line('old-line', 1, 'user-gm')]);
+    t.gm.emit([
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'tab-back' } },
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'old-line' } },
+    ]);
+    await Promise.all(t.players.map((client) => client.events()));
+
+    t.alice.emit([update(line('said-meanwhile', 1, 'user-alice'))]);
+    await t.alice.expectQuiet();
+    t.gm.emit([
+      { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['tab-back', 'old-line'] } },
+      update(line('old-line', 2, 'user-gm')),
+      update(tab(2)),
+    ]);
+
+    expect(ids(await t.gm.events())).toEqual([['AUTHORITATIVE_OBJECT', 'said-meanwhile']]);
+  });
+
   it('tells a player no deletion once the while for what was handed back is up', async () => {
     const t = await table();
     await handedBackToBob(t, 'd3');
