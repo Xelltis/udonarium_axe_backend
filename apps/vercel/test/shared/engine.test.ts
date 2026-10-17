@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CHAT_TAB_LIST_IDENTIFIER, CLOSE_CODE, SyncEvent } from '../../contracts/protocol.js';
-import { FLUSH_DELAY_MS } from '../../src/core/rooms/limits.js';
+import { FLUSH_DELAY_MS, MAX_FRAMES_PER_WINDOW } from '../../src/core/rooms/limits.js';
 import { FakeHost } from './fake-host.js';
 
 // Checks, with the room in memory, what is hard to bring about from the room server.
@@ -212,5 +212,19 @@ describe('the object index', () => {
     store.put(contextOf('b', 1, { parentIdentifier: 'a' }), null);
 
     expect(store.descendantsOf('a')).toEqual(['b']);
+  });
+});
+
+describe('pings passed on from a socket on another instance', () => {
+  it('counts them as frames, and closes the connection once over the limit', () => {
+    const host = new FakeHost();
+    const conn = host.join('alice');
+
+    const answered = Array.from({ length: MAX_FRAMES_PER_WINDOW + 1 }, () => host.engine.takeRelayedPing(conn));
+
+    expect(answered[0]).toBe(true);
+    expect(answered.at(-1)).toBe(false);
+    expect(conn.closed?.reason).toBe('too-many-messages');
+    expect(host.engine.takeRelayedPing(conn)).toBe(false);
   });
 });
