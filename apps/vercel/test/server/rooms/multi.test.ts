@@ -356,6 +356,34 @@ describe('a room whose sockets reach different instances', () => {
     expect(seen).not.toContain('leave');
   });
 
+  it('asks a socket elsewhere to come back only once what it sent has reached the room', async () => {
+    const { a, b } = await twoInstances({ socketSecondsOfB: 2 });
+    const alice = await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    bob.emitMessage({ type: 'send', events: [update('piece', 1)] });
+    const heard = (eventName: string) =>
+      alice
+        .events()
+        .some(
+          (event) => event.eventName === eventName && (event.data as { identifier?: string }).identifier === 'piece'
+        );
+    await vi.waitFor(() => expect(heard(SyncEvent.UPDATE)).toBe(true));
+    const publish = b.relay.publish.bind(b.relay);
+    vi.spyOn(b.relay, 'publish').mockImplementation(async (channel, message) => {
+      if (message.t === 'frame') await new Promise((resolve) => setTimeout(resolve, 2500));
+      return publish(channel, message);
+    });
+
+    bob.emitMessage({
+      type: 'send',
+      events: [{ eventName: SyncEvent.DELETE, data: { aliasName: 'character', identifier: 'piece' } }],
+    });
+    await vi.waitFor(() => expect(bob.closedWith).toEqual({ code: 1012, reason: 'rotate' }), { timeout: 6000 });
+    await enter(a, 'bob');
+
+    await vi.waitFor(() => expect(heard(SyncEvent.DELETE)).toBe(true), { timeout: 4000 });
+  }, 15_000);
+
   it('asks a socket to come back when the instance holding the room does not hear it', async () => {
     const { a, b } = await twoInstances({ leaseMsOfB: 400 });
     await enter(a, 'alice');

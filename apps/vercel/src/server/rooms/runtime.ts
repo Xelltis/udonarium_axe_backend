@@ -42,6 +42,8 @@ interface Link {
   relayed: boolean;
   /** When a ping last went on to the owner. */
   pingedAt: number;
+  /** Resolves once what came in has all gone on to the owner. */
+  sent: () => Promise<void>;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -222,13 +224,15 @@ export class RoomRuntime {
       gone: false,
       relayed: false,
       pingedAt: -Infinity,
+      sent: async () => undefined,
     };
 
     // Before the Vercel Function's maximum duration cuts it off, the server closes it itself and
-    // has it reconnect.
+    // has it reconnect. A relayed one is closed once what it sent has reached the owner, so that
+    // the hello it comes back with does not overtake it there.
     const rotation = setTimeout(() => {
       link.rotated = true;
-      conn.socket.close(COME_BACK_CODE, 'rotate');
+      void link.sent().then(() => conn.socket.close(COME_BACK_CODE, 'rotate'));
     }, this.options.socketSeconds * 1000);
     rotation.unref();
 
@@ -308,6 +312,12 @@ export class RoomRuntime {
         }, moved);
     };
     link.route = (message) => send({ t: 'frame', c: conn.id, d: message });
+    link.sent = async () => {
+      for (let seen: Promise<unknown> | null = null; seen !== queue;) {
+        seen = queue;
+        await seen;
+      }
+    };
     link.leave = () => {
       send({ t: 'close', c: conn.id, rotated: link.rotated });
       this.proxies.delete(conn.id);
