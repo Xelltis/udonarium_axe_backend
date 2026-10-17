@@ -341,8 +341,13 @@ export class RoomRuntime {
       if (room.isReleased) return;
       if (message.t === 'open') {
         const out = relay.outboundOf(message.i);
-        // Even when it does not get there (that instance went down), the check removes the seat.
-        const tell = (outbound: Outbound) => void relay.publish(out, outbound).catch(() => undefined);
+        // What goes to one WebSocket goes in the order it was sent: a frame in parts would be
+        // overtaken by the next one otherwise. Even when it does not get there (that instance went
+        // down), the check removes the seat.
+        let queue: Promise<unknown> = Promise.resolve();
+        const tell = (outbound: Outbound) => {
+          queue = queue.then(() => relay.publish(out, outbound)).catch(() => undefined);
+        };
         const conn: Conn = {
           id: message.c,
           instance: message.i,

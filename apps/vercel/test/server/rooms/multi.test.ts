@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 
@@ -178,6 +180,31 @@ describe('a room whose sockets reach different instances', () => {
     );
     const event = alice.events().find((item) => (item.data as { identifier?: string }).identifier === 'scene');
     expect((event?.data as { syncData: { scene: string } }).syncData.scene).toBe(scene);
+  });
+
+  it('carries what the holder sends a socket elsewhere in order, a frame in parts before the next', async () => {
+    const { a, b } = await twoInstances();
+    const alice = await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    // Random, so that it does not shrink on its way, as one picture's worth of data would not.
+    const scene = randomBytes(PART_BYTES * 2).toString('base64');
+    // A frame in parts takes longer on its way, as over a network.
+    const publish = a.relay.publish.bind(a.relay);
+    vi.spyOn(a.relay, 'publish').mockImplementation(async (channel, message) => {
+      if (message.t === 'frame' && message.d.length > PART_BYTES) await new Promise((wait) => setTimeout(wait, 50));
+      return publish(channel, message);
+    });
+
+    alice.emitMessage({ type: 'send', events: [update('scene', 1, { scene }), update('after', 1)] });
+    alice.emitMessage({ type: 'send', events: [update('last', 1)] });
+
+    const order = () =>
+      bob
+        .events()
+        .map((event) => (event.data as { identifier?: string }).identifier)
+        .filter((identifier) => identifier === 'scene' || identifier === 'after' || identifier === 'last');
+    await vi.waitFor(() => expect(order()).toHaveLength(3));
+    expect(order()).toEqual(['scene', 'after', 'last']);
   });
 
   it('asks the sockets elsewhere to come back once the holder lets go, and a new holder takes them', async () => {
