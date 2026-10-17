@@ -429,8 +429,19 @@ describe('a room whose sockets reach different instances', () => {
     await vi.waitFor(async () => expect(await a.redis.get(roomKeysOf(a.key, 'room').lease)).toBeNull());
     const told: unknown[] = [];
     await a.relay.subscribe(a.relay.outboundOf('b'), (message) => told.push(message));
+    const publish = a.relay.publish.bind(a.relay);
+    let failOnce = true;
+    vi.spyOn(a.relay, 'publish').mockImplementation(async (channel, message) => {
+      if (channel === a.relay.outboundOf('b') && failOnce) {
+        failOnce = false;
+        throw new Error('down');
+      }
+      return publish(channel, message);
+    });
 
-    await a.relay.publish(a.relay.inboundOf('room'), { t: 'open', c: 'late', i: 'b' });
+    await publish(a.relay.inboundOf('room'), { t: 'open', c: 'lost', i: 'b' });
+    await publish(a.relay.inboundOf('room'), { t: 'frame', c: 'lost', d: 'hello' });
+    await publish(a.relay.inboundOf('room'), { t: 'open', c: 'late', i: 'b' });
 
     await vi.waitFor(() => expect(told).toContainEqual({ t: 'close', c: 'late', code: 1012, reason: 'moved' }));
     letGo();
