@@ -24,6 +24,27 @@ export const headersOf = (incoming: IncomingMessage): Headers => {
   return headers;
 };
 
+/** Whether the browser sent it over HTTPS that a proxy in front ended (Vercel says so in x-forwarded-proto). */
+const viaHttps = (headers: Headers): boolean => headers.get('x-forwarded-proto') === 'https';
+
+/**
+ * The request with the URL the browser sent it to. Vercel ends HTTPS in front and hands the request
+ * on over plain HTTP, so @hono/node-server makes an http:// URL. The login's callback URL is made
+ * from it, and Discord takes only the https:// one registered.
+ */
+export const asSent = (request: Request): Request => {
+  if (!viaHttps(request.headers)) return request;
+  const url = new URL(request.url);
+  url.protocol = 'https:';
+  return new Request(url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    signal: request.signal,
+    duplex: 'half',
+  } as RequestInit);
+};
+
 /** Answers a request that did not switch to a WebSocket over plain HTTP, and closes it. */
 const answer = async (socket: Duplex, response: Response): Promise<void> => {
   const body = Buffer.from(await response.arrayBuffer());
@@ -39,7 +60,7 @@ const answer = async (socket: Duplex, response: Response): Promise<void> => {
  * and the count, they are handed to ws through upgrades.
  */
 export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
-  const server = createAdaptorServer({ fetch }) as Server;
+  const server = createAdaptorServer({ fetch: (request) => fetch(asSent(request)) }) as Server;
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_FRAME_BYTES,
@@ -47,12 +68,12 @@ export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
   });
 
   server.on('upgrade', (incoming: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const headers = headersOf(incoming);
     let request: Request;
     try {
       // The Node HTTP server does not take a request without a Host.
-      request = new Request(`http://${incoming.headers.host as string}${incoming.url as string}`, {
-        headers: headersOf(incoming),
-      });
+      const scheme = viaHttps(headers) ? 'https' : 'http';
+      request = new Request(`${scheme}://${incoming.headers.host as string}${incoming.url as string}`, { headers });
     } catch {
       // A Host that makes no URL. Thrown out of this listener, it would take the whole process down.
       void answer(socket, new Response(null, { status: 400 }));

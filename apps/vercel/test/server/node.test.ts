@@ -45,11 +45,33 @@ const tryUpgrade = (port: number, headers: Record<string, string> = {}) =>
 
 describe('the Node server', () => {
   it('serves plain requests through the app', async () => {
-    const port = await listen(() => new Response('hello'));
+    const seen: string[] = [];
+    const port = await listen((request) => {
+      seen.push(request.url);
+      return new Response('hello');
+    });
 
     const res = await fetch(`http://127.0.0.1:${port}/`);
 
     expect(await res.text()).toBe('hello');
+    expect(seen).toEqual([`http://127.0.0.1:${port}/`]);
+  });
+
+  it('hands the app the https URL the browser used when a proxy in front ended HTTPS', async () => {
+    const seen: string[] = [];
+    const port = await listen(async (request) => {
+      seen.push(request.url);
+      return new Response(await request.text());
+    });
+
+    const res = await fetch(`http://127.0.0.1:${port}/v1/auth/token?x=1`, {
+      method: 'POST',
+      headers: { 'x-forwarded-proto': 'https' },
+      body: 'sent',
+    });
+
+    expect(await res.text()).toBe('sent');
+    expect(seen).toEqual([`https://127.0.0.1:${port}/v1/auth/token?x=1`]);
   });
 
   it('answers in HTTP a socket the app does not take, and closes', async () => {
@@ -64,6 +86,18 @@ describe('the Node server', () => {
     expect(answer).toEqual({ open: false, status: 403, body: '{"error":"origin-not-allowed"}' });
     expect(seen[0].headers.get('x-real-ip')).toBe('192.0.2.1');
     expect(seen[0].url).toBe(`http://127.0.0.1:${port}/v1/rooms/r/ws`);
+  });
+
+  it('gives a socket the https URL too when a proxy in front ended HTTPS', async () => {
+    const seen: string[] = [];
+    const port = await listen((request) => {
+      seen.push(request.url);
+      return new Response(null, { status: 403 });
+    });
+
+    await tryUpgrade(port, { 'x-forwarded-proto': 'https' });
+
+    expect(seen).toEqual([`https://127.0.0.1:${port}/v1/rooms/r/ws`]);
   });
 
   it('answers 400 to a socket whose Host makes no URL, and keeps serving', async () => {
