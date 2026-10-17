@@ -138,6 +138,11 @@ export class RoomEngine<C extends object> {
    * from hibernating, which would lose what is kept between the steps a seat paces its deletes in.
    */
   private keepTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * For each seat, what was handed back to it as it stands. A deletion of one that goes through is
+   * told back to the seat, which may have made it again on taking it back after sending the deletion.
+   */
+  private handedBack = new Map<string, Set<string>>();
 
   constructor(private readonly host: RoomHost<C>) {}
 
@@ -183,6 +188,12 @@ export class RoomEngine<C extends object> {
    */
   dropStrayCursors(): void {
     this.dropCursors(this.removeStrayCursors());
+  }
+
+  private noteHandedBack(seat: Seat, identifier: string): void {
+    const ids = this.handedBack.get(seat.peerId);
+    if (ids) ids.add(identifier);
+    else this.handedBack.set(seat.peerId, new Set([identifier]));
   }
 
   /** Keeps the room awake until the last of what is kept from deleting is let go. */
@@ -904,6 +915,7 @@ export class RoomEngine<C extends object> {
     if (mine === 'hidden') push(sender, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
     else if (corrected && delivered(mine)) {
       push(sender, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, mine)));
+      this.noteHandedBack(seat, identifier);
     }
 
     // When the view hint or the parent changed, or it is the first time it has come (its children
@@ -1153,8 +1165,10 @@ export class RoomEngine<C extends object> {
    */
   private refuseWrite(identifier: string, seat: Seat, reply: Reply): void {
     const view = this.viewOf(identifier, seat);
-    if (view) reply(AuthorityEvent.AUTHORITATIVE, view);
-    else if (this.store.isDeleted(identifier)) reply(SyncEvent.DELETE, { aliasName: '', identifier });
+    if (view) {
+      reply(AuthorityEvent.AUTHORITATIVE, view);
+      this.noteHandedBack(seat, identifier);
+    } else if (this.store.isDeleted(identifier)) reply(SyncEvent.DELETE, { aliasName: '', identifier });
     else reply(AuthorityEvent.WITHDRAW, { identifier });
   }
 
@@ -1209,6 +1223,9 @@ export class RoomEngine<C extends object> {
     // someone holding an old copy.
     const cursor = entry ? entry.alias === PEER_CURSOR_ALIAS : aliasName === PEER_CURSOR_ALIAS;
     for (const id of doomed) this.store.delete(id, !cursor);
+    if (this.handedBack.get(seat.peerId)?.delete(identifier)) {
+      push(sender, fromAuthority(SyncEvent.DELETE, { aliasName, identifier }));
+    }
     for (const { conn } of others) {
       doomed.forEach((id, index) => {
         if (!delivered((seen.get(conn) as ViewKind[])[index])) return;

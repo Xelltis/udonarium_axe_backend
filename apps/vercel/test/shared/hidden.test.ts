@@ -806,6 +806,38 @@ describe('dice', () => {
   });
 });
 
+describe('what is handed back and then deleted', () => {
+  it('tells a player a die it was handed back is gone once its deletion goes through, the die having come back on its side', async () => {
+    const t = await table();
+    const die = contextOf('d1', 1, 0.5, { attributes: { face: '6', owner: 'user-alice', x: 0 } }, 'dice-symbol');
+    const mine = contextOf('b1', 1, 0.5, { attributes: { x: 0 } }, 'dice-symbol');
+    t.alice.emit([update(die)]);
+    const [toBob] = await t.bob.events();
+    t.bob.emit([update(mine)]);
+    await t.alice.events();
+
+    const moved = (majorVersion: number, x: number) =>
+      update({
+        ...(toBob.data as ObjectContext),
+        majorVersion,
+        syncData: { attributes: { face: '', owner: 'user-alice', x } },
+      });
+    t.bob.emit([
+      moved(2, 5),
+      moved(3, 6),
+      { eventName: SyncEvent.DELETE, data: { aliasName: 'dice-symbol', identifier: 'd1' } },
+    ]);
+
+    expect(ids(await t.bob.events())).toEqual([
+      ['AUTHORITATIVE_OBJECT', 'd1'],
+      ['AUTHORITATIVE_OBJECT', 'd1'],
+      ['DELETE_GAME_OBJECT', 'd1'],
+    ]);
+    t.bob.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'dice-symbol', identifier: 'b1' } }]);
+    await t.bob.expectQuiet();
+  });
+});
+
 describe('roles and what they see', () => {
   it('hands a promoted player what the GM sees, and takes it back from a demoted one', async () => {
     const t = await table();
