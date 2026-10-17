@@ -36,6 +36,22 @@ describe('the relay between instances', () => {
     await relay.stop();
   });
 
+  it('hears on a channel listened to again before the stops of listening there are through', async () => {
+    const relay = new Relay(connection.redis, freshKey(), 'here');
+    await relay.start();
+    const channel = relay.controlOf('room');
+    const heard: string[] = [];
+    await relay.subscribe(channel, () => heard.push('first'));
+
+    void relay.unsubscribe(channel);
+    void relay.unsubscribe(channel);
+    await relay.subscribe(channel, () => heard.push('second'));
+    await relay.publish(channel, { t: 'moved' });
+
+    await vi.waitFor(() => expect(heard).toEqual(['second']));
+    await relay.stop();
+  });
+
   it('keeps saying the instance is alive, and says so when it cannot', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const set = vi.spyOn(connection.redis, 'set').mockRejectedValue(new Error('down'));

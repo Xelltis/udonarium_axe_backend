@@ -58,6 +58,11 @@ export class Relay {
   private sent = 0;
   /** Holds what comes in parts until all the parts are there. Kept for each sender's channel and message. */
   private readonly parts = new Map<string, Uint8Array[]>();
+  /**
+   * The unsubscribes under way, by channel. Listening on a channel waits for its own: node-redis adds
+   * a listener given meanwhile to the ones being taken away, and sends no SUBSCRIBE for it.
+   */
+  private readonly unsubscribing = new Map<string, Promise<void>>();
 
   constructor(
     private readonly redis: Redis,
@@ -127,6 +132,7 @@ export class Relay {
 
   /** Listens on that channel. What comes in parts is passed on once all the parts are there. */
   async subscribe<T>(channel: string, listener: Listener<T>): Promise<void> {
+    await this.unsubscribing.get(channel);
     await (this.subscriber as Redis).subscribe(
       channel,
       (data: Buffer) => {
@@ -149,6 +155,12 @@ export class Relay {
 
   /** Stops listening on that channel. Does nothing if it already stopped (also once the connection is closed). */
   async unsubscribe(channel: string): Promise<void> {
-    await this.subscriber?.unsubscribe(channel).catch(() => undefined);
+    const done = (this.subscriber?.unsubscribe(channel) ?? Promise.resolve()).then(
+      () => undefined,
+      () => undefined
+    );
+    this.unsubscribing.set(channel, done);
+    await done;
+    if (this.unsubscribing.get(channel) === done) this.unsubscribing.delete(channel);
   }
 }
