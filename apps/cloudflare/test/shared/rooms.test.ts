@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import messages from '../../contracts/fixtures/messages.json' with { type: 'json' };
 import {
   AUTHORITY_PEER_ID,
+  AuthorityEvent,
   CATALOG_BATCH,
   CLOSE_CODE,
   MAX_MEMBERS,
@@ -628,12 +629,14 @@ describe('the state of the room', () => {
     ]);
   });
 
-  it('answers a request for something it does not have with nothing', async () => {
+  it('answers a request for something it does not have with a withdrawal, so that nobody waits for it', async () => {
     const { bob } = await twoInRoom();
 
     bob.emit([{ eventName: SyncEvent.REQUEST, data: 'nothing' }]);
 
-    await bob.expectQuiet();
+    expect(await bob.events()).toEqual([
+      { eventName: AuthorityEvent.WITHDRAW, data: { identifier: 'nothing' }, sendFrom: AUTHORITY_PEER_ID },
+    ]);
   });
 
   it('sends its whole catalog when asked, in batches the client reads', async () => {

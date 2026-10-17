@@ -120,7 +120,23 @@ describe('cards', () => {
     const listed = (late.catalog[0].data as { identifier: string }[]).map((item) => item.identifier);
     expect(listed).toContain('back_c3');
     expect(listed).not.toContain('front_c3');
-    expect(ids(await late.client.events())).toEqual([['UPDATE_GAME_OBJECT', 'back_c3']]);
+    expect(ids(await late.client.events())).toEqual([
+      ['WITHDRAW_GAME_OBJECT', 'front_c3'],
+      ['UPDATE_GAME_OBJECT', 'back_c3'],
+    ]);
+  });
+
+  it('answers nothing yet about what waits for its parent, and hands it over once the parent comes', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('c10', { state: 0 });
+    t.gm.emit(elements.map(update));
+    await Promise.all(t.players.map((client) => client.expectQuiet()));
+
+    t.alice.emit([{ eventName: SyncEvent.REQUEST, data: 'back_c10' }]);
+    await t.alice.expectQuiet();
+    t.gm.emit([update(card)]);
+
+    expect(ids(await t.alice.events())).toContainEqual(['AUTHORITATIVE_OBJECT', 'back_c10']);
   });
 
   it('has a player drop what it holds but may not see, and refuses its writes to it', async () => {
@@ -1037,6 +1053,23 @@ describe('what is handed back and then deleted', () => {
       expect(room.handedBack.has('bob')).toBe(false);
       expect(room.toldGone.has('bob')).toBe(false);
     });
+  });
+
+  it('hands a player back what it makes again after asking about it and being told it is gone', async () => {
+    const t = await table();
+    t.gm.emit([update(contextOf('d6', 1, 0.5, { attributes: { face: '2', owner: '', x: 0 } }, 'dice-symbol'))]);
+    await Promise.all(t.players.map((client) => client.events()));
+    t.gm.emit([deletion('d6')]);
+    await Promise.all(t.players.map((client) => client.events()));
+
+    t.bob.emit([{ eventName: SyncEvent.REQUEST, data: 'd6' }]);
+    expect(ids(await t.bob.events())).toEqual([['DELETE_GAME_OBJECT', 'd6']]);
+    t.bob.emit([
+      { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['d6'] } },
+      update(contextOf('d6', 3, 0.5, { attributes: { face: '5', owner: '', x: 10 } }, 'dice-symbol')),
+    ]);
+
+    expect(ids(await t.bob.events())).toEqual([['AUTHORITATIVE_OBJECT', 'd6']]);
   });
 
   it('hands a player back what it makes again after a deletion told back, however long the load took', async () => {

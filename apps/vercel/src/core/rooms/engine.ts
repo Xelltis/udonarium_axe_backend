@@ -218,6 +218,13 @@ export class RoomEngine<C extends object> {
     return this.handedBack.get(peerId);
   }
 
+  /** Minds that the seat was told this had gone. */
+  private noteToldGone(peerId: string, identifier: string): void {
+    const told = this.toldGone.get(peerId);
+    if (told) told.add(identifier);
+    else this.toldGone.set(peerId, new Set([identifier]));
+  }
+
   /** Whether the seat makes again what it was told had gone, which is then handed to it once more. */
   private madeAgain(peerId: string, identifier: string): boolean {
     return this.toldGone.get(peerId)?.delete(identifier) ?? false;
@@ -1288,9 +1295,7 @@ export class RoomEngine<C extends object> {
     const handed = this.handedBackTo(seat.peerId);
     doomed.forEach((id, index) => {
       if (!handed?.ids.delete(id)) return;
-      const told = this.toldGone.get(seat.peerId);
-      if (told) told.add(id);
-      else this.toldGone.set(seat.peerId, new Set([id]));
+      this.noteToldGone(seat.peerId, id);
       push(sender, fromAuthority(SyncEvent.DELETE, { aliasName: index === 0 ? aliasName : '', identifier: id }));
     });
     for (const { seat: other } of others) {
@@ -1414,17 +1419,25 @@ export class RoomEngine<C extends object> {
     }
   }
 
-  /** Sends back what was asked for, in the form shown to that seat. Nothing goes back for what is not shown. */
+  /**
+   * Sends back what was asked for, in the form shown to that seat. What was deleted is answered with
+   * DELETE, and what is not here or not shown to the seat with WITHDRAW, so that the seat stops
+   * waiting for it. What waits for its parent is handed over once the parent comes.
+   */
   private answerRequest(data: unknown, seat: Seat, reply: Reply): void {
     const parsed = safeParse(requestSchema, data);
     if (!parsed.success) return;
     const identifier = parsed.output;
     if (this.store.isDeleted(identifier)) {
+      this.noteToldGone(seat.peerId, identifier);
       reply(SyncEvent.DELETE, { aliasName: '', identifier });
       return;
     }
     const view = this.viewOf(identifier, seat);
     if (view) reply(SyncEvent.UPDATE, view);
+    else if (!this.store.entryOf(identifier) || this.kindOf(identifier, seat) === 'hidden') {
+      reply(AuthorityEvent.WITHDRAW, { identifier });
+    }
   }
 
   /**
