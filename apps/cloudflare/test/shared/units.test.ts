@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { assetHeaders } from '../../src/core/assets/headers.js';
 import { roomKeyOf } from '../../src/core/assets/keys.js';
+import { assetNameOf } from '../../src/core/assets/names.js';
 import { networkOf } from '../../src/core/http/network.js';
 import { isAllowedOrigin } from '../../src/core/http/origin.js';
 import { decodeFrame } from '../../src/core/rooms/codec.js';
@@ -47,6 +49,15 @@ describe('roomKeyOf', () => {
     expect(roomKeyOf('b'.repeat(64))).toBeNull();
     expect(roomKeyOf(`blocked/${'b'.repeat(64)}`)).toBeNull();
     expect(roomKeyOf('rooms//x')).toBeNull();
+  });
+});
+
+describe('assetNameOf', () => {
+  it('puts a half of a character that came alone in place, so that the name can be served', () => {
+    const name = assetNameOf('\uD800.png');
+
+    expect(name).toBe('�.png');
+    expect(assetHeaders({ type: 'image/png', size: 1, etag: '"e"', name }).get('X-Asset-Name')).toBe('%EF%BF%BD.png');
   });
 });
 
