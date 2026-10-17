@@ -145,6 +145,9 @@ Vercel版では、数分ごとに部屋のサーバーが接続を閉じて、Ax
 | `rate-limited`         | 送信元からの上限を超えた                                                                 | 少し待てば戻る。Axeは間を置いて試し直す                  |
 | `blocked`              | 運営する人が、その画像を置かせないようにした                                             | 正常な動き。その画像は使わない                           |
 | `upgrade-required`     | 部屋に入るURLを、WebSocketでなく普通のリクエストで開いた                                 | 正常な動き。部屋にはAxeからつなぐ                        |
+| `internal-error`       | 部屋のサーバーの中で失敗した。Vercel版では、Redisが答えないとき（コマンドを使い切ったなど） | Vercel版なら、Upstashのダッシュボードでコマンドの数を見る（→ [費用と上限](/operate/costs#vercel版)） |
+
+部屋のWebSocketがclose code `1011`・reason `unavailable`で閉じるときも、部屋を開けなかった（Vercel版ではRedisが答えない）ことを表します。`internal-error`と同じように確かめます。
 
 ほかのコードも含めた一覧は、[部屋のサーバーのAPI](/reference/server-api#エラー)にあります。
 
