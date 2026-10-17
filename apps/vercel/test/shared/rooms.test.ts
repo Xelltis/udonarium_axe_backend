@@ -692,12 +692,15 @@ describe('the state of the room', () => {
       await bob.expectQuiet();
     });
 
-    it('takes away the cursor of a page its peer has come back from', async () => {
+    it('takes away the cursor of a page its peer has come back from once the new page writes its own', async () => {
       const { roomKey, alice, bob } = await twoInRoom();
       bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);
       await alice.events();
 
       const again = await join(roomKey, 'bob');
+      again.client.emit([
+        { eventName: SyncEvent.UPDATE, data: { ...cursorOf('bob'), identifier: 'cursor-bob-reloaded' } },
+      ]);
 
       expect(await alice.events()).toEqual([
         {
@@ -706,7 +709,20 @@ describe('the state of the room', () => {
           sendFrom: AUTHORITY_PEER_ID,
         },
       ]);
-      expect(again.catalog[0].data).toEqual([]);
+      expect((await alice.events()).map((event) => (event.data as { identifier: string }).identifier)).toEqual([
+        'cursor-bob-reloaded',
+      ]);
+    });
+
+    it('keeps the cursor of a peer that comes back on the same page, as when asked back on another link', async () => {
+      const { roomKey, alice, bob } = await twoInRoom();
+      bob.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('bob') }]);
+      await alice.events();
+
+      const again = await join(roomKey, 'bob');
+
+      expect(again.catalog[0].data).toEqual([expect.objectContaining({ identifier: 'cursor-bob' })]);
+      await alice.expectQuiet();
     });
 
     it('leaves no tombstone for a cursor, so its peer can bring it back', async () => {

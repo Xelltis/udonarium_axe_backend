@@ -523,11 +523,11 @@ export class RoomEngine<C extends object> {
       return false;
     }
     if (previous) {
-      // The same person has reconnected. The old connection is one already cut that still lingers. A
-      // reloaded page's cursor has another identifier, so the old cursor is deleted, and the others
-      // are made to delete it too.
+      // The same person has reconnected. The old connection is one already cut that still lingers.
+      // Its cursor is kept: the same page comes back with it as it was, as on a server asking the
+      // seat back on another link, and others would see it go and come back. A reloaded page's
+      // cursor has another identifier, and the old one goes once it writes that (see update).
       this.refuse(previous.conn, 'replaced');
-      this.dropCursors(this.store.removeOwnedBy(seat.peerId), conn);
     }
 
     this.host.setSeat(conn, seat);
@@ -848,6 +848,8 @@ export class RoomEngine<C extends object> {
     } else if (verdict === 'deleted') {
       reply(SyncEvent.DELETE, { aliasName, identifier });
     } else if (verdict === 'accept') {
+      // A seat writing a cursor of another name, as a reloaded page does, leaves its old one behind.
+      if (owner !== null && !existing) this.dropCursors(this.store.removeOwnedBy(seat.peerId), sender);
       const before = this.store.lookup(identifier);
       this.store.put(context, owner);
       const mine = this.kindOf(identifier, seat);
