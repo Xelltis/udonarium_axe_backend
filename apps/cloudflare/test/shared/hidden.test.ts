@@ -1072,6 +1072,26 @@ describe('what is handed back and then deleted', () => {
     expect(ids(await t.bob.events())).toEqual([['AUTHORITATIVE_OBJECT', 'd6']]);
   });
 
+  it('hands nothing back to a player only changing what somebody else brought back after it was told it was gone', async () => {
+    const t = await table();
+    t.gm.emit([update(contextOf('d7', 1, 0.5, { attributes: { face: '2', owner: '', x: 0 } }, 'dice-symbol'))]);
+    await Promise.all(t.players.map((client) => client.events()));
+    t.gm.emit([deletion('d7')]);
+    await Promise.all(t.players.map((client) => client.events()));
+    t.bob.emit([{ eventName: SyncEvent.REQUEST, data: 'd7' }]);
+    expect(ids(await t.bob.events())).toEqual([['DELETE_GAME_OBJECT', 'd7']]);
+
+    t.gm.emit([
+      { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['d7'] } },
+      update(contextOf('d7', 5, 0.5, { attributes: { face: '2', owner: '', x: 0 } }, 'dice-symbol')),
+    ]);
+    await Promise.all(t.players.map((client) => client.events()));
+    t.bob.emit([update(contextOf('d7', 6, 0.5, { attributes: { face: '2', owner: '', x: 60 } }, 'dice-symbol'))]);
+
+    expect(ids(await t.alice.events())).toEqual([['UPDATE_GAME_OBJECT', 'd7']]);
+    await t.bob.expectQuiet();
+  });
+
   it('hands a player back what it makes again after a deletion told back, however long the load took', async () => {
     const t = await table();
     await handedBackToBob(t, 'd5');

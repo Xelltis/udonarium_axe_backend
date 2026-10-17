@@ -1321,11 +1321,20 @@ export class RoomEngine<C extends object> {
     return stored ? attributesOf(stored)[SERVER_ROLL_FIELD] === true : false;
   }
 
-  /** It is not taken from a guest. */
+  /**
+   * It is not taken from a guest. What one seat brings back reaches the others as it comes, so they
+   * are no longer minded to be handed it once more on writing it: one only changing it would have
+   * its change sent back.
+   */
   private forget(data: unknown, seat: Seat): boolean {
     const parsed = safeParse(forgetSchema, data);
     if (!parsed.success || seat.role === 'guest') return false;
-    this.store.forget(parsed.output.identifiers ?? []);
+    const identifiers = parsed.output.identifiers ?? [];
+    this.store.forget(identifiers);
+    for (const [peerId, told] of this.toldGone) {
+      if (peerId === seat.peerId) continue;
+      for (const identifier of identifiers) told.delete(identifier);
+    }
     return true;
   }
 
