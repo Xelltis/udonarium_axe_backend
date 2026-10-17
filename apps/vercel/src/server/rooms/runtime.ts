@@ -106,13 +106,17 @@ export class RoomRuntime {
     this.parkMs = options.parkMs ?? PARK_MS;
   }
 
-  /** Starts listening to the relay. */
+  /** Starts listening to the relay. A start that failed is tried again by the next socket. */
   private ready(): Promise<void> {
     const relay = this.relay;
     if (!relay) return Promise.resolve();
     this.started ??= relay
       .start()
-      .then(() => relay.subscribe<Outbound>(relay.outboundOf(relay.instance), (message) => this.fromOwner(message)));
+      .then(() => relay.subscribe<Outbound>(relay.outboundOf(relay.instance), (message) => this.fromOwner(message)))
+      .catch((err: unknown) => {
+        this.started = null;
+        throw err;
+      });
     return this.started;
   }
 

@@ -78,12 +78,22 @@ export class Relay {
   ownerControlOf = (roomKey: string) => this.key('r', roomKey, 'own');
   aliveOf = (instance: string) => this.key('i', instance);
 
-  /** Opens the connection for listening, and starts putting up the mark that this instance is alive. */
+  /**
+   * Opens the connection for listening, and starts putting up the mark that this instance is alive.
+   * A connection that could not be opened is let go, so that the next start tries again.
+   */
   async start(): Promise<void> {
     if (this.subscriber) return;
-    this.subscriber = this.redis.duplicate();
-    this.subscriber.on('error', (err: unknown) => console.error('Redis subscriber error:', err));
-    await this.subscriber.connect();
+    const subscriber = this.redis.duplicate();
+    this.subscriber = subscriber;
+    subscriber.on('error', (err: unknown) => console.error('Redis subscriber error:', err));
+    try {
+      await subscriber.connect();
+    } catch (err) {
+      if (this.subscriber === subscriber) this.subscriber = null;
+      subscriber.destroy();
+      throw err;
+    }
     const beat = () =>
       void this.redis
         .set(this.aliveOf(this.instance), '1', {

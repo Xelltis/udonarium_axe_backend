@@ -542,6 +542,20 @@ describe('a room whose sockets reach different instances', () => {
     await room.release();
   });
 
+  it('takes a room’s sockets again once listening to the relay failed at first', async () => {
+    const { a } = await twoInstances();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const subscribe = a.relay.subscribe.bind(a.relay);
+    vi.spyOn(a.relay, 'subscribe')
+      .mockImplementationOnce(() => Promise.reject(new Error('down')))
+      .mockImplementation(subscribe);
+
+    const first = attach(a);
+    await vi.waitFor(() => expect(first.closedWith).toEqual({ code: 1011, reason: 'unavailable' }));
+
+    await enter(a, 'alice');
+  });
+
   it('says so when it cannot hear the room’s sockets on other instances', async () => {
     const { a } = await twoInstances();
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);

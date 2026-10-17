@@ -24,6 +24,37 @@ describe('the relay between instances', () => {
     expect(await relay.isAlive('here')).toBe(false);
   });
 
+  it('opens the connection it hears on again once opening it failed', async () => {
+    const relay = new Relay(connection.redis, freshKey(), 'here');
+    const duplicate = connection.redis.duplicate.bind(connection.redis);
+    const failing = { on: vi.fn(), connect: vi.fn().mockRejectedValue(new Error('down')), destroy: vi.fn() };
+    vi.spyOn(connection.redis, 'duplicate')
+      .mockReturnValueOnce(failing as never)
+      .mockImplementation(() => duplicate());
+
+    await expect(relay.start()).rejects.toThrow('down');
+    await relay.start();
+
+    expect(failing.destroy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(async () => expect(await relay.isAlive('here')).toBe(true));
+    await relay.stop();
+  });
+
+  it('leaves stopped a relay stopped while the connection it hears on failed to open', async () => {
+    const relay = new Relay(connection.redis, freshKey(), 'here');
+    let fail!: (err: Error) => void;
+    const connect = new Promise<void>((_resolve, reject) => (fail = reject));
+    const failing = { on: vi.fn(), connect: vi.fn(() => connect), destroy: vi.fn() };
+    vi.spyOn(connection.redis, 'duplicate').mockReturnValueOnce(failing as never);
+
+    const starting = relay.start();
+    await relay.stop();
+    fail(new Error('down'));
+
+    await expect(starting).rejects.toThrow('down');
+    expect((relay as unknown as { subscriber: unknown }).subscriber).toBeNull();
+  });
+
   it('says what goes wrong on the connection it hears on', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const relay = new Relay(connection.redis, freshKey(), 'here');
