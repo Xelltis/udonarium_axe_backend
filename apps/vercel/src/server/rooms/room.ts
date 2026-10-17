@@ -316,9 +316,12 @@ export class VercelRoom implements RoomHost<Conn> {
     this.letGo();
   }
 
-  /** Lets the room go. Even when that fails (Redis went down), the lease runs out and another instance takes it. */
+  /**
+   * Lets the room go. Even when that fails (Redis went down), the lease runs out and another instance
+   * takes it. The writing goes on after the last call, as the room's other work does.
+   */
   private letGo(): void {
-    this.release().catch((err: unknown) => console.error('Could not let the room go:', err));
+    this.deps.defer(this.release().catch((err: unknown) => console.error('Could not let the room go:', err)));
   }
 
   /** Writes the changes gathered so far, and gives the lease back once they are written. */

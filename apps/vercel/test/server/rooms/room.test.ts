@@ -276,6 +276,19 @@ describe('a room held on Vercel', () => {
     expect(await connection.redis.hGet(roomKeysOf(key, 'room').meta, 'deleting')).toBe('1');
   });
 
+  it('lets the room go as work that goes on after the last call, once its last socket here closes', async () => {
+    const deferred: Promise<unknown>[] = [];
+    const { deps, key } = await roomDepsOf(connection.redis, { defer: (work) => void deferred.push(work) });
+    const room = await VercelRoom.open(deps, 'room');
+    const conn = seat(room, 'alice');
+
+    room.closed(conn);
+    await Promise.all(deferred);
+
+    expect(room.isReleased).toBe(true);
+    expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toBeNull();
+  });
+
   it('only turns people away for a room that is not there', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const { deps } = await roomDepsOf(connection.redis);
