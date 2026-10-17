@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../../contracts/protocol.js';
 import type { ObjectContext } from '../../contracts/protocol.js';
+import { harness } from '../harness.js';
 import { chatTabList, contextOf, createRoom, join, listedTabOf } from './room-helpers.js';
 
 type Client = Awaited<ReturnType<typeof join>>['client'];
@@ -835,6 +836,119 @@ describe('what is handed back and then deleted', () => {
     ]);
     t.bob.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'dice-symbol', identifier: 'b1' } }]);
     await t.bob.expectQuiet();
+  });
+
+  /** Has bob move alice's die, shown to him only in part, which is handed back to him. */
+  const handedBackToBob = async (t: Awaited<ReturnType<typeof table>>, identifier: string) => {
+    t.alice.emit([
+      update(contextOf(identifier, 1, 0.5, { attributes: { face: '6', owner: 'user-alice', x: 0 } }, 'dice-symbol')),
+    ]);
+    const [[toBob]] = await Promise.all([t.bob.events(), t.gm.events()]);
+    t.bob.emit([
+      update({
+        ...(toBob.data as ObjectContext),
+        majorVersion: 2,
+        syncData: { attributes: { face: '', owner: 'user-alice', x: 5 } },
+      }),
+    ]);
+    expect(ids(await t.bob.events())).toEqual([['AUTHORITATIVE_OBJECT', identifier]]);
+    await Promise.all([t.alice.events(), t.gm.events()]);
+  };
+  const deletion = (identifier: string) => ({
+    eventName: SyncEvent.DELETE,
+    data: { aliasName: 'dice-symbol', identifier },
+  });
+
+  it('hands a player back what it made again after a deletion told back, as on loading a room', async () => {
+    const t = await table();
+    await handedBackToBob(t, 'd1');
+
+    t.bob.emit([
+      deletion('d1'),
+      { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['d1'] } },
+      update(contextOf('d1', 5, 0.5, { attributes: { face: '4', owner: '', x: 10 } }, 'dice-symbol')),
+    ]);
+
+    expect(ids(await t.bob.events())).toEqual([
+      ['DELETE_GAME_OBJECT', 'd1'],
+      ['AUTHORITATIVE_OBJECT', 'd1'],
+    ]);
+    expect(ids(await t.gm.events())).toEqual([
+      ['DELETE_GAME_OBJECT', 'd1'],
+      ['FORGET_DELETED_OBJECTS', undefined],
+      ['UPDATE_GAME_OBJECT', 'd1'],
+    ]);
+  });
+
+  it('tells a player a die is gone once its deletion goes through, its stale change having been handed back', async () => {
+    const t = await table();
+    const die = (majorVersion: number, minorVersion: number, face: string) =>
+      contextOf('d2', majorVersion, minorVersion, { attributes: { face, owner: 'user-alice', x: 0 } }, 'dice-symbol');
+    t.alice.emit([update(die(1, 0.5, '3'))]);
+    await t.bob.events();
+    t.alice.emit([update(die(2, 0.9, '5'))]);
+    const [seen] = await t.bob.events();
+
+    t.bob.emit([
+      update({
+        ...(seen.data as ObjectContext),
+        majorVersion: 2,
+        minorVersion: 0.1,
+        syncData: { attributes: { face: '', owner: 'user-alice', x: 50 } },
+      }),
+      deletion('d2'),
+    ]);
+
+    expect(ids(await t.bob.events())).toEqual([
+      ['AUTHORITATIVE_OBJECT', 'd2'],
+      ['DELETE_GAME_OBJECT', 'd2'],
+    ]);
+  });
+
+  it('tells a player made GM that a card whose face it was just handed is gone, its deletion having been on the way', async () => {
+    const t = await table();
+    const { card, elements } = cardTree('c9', { state: 1 });
+    await place(t, [card, ...elements]);
+    t.gm.emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId: 'bob', role: 'gm' } }]);
+    expect(ids(await t.bob.events())).toEqual([
+      ['AUTHORITATIVE_OBJECT', 'front_c9'],
+      ['AUTHORITATIVE_OBJECT', 'name_c9'],
+    ]);
+    await t.bob.next('asset-token');
+
+    t.bob.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'card', identifier: 'c9' } }]);
+
+    expect(ids(await t.bob.events()).sort()).toEqual([
+      ['DELETE_GAME_OBJECT', 'front_c9'],
+      ['DELETE_GAME_OBJECT', 'name_c9'],
+    ]);
+  });
+
+  it('tells a player no deletion once the while for what was handed back is up', async () => {
+    const t = await table();
+    await handedBackToBob(t, 'd3');
+    await harness.inside(t.roomKey, ({ engine }) => {
+      const room = engine as unknown as { handedBack: Map<string, { until: number }> };
+      for (const handed of room.handedBack.values()) handed.until = Date.now() - 1;
+    });
+
+    t.bob.emit([deletion('d3')]);
+
+    expect(ids(await t.alice.events())).toEqual([['DELETE_GAME_OBJECT', 'd3']]);
+    await t.bob.expectQuiet();
+  });
+
+  it('forgets what was handed back to a player once the player leaves', async () => {
+    const t = await table();
+    await handedBackToBob(t, 'd4');
+
+    t.bob.close();
+    await t.gm.next('leave');
+
+    await harness.inside(t.roomKey, ({ engine }) => {
+      const room = engine as unknown as { handedBack: Map<string, unknown> };
+      expect(room.handedBack.has('bob')).toBe(false);
+    });
   });
 });
 

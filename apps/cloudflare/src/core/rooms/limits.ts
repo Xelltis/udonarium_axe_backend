@@ -53,6 +53,14 @@ export const ROLL_TIME_TOLERANCE_MS = 10 * 60 * 1000;
  */
 export const KEEP_FROM_DELETING_MS = 20_000;
 
+/**
+ * How long, after something was last handed back to a seat, a deletion the seat sends of it is told
+ * back to the seat (milliseconds). A deletion the seat sent before the object came back to it arrives
+ * within the time there and back, behind whatever was on the way; one sent later is the seat's own,
+ * and so is the object being gone on its side.
+ */
+export const HANDED_BACK_MS = 20_000;
+
 /** How many dice can wait to be rolled in the whole room. Any more are not rolled. */
 export const MAX_PENDING_ROLLS = 64;
 

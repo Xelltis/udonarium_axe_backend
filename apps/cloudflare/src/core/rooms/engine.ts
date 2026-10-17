@@ -37,6 +37,7 @@ import type { RoomHost, RoomStore, Seat } from './host.js';
 import {
   FLUSH_DELAY_MS,
   FLUSH_TALLY_MS,
+  HANDED_BACK_MS,
   HELLO_TIMEOUT_MS,
   KEEP_FROM_DELETING_MS,
   MAX_EVENTS_PER_WINDOW,
@@ -139,10 +140,13 @@ export class RoomEngine<C extends object> {
    */
   private keepTimer: ReturnType<typeof setTimeout> | null = null;
   /**
-   * For each seat, what was handed back to it as it stands. A deletion of one that goes through is
-   * told back to the seat, which may have made it again on taking it back after sending the deletion.
+   * For each seat, what was handed back to it as it stands, what of that it was told had gone, and
+   * until when either is minded. A deletion of one that goes through is told back to the seat, which
+   * may have made it again on taking it back after sending the deletion. One told back that the seat
+   * then makes again, as on loading a room or undoing, is handed to it once more: it made it before
+   * the word of the deletion came.
    */
-  private handedBack = new Map<string, Set<string>>();
+  private handedBack = new Map<string, { ids: Set<string>; told: Set<string>; until: number }>();
 
   constructor(private readonly host: RoomHost<C>) {}
 
@@ -190,10 +194,23 @@ export class RoomEngine<C extends object> {
     this.dropCursors(this.removeStrayCursors());
   }
 
-  private noteHandedBack(seat: Seat, identifier: string): void {
-    const ids = this.handedBack.get(seat.peerId);
-    if (ids) ids.add(identifier);
-    else this.handedBack.set(seat.peerId, new Set([identifier]));
+  private noteHandedBack(peerId: string, identifier: string): void {
+    const handed = this.handedBackTo(peerId) ?? { ids: new Set<string>(), told: new Set<string>(), until: 0 };
+    handed.ids.add(identifier);
+    handed.until = Date.now() + HANDED_BACK_MS;
+    this.handedBack.set(peerId, handed);
+  }
+
+  /** What was handed back to the seat, while it is still minded. */
+  private handedBackTo(peerId: string): { ids: Set<string>; told: Set<string>; until: number } | undefined {
+    const handed = this.handedBack.get(peerId);
+    if (handed && handed.until <= Date.now()) this.handedBack.delete(peerId);
+    return this.handedBack.get(peerId);
+  }
+
+  /** Whether the seat makes again what it was told had gone, which is then handed to it once more. */
+  private madeAgain(peerId: string, identifier: string): boolean {
+    return this.handedBackTo(peerId)?.told.delete(identifier) ?? false;
   }
 
   /** Keeps the room awake until the last of what is kept from deleting is let go. */
@@ -557,6 +574,7 @@ export class RoomEngine<C extends object> {
 
   /** The seat has left. Deletes what was kept only while it was there, and tells the others. */
   private leave(seat: Seat): void {
+    this.handedBack.delete(seat.peerId);
     if (this.store.removeOwnedBy(seat.peerId).length > 0) this.scheduleFlush();
     this.broadcast(undefined, { type: 'leave', peerId: seat.peerId });
     if (this.seats().length === 0) this.host.emptied();
@@ -804,12 +822,14 @@ export class RoomEngine<C extends object> {
       // sender's. An UPDATE would then be thrown away and the losing change would stay on that
       // person's screen alone, so it is made to replace whatever the version.
       reply(seen === 'masked' ? AuthorityEvent.AUTHORITATIVE : SyncEvent.UPDATE, view);
+      if (seen === 'masked') this.noteHandedBack(seat.peerId, identifier);
     } else if (verdict === 'deleted') {
       reply(SyncEvent.DELETE, { aliasName, identifier });
     } else if (verdict === 'accept') {
       const before = this.store.lookup(identifier);
+      const again = this.madeAgain(seat.peerId, identifier);
       this.store.put(context, owner);
-      this.spread(context, before, seat, sender, push, corrected);
+      this.spread(context, before, seat, sender, push, corrected || again);
     }
   }
 
@@ -915,7 +935,7 @@ export class RoomEngine<C extends object> {
     if (mine === 'hidden') push(sender, fromAuthority(AuthorityEvent.WITHDRAW, { identifier }));
     else if (corrected && delivered(mine)) {
       push(sender, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, mine)));
-      this.noteHandedBack(seat, identifier);
+      this.noteHandedBack(seat.peerId, identifier);
     }
 
     // When the view hint or the parent changed, or it is the first time it has come (its children
@@ -969,6 +989,7 @@ export class RoomEngine<C extends object> {
     }
     const context = this.store.get(identifier) as ObjectContext;
     push(conn, fromAuthority(AuthorityEvent.AUTHORITATIVE, viewFor(context, now)));
+    this.noteHandedBack((this.host.seatOf(conn) as Seat).peerId, identifier);
   }
 
   /**
@@ -1167,7 +1188,7 @@ export class RoomEngine<C extends object> {
     const view = this.viewOf(identifier, seat);
     if (view) {
       reply(AuthorityEvent.AUTHORITATIVE, view);
-      this.noteHandedBack(seat, identifier);
+      this.noteHandedBack(seat.peerId, identifier);
     } else if (this.store.isDeleted(identifier)) reply(SyncEvent.DELETE, { aliasName: '', identifier });
     else reply(AuthorityEvent.WITHDRAW, { identifier });
   }
@@ -1178,7 +1199,8 @@ export class RoomEngine<C extends object> {
    *
    * The descendants of what is deleted are deleted with it. Descendants the sender could not see
    * (such as the face of a face-down card) are not on the sender's side, so no delete for them comes
-   * from the sender. The server sends a DELETE to those who hold them.
+   * from the sender. The server sends a DELETE to those who hold them. What of it was handed back to
+   * the sender lately is told back as gone, the sender having perhaps taken it back after deleting.
    */
   private remove(event: EventContext, seat: Seat, sender: C, push: Push<C>): void {
     const parsed = safeParse(deleteSchema, event.data);
@@ -1223,8 +1245,15 @@ export class RoomEngine<C extends object> {
     // someone holding an old copy.
     const cursor = entry ? entry.alias === PEER_CURSOR_ALIAS : aliasName === PEER_CURSOR_ALIAS;
     for (const id of doomed) this.store.delete(id, !cursor);
-    if (this.handedBack.get(seat.peerId)?.delete(identifier)) {
-      push(sender, fromAuthority(SyncEvent.DELETE, { aliasName, identifier }));
+    const handed = this.handedBackTo(seat.peerId);
+    doomed.forEach((id, index) => {
+      if (!handed?.ids.delete(id)) return;
+      handed.told.add(id);
+      push(sender, fromAuthority(SyncEvent.DELETE, { aliasName: index === 0 ? aliasName : '', identifier: id }));
+    });
+    for (const { seat: other } of others) {
+      const theirs = this.handedBack.get(other.peerId);
+      for (const id of doomed) theirs?.ids.delete(id);
     }
     for (const { conn } of others) {
       doomed.forEach((id, index) => {
