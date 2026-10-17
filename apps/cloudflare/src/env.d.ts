@@ -31,6 +31,14 @@ declare namespace Cloudflare {
     SESSION_SECRET?: string;
     /** The time from the last person leaving until the room is deleted. */
     ROOM_RETENTION_HOURS: string;
+    /** The SkyWay app id. With it and SKYWAY_SECRET set, the Worker issues SkyWay tokens. */
+    SKYWAY_APP_ID?: string;
+    /** The SkyWay app's secret key (set as a secret). */
+    SKYWAY_SECRET?: string;
+    /** How many lobby channels the SkyWay room list is split across. 3 when unset. */
+    SKYWAY_UDONARIUM_LOBBY_SIZE?: string;
+    /** How long an issued SkyWay token works, in seconds (60 to 604800). A day when unset. */
+    SKYWAY_TOKEN_TTL_SECONDS?: string;
   }
 }
 

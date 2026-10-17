@@ -18,6 +18,7 @@ declare module 'node:crypto' {
   interface Hmac {
     update(data: string): Hmac;
     digest(): Uint8Array;
+    digest(encoding: 'base64url'): string;
   }
   export function createHmac(algorithm: 'sha256', key: string): Hmac;
   export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean;
