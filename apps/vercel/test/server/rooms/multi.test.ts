@@ -415,6 +415,27 @@ describe('a room whose sockets reach different instances', () => {
     );
   });
 
+  it('asks a socket elsewhere to come back when it reaches a room let go but still heard', async () => {
+    const { a } = await twoInstances();
+    let letGo!: () => void;
+    const held = new Promise<void>((resolve) => (letGo = resolve));
+    const unsubscribe = a.relay.unsubscribe.bind(a.relay);
+    vi.spyOn(a.relay, 'unsubscribe').mockImplementation(async (channel) => {
+      await held;
+      return unsubscribe(channel);
+    });
+    const alice = await enter(a, 'alice');
+    alice.close(1000, 'bye');
+    await vi.waitFor(async () => expect(await a.redis.get(roomKeysOf(a.key, 'room').lease)).toBeNull());
+    const told: unknown[] = [];
+    await a.relay.subscribe(a.relay.outboundOf('b'), (message) => told.push(message));
+
+    await a.relay.publish(a.relay.inboundOf('room'), { t: 'open', c: 'late', i: 'b' });
+
+    await vi.waitFor(() => expect(told).toContainEqual({ t: 'close', c: 'late', code: 1012, reason: 'moved' }));
+    letGo();
+  });
+
   it('asks a socket to come back when the instance holding the room does not hear it', async () => {
     const { a, b } = await twoInstances({ leaseMsOfB: 400 });
     await enter(a, 'alice');

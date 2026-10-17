@@ -373,7 +373,15 @@ export class RoomRuntime {
     await this.ready();
     const remotes = new Map<string, Conn>();
     await relay.subscribe<Inbound>(relay.inboundOf(room.roomKey), (message) => {
-      if (room.isReleased) return;
+      // A room let go and still heard for a moment asks a socket that reaches it to come back, as
+      // the owner it reaches is no longer, rather than take it in and say nothing.
+      if (room.isReleased) {
+        if (message.t === 'open') {
+          const moved: Outbound = { t: 'close', c: message.c, code: COME_BACK_CODE, reason: 'moved' };
+          relay.publish(relay.outboundOf(message.i), moved).catch(() => undefined);
+        }
+        return;
+      }
       if (message.t === 'open') {
         const out = relay.outboundOf(message.i);
         // What goes to one WebSocket goes in the order it was sent: a frame in parts would be
