@@ -114,7 +114,14 @@ export class RedisRoomStore extends ObjectIndex implements RoomStore {
       let data = stored.data as Uint8Array;
       if (stored.chunks > 0) {
         const parts = await redis.hGetAll(keys.chunks(identifier));
-        data = joinParts(Array.from({ length: stored.chunks }, (_, seq) => parts[String(seq)] as Uint8Array));
+        const pieces = Array.from({ length: stored.chunks }, (_, seq) => parts[String(seq)]);
+        // A write cut short partway can leave an object's parts missing. That object is left out,
+        // rather than the room never opening again.
+        if (pieces.some((part) => part === undefined)) {
+          console.error('An object’s parts are missing; it is left out:', identifier);
+          continue;
+        }
+        data = joinParts(pieces as Uint8Array[]);
       }
       const { alias, major, minor, owner, parent, view } = stored;
       rows.set(identifier, { alias, major, minor, owner, parent, view, data });

@@ -84,6 +84,22 @@ describe('a room store in Redis', () => {
     expect((await open()).get('scene')?.syncData).toEqual(big);
   });
 
+  it('leaves out an object whose parts a write cut short left missing, and opens the rest', async () => {
+    const { open, store, keys } = await room();
+    store.put(contextOf('scene', 1, { scene: 'x'.repeat(2 * CHUNK_BYTES + 10) }), null);
+    store.put(contextOf('piece', 1), null);
+    store.flush();
+    await store.settle();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await connection.redis.hDel(keys.chunks('scene'), '1');
+
+    const again = await open();
+
+    expect(again.get('scene')).toBeNull();
+    expect(again.get('piece')?.syncData).toEqual({ value: 'piece' });
+    expect(error).toHaveBeenCalledWith('An object’s parts are missing; it is left out:', 'scene');
+  });
+
   it('keeps the mark of what was deleted, and drops it when told to forget', async () => {
     const { open, store, keys } = await room();
     store.put(contextOf('gone'), null);
