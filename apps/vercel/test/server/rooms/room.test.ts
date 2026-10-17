@@ -124,13 +124,19 @@ describe('a room held on Vercel', () => {
   });
 
   it('keeps its lease for as long as it holds the room', async () => {
-    const { deps, key } = await roomDepsOf(connection.redis);
+    const { deps, key } = await roomDepsOf(connection.redis, {
+      timing: { leaseMs: 60_000, renewMs: 40, tickMs: 40 },
+    });
     const room = await VercelRoom.open(deps, 'room');
+    const lease = roomKeysOf(key, 'room').lease;
+    await connection.redis.pExpire(lease, 5_000);
 
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await vi.waitFor(async () => expect(await connection.redis.pTTL(lease)).toBeGreaterThan(5_000), {
+      timeout: 4_000,
+    });
 
     expect(room.isReleased).toBe(false);
-    expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toMatch(/^here:/);
+    expect(await connection.redis.get(lease)).toMatch(/^here:/);
     await room.release();
   });
 
