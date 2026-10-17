@@ -9,6 +9,7 @@ import { vercelBackend } from '../../../src/server/backend.js';
 import { createServerDeps } from '../../../src/server/deps.js';
 import { connectRedis } from '../../../src/server/redis.js';
 import { roomKeysOf } from '../../../src/server/rooms/keys.js';
+import { MAX_FRAMES_PER_WINDOW } from '../../../src/core/rooms/limits.js';
 import { PART_BYTES } from '../../../src/server/rooms/relay.js';
 import { VercelRoom } from '../../../src/server/rooms/room.js';
 import { REDIS_URL } from '../redis-helpers.js';
@@ -149,6 +150,39 @@ describe('a room whose sockets reach different instances', () => {
 
     await vi.waitFor(() => expect(bob.sent).toContain('pong'));
     expect(publish).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ t: 'frame', d: 'ping' }));
+  });
+
+  it('passes a relayed socket’s pings on no sooner than one in five seconds', async () => {
+    const { a, b } = await twoInstances();
+    await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    const publish = vi.spyOn(b.relay, 'publish');
+
+    bob.emit('message', Buffer.from('ping'), false);
+    bob.emit('message', Buffer.from('ping'), false);
+
+    await vi.waitFor(() => expect(bob.sent).toContain('pong'));
+    const pings = publish.mock.calls.filter(([, message]) => message.t === 'frame' && message.d === 'ping');
+    expect(pings).toHaveLength(1);
+    expect(bob.sent.filter((data) => data === 'pong')).toHaveLength(1);
+  });
+
+  it('cuts off a relayed socket whose pings go past the limit on frames', async () => {
+    const { a, b } = await twoInstances();
+    await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    const room = (await a.runtime.openRoom('room')) as VercelRoom;
+    const [relayed] = room.remotes;
+    const { rates } = room.engine as unknown as { rates: WeakMap<object, { count: number }> };
+    (rates.get(relayed) as { count: number }).count = MAX_FRAMES_PER_WINDOW;
+
+    bob.emit('message', Buffer.from('ping'), false);
+
+    await vi.waitFor(() =>
+      expect(bob.messages()).toContainEqual(expect.objectContaining({ type: 'error', code: 'too-many-messages' }))
+    );
+    expect(bob.sent).not.toContain('pong');
+    expect(room.takeRelayedPing(relayed)).toBe(false);
   });
 
   it('asks a socket to come back at its ping once the instance holding the room is gone', async () => {

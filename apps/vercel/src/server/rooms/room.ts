@@ -221,6 +221,11 @@ export class VercelRoom implements RoomHost<Conn> {
     this.engine.receive(conn, message);
   }
 
+  /** Counts a ping relayed from another instance, answering whether to answer it. */
+  takeRelayedPing(conn: Conn): boolean {
+    return this.engine.takeRelayedPing(conn);
+  }
+
   /**
    * A connection dropped. Its seat leaves the copy of the seats other instances read, so that
    * somebody who left may not put assets in from one of them. When this instance has no connections

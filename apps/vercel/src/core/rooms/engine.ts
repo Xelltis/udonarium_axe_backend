@@ -289,6 +289,17 @@ export class RoomEngine<C extends object> {
     }
   }
 
+  /**
+   * Counts a ping a socket on another instance sent on to this one, as any frame is counted; over
+   * the limit, the connection is closed as for any frame. Answers whether the ping is to be answered.
+   */
+  takeRelayedPing(conn: C): boolean {
+    if (this.refused.has(conn)) return false;
+    if (this.withinRate(conn)) return true;
+    this.refuse(conn, 'too-many-messages');
+    return false;
+  }
+
   /** Takes in what came on a connection. */
   receive(conn: C, message: string | ArrayBuffer | Uint8Array): void {
     // The room server answers PING itself, so text that reaches here is of no use. Dropped silently,

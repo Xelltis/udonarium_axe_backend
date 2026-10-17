@@ -13,6 +13,12 @@ import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
  */
 export const PARK_MS = 15_000;
 
+/**
+ * How long a relayed socket's pings wait between going on to the owner (milliseconds). Axe pings
+ * every 25 seconds; one sent sooner goes unanswered rather than costing the relay a round trip.
+ */
+export const RELAYED_PING_GAP_MS = 5_000;
+
 /** How long to wait before trying again when no owner is found (milliseconds). */
 const RETRY_MS = 100;
 
@@ -34,6 +40,8 @@ interface Link {
   gone: boolean;
   /** Whether it is relayed to another instance, which then answers its pings. */
   relayed: boolean;
+  /** When a ping last went on to the owner. */
+  pingedAt: number;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -206,7 +214,15 @@ export class RoomRuntime {
   /** Takes a WebSocket that connected to a room. */
   attach(ws: WebSocket, roomKey: string): void {
     const conn: Conn = { id: crypto.randomUUID(), socket: socketOf(ws), seat: null };
-    const link: Link = { waiting: [], route: null, leave: null, rotated: false, gone: false, relayed: false };
+    const link: Link = {
+      waiting: [],
+      route: null,
+      leave: null,
+      rotated: false,
+      gone: false,
+      relayed: false,
+      pingedAt: -Infinity,
+    };
 
     // Before the Vercel Function's maximum duration cuts it off, the server closes it itself and
     // has it reconnect.
@@ -222,6 +238,10 @@ export class RoomRuntime {
       // the room). A relayed one goes on to the owner, so a socket whose owner went silent hears no
       // answer and gets back in elsewhere rather than seeming connected.
       if (message === PING && !link.relayed) return conn.socket.send(PONG);
+      if (message === PING) {
+        if (Date.now() - link.pingedAt < RELAYED_PING_GAP_MS) return;
+        link.pingedAt = Date.now();
+      }
       if (link.route) link.route(message);
       else link.waiting.push(message);
     });
@@ -363,10 +383,14 @@ export class RoomRuntime {
       }
       const conn = remotes.get(message.c);
       if (!conn) return;
-      if (message.t === 'frame') return message.d === PING ? conn.socket.send(PONG) : room.receive(conn, message.d);
-      remotes.delete(message.c);
-      if (message.rotated) setTimeout(() => room.closed(conn), this.parkMs).unref();
-      else room.closed(conn);
+      if (message.t !== 'frame') {
+        remotes.delete(message.c);
+        if (message.rotated) setTimeout(() => room.closed(conn), this.parkMs).unref();
+        else room.closed(conn);
+        return;
+      }
+      if (message.d !== PING) return room.receive(conn, message.d);
+      if (room.takeRelayedPing(conn)) conn.socket.send(PONG);
     });
     await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), () => void room.deletedElsewhere());
   }
