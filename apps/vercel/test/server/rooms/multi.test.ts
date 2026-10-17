@@ -40,19 +40,30 @@ const twoInstances = async ({
   parkMs = 50,
   socketSecondsOfB,
   leaseMsOfB = TIMING.leaseMs,
-}: { parkMs?: number; socketSecondsOfB?: number; leaseMsOfB?: number } = {}) => {
+  deferOfA,
+}: {
+  parkMs?: number;
+  socketSecondsOfB?: number;
+  leaseMsOfB?: number;
+  deferOfA?: (work: Promise<unknown>) => void;
+} = {}) => {
   const config = configOf();
-  const make = async (instance: string, roomSocketSeconds = config.roomSocketSeconds, leaseMs = TIMING.leaseMs) => {
+  const make = async (
+    instance: string,
+    roomSocketSeconds = config.roomSocketSeconds,
+    leaseMs = TIMING.leaseMs,
+    defer?: (work: Promise<unknown>) => void
+  ) => {
     const redis = await connectRedis(REDIS_URL);
     const deps = await createServerDeps(
       { ...config, roomSocketSeconds },
-      { bucketOf: () => memoryBucket(), instance, timing: { ...TIMING, leaseMs }, parkMs },
+      { bucketOf: () => memoryBucket(), instance, timing: { ...TIMING, leaseMs }, parkMs, defer },
       redis
     );
     opened.push(deps);
     return deps;
   };
-  const a = await make('a');
+  const a = await make('a', undefined, undefined, deferOfA);
   const b = await make('b', socketSecondsOfB, leaseMsOfB);
   await vercelBackend(a).rooms.create({
     roomKey: 'room',
@@ -258,6 +269,62 @@ describe('a room whose sockets reach different instances', () => {
     await welcomed(again);
     expect(await b.runtime.openRoom('room')).not.toBeNull();
     again.close(1000, 'bye');
+  });
+
+  it('goes on asking the sockets elsewhere back after the last call, as letting the room go does', async () => {
+    const deferred: Promise<unknown>[] = [];
+    const { a, b } = await twoInstances({ deferOfA: (work) => deferred.push(work) });
+    const alice = await enter(a, 'alice');
+    const bob = await enter(b, 'bob');
+    let letGo!: () => void;
+    const held = new Promise<void>((resolve) => (letGo = resolve));
+    const publish = a.relay.publish.bind(a.relay);
+    const published = vi.spyOn(a.relay, 'publish').mockImplementation(async (channel, message) => {
+      if (channel === a.relay.controlOf('room')) await held;
+      return publish(channel, message);
+    });
+
+    alice.close(1000, 'bye');
+    await vi.waitFor(() => expect(published).toHaveBeenCalledWith(a.relay.controlOf('room'), { t: 'moved' }));
+    let settled = false;
+    void Promise.all(deferred).then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+
+    letGo();
+    await vi.waitFor(() => expect(settled).toBe(true));
+    expect(bob.closedWith).toEqual({ code: 1012, reason: 'moved' });
+  });
+
+  it('says so when it cannot ask the sockets elsewhere back on letting the room go', async () => {
+    const { a, b } = await twoInstances();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const alice = await enter(a, 'alice');
+    await enter(b, 'bob');
+    const publish = a.relay.publish.bind(a.relay);
+    vi.spyOn(a.relay, 'publish').mockImplementation((channel, message) =>
+      channel === a.relay.controlOf('room') ? Promise.reject(new Error('blip')) : publish(channel, message)
+    );
+
+    alice.close(1000, 'bye');
+
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Could not ask the room’s sockets on other instances back:', expect.any(Error))
+    );
+  });
+
+  it('says so when it cannot delete the room another instance asked it to', async () => {
+    const { a, b } = await twoInstances();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await enter(a, 'alice');
+    await enter(b, 'bob');
+    vi.spyOn(VercelRoom.prototype, 'deletedElsewhere').mockRejectedValue(new Error('down'));
+
+    expect(await b.runtime.deleteRoom('room', 'user-gm')).toBe('deleted');
+
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Could not delete the room asked for:', expect.any(Error))
+    );
   });
 
   it('lets the seats of an instance that went away go', async () => {

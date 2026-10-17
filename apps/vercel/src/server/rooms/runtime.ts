@@ -134,11 +134,16 @@ export class RoomRuntime {
             console.error('Could not hear the room’s sockets on other instances:', err)
           );
           // Stops hearing the room only once it has started to, so that a room let go while it
-          // was still being set up is not left heard on this instance.
+          // was still being set up is not left heard on this instance. It goes on after the last
+          // call, as letting the room go does, so the sockets elsewhere are still asked back.
           room.onRelease = () => {
             if (this.rooms.get(roomKey) === claiming) this.rooms.delete(roomKey);
-            const unserving = serving.then(() => this.unserve(room)).finally(() => this.unserving.delete(unserving));
+            const unserving = serving
+              .then(() => this.unserve(room))
+              .catch((err: unknown) => console.error('Could not ask the room’s sockets on other instances back:', err))
+              .finally(() => this.unserving.delete(unserving));
             this.unserving.add(unserving);
+            this.deps.defer(unserving);
           };
         },
         () => this.rooms.delete(roomKey)
@@ -415,7 +420,11 @@ export class RoomRuntime {
       if (message.d !== PING) return room.receive(conn, message.d);
       if (room.takeRelayedPing(conn)) conn.socket.send(PONG);
     });
-    await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), () => void room.deletedElsewhere());
+    await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), () =>
+      this.deps.defer(
+        room.deletedElsewhere().catch((err: unknown) => console.error('Could not delete the room asked for:', err))
+      )
+    );
   }
 
   /** Stepped down as owner. Has the WebSockets that landed on other instances reconnect. */
