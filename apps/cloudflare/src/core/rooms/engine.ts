@@ -1157,8 +1157,12 @@ export class RoomEngine<C extends object> {
       return this.refuseWrite(identifier, seat, reply);
     const kept = this.keptFromDeleting.get(seat.peerId);
     // What cannot be seen has dropped out above, and what is left are descendants with all their
-    // parents there, so they have reached the sender.
-    if (kept && kept.until > Date.now() && kept.ids.has(identifier)) return this.refuseWrite(identifier, seat, reply);
+    // parents there, so they have reached the sender. Each delete of them keeps the rest for longer:
+    // Axe paces what it sends, and the lines of a long tab come over more than one window.
+    if (kept && kept.until > Date.now() && kept.ids.has(identifier)) {
+      kept.until = Date.now() + KEEP_FROM_DELETING_MS;
+      return this.refuseWrite(identifier, seat, reply);
+    }
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
     // Nobody but the GM may delete a result the server rolled, and the same goes for deleting the
     // whole tab. It is gone from the sender's side already, so everything it can see is sent back.

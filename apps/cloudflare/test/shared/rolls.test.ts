@@ -667,6 +667,37 @@ describe('a rolled result', () => {
     await clients.carol.expectQuiet();
   });
 
+  it('keeps the lines of a tab it would not let go for as long as their deletes keep coming', async () => {
+    const clients = await room();
+    await rolledIn(clients);
+    for (const id of ['first', 'second']) {
+      clients.alice.emit([
+        {
+          eventName: SyncEvent.UPDATE,
+          data: contextOf(id, 1, 0.5, { parentIdentifier: 'main', value: id, attributes: {} }, 'chat'),
+        },
+      ]);
+      await clients.bob.events();
+    }
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } }]);
+    await clients.alice.events();
+    await harness.inside(clients.roomKey, ({ engine }) => {
+      const room = engine as unknown as { keptFromDeleting: Map<string, { until: number }> };
+      for (const kept of room.keptFromDeleting.values()) kept.until = Date.now() + 50;
+    });
+
+    // A seat pacing what it sends may send the lines of a long tab well after the tab.
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'first' } }]);
+    await clients.alice.events();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'second' } }]);
+
+    expect(
+      (await clients.alice.events()).map((event) => [event.eventName, (event.data as Message).identifier])
+    ).toEqual([[AuthorityEvent.AUTHORITATIVE, 'second']]);
+    await clients.bob.expectQuiet();
+  });
+
   it('lets those lines go once the while it keeps them has passed, and keeps the lines of two tabs at once', async () => {
     const clients = await room();
     await rolledIn(clients);
