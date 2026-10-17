@@ -941,14 +941,38 @@ describe('what is handed back and then deleted', () => {
   it('forgets what was handed back to a player once the player leaves', async () => {
     const t = await table();
     await handedBackToBob(t, 'd4');
+    await handedBackToBob(t, 'd6');
+    t.bob.emit([deletion('d6')]);
+    expect(ids(await t.bob.events())).toEqual([['DELETE_GAME_OBJECT', 'd6']]);
+    await Promise.all([t.alice.events(), t.gm.events()]);
 
     t.bob.close();
     await t.gm.next('leave');
 
     await harness.inside(t.roomKey, ({ engine }) => {
-      const room = engine as unknown as { handedBack: Map<string, unknown> };
+      const room = engine as unknown as { handedBack: Map<string, unknown>; toldGone: Map<string, unknown> };
       expect(room.handedBack.has('bob')).toBe(false);
+      expect(room.toldGone.has('bob')).toBe(false);
     });
+  });
+
+  it('hands a player back what it makes again after a deletion told back, however long the load took', async () => {
+    const t = await table();
+    await handedBackToBob(t, 'd5');
+    t.bob.emit([deletion('d5')]);
+    expect(ids(await t.bob.events())).toEqual([['DELETE_GAME_OBJECT', 'd5']]);
+    await Promise.all([t.alice.events(), t.gm.events()]);
+    await harness.inside(t.roomKey, ({ engine }) => {
+      const room = engine as unknown as { handedBack: Map<string, { until: number }> };
+      for (const handed of room.handedBack.values()) handed.until = Date.now() - 1;
+    });
+
+    t.bob.emit([
+      { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['d5'] } },
+      update(contextOf('d5', 5, 0.5, { attributes: { face: '4', owner: '', x: 10 } }, 'dice-symbol')),
+    ]);
+
+    expect(ids(await t.bob.events())).toEqual([['AUTHORITATIVE_OBJECT', 'd5']]);
   });
 });
 

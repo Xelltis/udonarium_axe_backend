@@ -140,13 +140,17 @@ export class RoomEngine<C extends object> {
    */
   private keepTimer: ReturnType<typeof setTimeout> | null = null;
   /**
-   * For each seat, what was handed back to it as it stands, what of that it was told had gone, and
-   * until when either is minded. A deletion of one that goes through is told back to the seat, which
-   * may have made it again on taking it back after sending the deletion. One told back that the seat
-   * then makes again, as on loading a room or undoing, is handed to it once more: it made it before
-   * the word of the deletion came.
+   * For each seat, what was handed back to it as it stands, and until when that is minded. A deletion
+   * of one that goes through is told back to the seat, which may have made it again on taking it
+   * back after sending the deletion.
    */
-  private handedBack = new Map<string, { ids: Set<string>; told: Set<string>; until: number }>();
+  private handedBack = new Map<string, { ids: Set<string>; until: number }>();
+  /**
+   * For each seat, what it was told had gone on deleting it. One the seat then makes again, as on
+   * loading a room or undoing, is handed to it once more: it made it before the word came, however
+   * long the load in between. It lasts until then, or until the seat leaves.
+   */
+  private toldGone = new Map<string, Set<string>>();
 
   constructor(private readonly host: RoomHost<C>) {}
 
@@ -195,14 +199,14 @@ export class RoomEngine<C extends object> {
   }
 
   private noteHandedBack(peerId: string, identifier: string): void {
-    const handed = this.handedBackTo(peerId) ?? { ids: new Set<string>(), told: new Set<string>(), until: 0 };
+    const handed = this.handedBackTo(peerId) ?? { ids: new Set<string>(), until: 0 };
     handed.ids.add(identifier);
     handed.until = Date.now() + HANDED_BACK_MS;
     this.handedBack.set(peerId, handed);
   }
 
   /** What was handed back to the seat, while it is still minded. */
-  private handedBackTo(peerId: string): { ids: Set<string>; told: Set<string>; until: number } | undefined {
+  private handedBackTo(peerId: string): { ids: Set<string>; until: number } | undefined {
     const handed = this.handedBack.get(peerId);
     if (handed && handed.until <= Date.now()) this.handedBack.delete(peerId);
     return this.handedBack.get(peerId);
@@ -210,7 +214,7 @@ export class RoomEngine<C extends object> {
 
   /** Whether the seat makes again what it was told had gone, which is then handed to it once more. */
   private madeAgain(peerId: string, identifier: string): boolean {
-    return this.handedBackTo(peerId)?.told.delete(identifier) ?? false;
+    return this.toldGone.get(peerId)?.delete(identifier) ?? false;
   }
 
   /** Keeps the room awake until the last of what is kept from deleting is let go. */
@@ -575,6 +579,7 @@ export class RoomEngine<C extends object> {
   /** The seat has left. Deletes what was kept only while it was there, and tells the others. */
   private leave(seat: Seat): void {
     this.handedBack.delete(seat.peerId);
+    this.toldGone.delete(seat.peerId);
     if (this.store.removeOwnedBy(seat.peerId).length > 0) this.scheduleFlush();
     this.broadcast(undefined, { type: 'leave', peerId: seat.peerId });
     if (this.seats().length === 0) this.host.emptied();
@@ -1248,7 +1253,9 @@ export class RoomEngine<C extends object> {
     const handed = this.handedBackTo(seat.peerId);
     doomed.forEach((id, index) => {
       if (!handed?.ids.delete(id)) return;
-      handed.told.add(id);
+      const told = this.toldGone.get(seat.peerId);
+      if (told) told.add(id);
+      else this.toldGone.set(seat.peerId, new Set([id]));
       push(sender, fromAuthority(SyncEvent.DELETE, { aliasName: index === 0 ? aliasName : '', identifier: id }));
     });
     for (const { seat: other } of others) {
