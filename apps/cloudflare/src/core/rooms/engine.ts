@@ -979,10 +979,14 @@ export class RoomEngine<C extends object> {
     push: Push<C>,
     writer?: C
   ): void {
+    // Who wrote what waited is minded no longer once it has its parent: it may wait again later,
+    // moved under a parent not there yet, and what is taken back then is handed back to all.
+    const arrived = new Set<string>();
     for (const { conn, seat } of seats) {
       for (const identifier of identifiers) {
         const then = viewKind(identifier, seat, was);
         const now = viewKind(identifier, seat, this.store.lookup);
+        if (then === 'pending' && now !== 'pending') arrived.add(identifier);
         const withdrawn = then === 'pending' && !!this.withdrawnPending.get(seat.userId)?.has(identifier);
         const writerPeerId = conn === writer ? (this.host.seatOf(conn) as Seat).peerId : '';
         const remade = then === 'pending' && delivered(now) && this.madeAgain(writerPeerId, identifier);
@@ -994,6 +998,7 @@ export class RoomEngine<C extends object> {
         if (withdrawn && now !== 'pending') this.withdrawnPending.get(seat.userId)?.delete(identifier);
       }
     }
+    for (const identifier of arrived) this.pendingWriters.delete(identifier);
   }
 
   /**

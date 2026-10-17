@@ -990,6 +990,23 @@ describe('what is handed back and then deleted', () => {
     expect(ids(await t.gm.events())).toEqual([['AUTHORITATIVE_OBJECT', 'said-meanwhile']]);
   });
 
+  it('hands back to the one who wrote a child before its parent what is taken back later, once its parent comes', async () => {
+    const t = await table();
+    const node = (identifier: string, majorVersion: number, parentIdentifier: string) =>
+      contextOf(identifier, majorVersion, 0.5, { parentIdentifier, attributes: {} }, 'node');
+    // A room loaded writes a child before its parent.
+    t.gm.emit([update(node('child', 1, 'parent')), update(node('parent', 1, ''))]);
+    await Promise.all(t.players.map((client) => client.events()));
+
+    t.gm.emit([update(node('parent', 2, 'not-yet'))]);
+    expect(ids(await t.gm.events())).toEqual([['WITHDRAW_GAME_OBJECT', 'child']]);
+    await Promise.all(t.players.map((client) => client.events()));
+
+    t.gm.emit([update(node('not-yet', 1, ''))]);
+
+    expect(ids(await t.gm.events())).toEqual([['AUTHORITATIVE_OBJECT', 'child']]);
+  });
+
   it('tells a player no deletion once the while for what was handed back is up', async () => {
     const t = await table();
     await handedBackToBob(t, 'd3');
