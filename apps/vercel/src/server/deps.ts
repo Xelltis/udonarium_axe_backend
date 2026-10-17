@@ -26,6 +26,14 @@ export const upgrades: Upgrades = new WeakMap<Request, (onSocket: (ws: WebSocket
 /** The leftover assets are swept once for every this many new assets stored. */
 export const ORPHAN_SWEEP_EVERY = 20;
 
+/**
+ * Without CRON_SECRET anyone can call the sweep, so then it runs only once in this long, across
+ * instances (milliseconds). Vercel Cron calls once a day.
+ *
+ *   sweep:unkeyed   STR   Set when the sweep ran without the secret. Runs out after this long.
+ */
+export const UNKEYED_SWEEP_EVERY_MS = 12 * 60 * 60 * 1000;
+
 /** What a sweep deleted. */
 export interface Swept {
   rooms: number;
@@ -132,11 +140,19 @@ export const backendProvider = (options: DepsOptions) => {
     },
     /**
      * Deletes the rooms past their time to be deleted, and the leftover assets (Vercel Cron). Does
-     * nothing when there is no Redis to hold rooms.
+     * nothing when there is no Redis to hold rooms. Without the secret, returns null when it swept
+     * less than UNKEYED_SWEEP_EVERY_MS ago.
      */
-    async sweep(config: VercelServerConfig): Promise<Swept> {
+    async sweep(config: VercelServerConfig, keyed: boolean): Promise<Swept | null> {
       if (!config.redisUrl) return { rooms: 0, assets: 0 };
       const deps = await depsOf(config);
+      if (!keyed) {
+        const taken = await deps.redis.set(deps.key('sweep', 'unkeyed'), '1', {
+          condition: 'NX',
+          expiration: { type: 'PX', value: UNKEYED_SWEEP_EVERY_MS },
+        });
+        if (!taken) return null;
+      }
       return { rooms: await deps.sweeper.now(), assets: await deps.orphans() };
     },
     /** What was made (so the tests can reach inside). */

@@ -137,7 +137,7 @@ Vercelのプロジェクトの**Environment Variables**で足したり変えた�
 | `BLOB_READ_WRITE_TOKEN` |  ※   | —      | 同じストアの鍵。Vercelの外で動かすときは、こちらを入れる                                           |
 | `ROOM_SOCKET_SECONDS`   |      | `280`  | 部屋のWebSocketを、部屋のサーバーから閉じてつなぎ直してもらうまでの秒数（60以上）                  |
 | `REDIS_KEY_PREFIX`      |      | `axe:` | Redisのキーの頭。1つのRedisを、別のデプロイと分けて使うときに替える                                |
-| `CRON_SECRET`           |      | —      | 掃除（`/internal/sweep`）を呼べる鍵。入れると、Vercel Cronのほかからは呼べなくなる                 |
+| `CRON_SECRET`           |      | —      | 掃除（`/internal/sweep`）を呼べる鍵。入れると、Vercel Cronのほかからは呼べなくなる。入れないときは、掃除は12時間に1回まで |
 | `BLOB_LOCAL_DIR`        |      | —      | 手元で試すときに、画像と音声をこのディレクトリに置く。Vercelの上では使えない                       |
 
 - ※のBlobの2つは、どちらかがあれば足ります。ストアをプロジェクトにつなぐと、Vercelが`BLOB_STORE_ID`を入れます。

@@ -26,8 +26,12 @@ export interface ServerAppOptions {
   env?: () => Record<string, string | undefined>;
   /** The room server that fits the settings. */
   backendFor: (config: VercelServerConfig) => Promise<ServerBackend>;
-  /** Deletes the rooms past their time to be deleted, and the assets that failed to be deleted. */
-  sweep: (config: VercelServerConfig) => Promise<Swept>;
+  /**
+   * Deletes the rooms past their time to be deleted, and the assets that failed to be deleted.
+   * keyed is whether the caller showed CRON_SECRET. Returns null when it did not sweep because it
+   * swept a little while ago.
+   */
+  sweep: (config: VercelServerConfig, keyed: boolean) => Promise<Swept | null>;
 }
 
 type ServerAppEnv = ServerEnv & { Variables: { config: VercelServerConfig } };
@@ -50,13 +54,15 @@ export const serverApp = (options: ServerAppOptions): Hono<ServerAppEnv> => {
   for (const path of SERVER_PATHS) app.use(path, loader);
   app.route('/v1', serverRoutes());
   // The sweep Vercel Cron calls. When CRON_SECRET is set, checks the Authorization Vercel adds.
+  // Without it anyone can call, so the sweep runs only once in a while.
   app.get('/internal/sweep', async (c) => {
     const config = c.get('config');
     const authorization = c.req.header('Authorization') ?? '';
     if (config.cronSecret && !sameText(authorization, `Bearer ${config.cronSecret}`)) {
       return c.body(null, 401);
     }
-    return c.json(await options.sweep(config));
+    const swept = await options.sweep(config, config.cronSecret !== null);
+    return swept ? c.json(swept) : c.body(null, 429);
   });
   return app;
 };

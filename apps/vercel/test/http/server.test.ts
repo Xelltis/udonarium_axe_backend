@@ -7,6 +7,7 @@ vi.mock('hono/adapter', () => ({
 }));
 
 import { serverApp } from '../../src/http/server.js';
+import type { ServerAppOptions } from '../../src/http/server.js';
 import { storelessBackend } from '../../src/server/backend.js';
 
 describe('serverApp', () => {
@@ -37,7 +38,7 @@ describe('serverApp', () => {
   });
 
   it('sweeps for Vercel Cron, only with its secret when one is set', async () => {
-    const sweep = vi.fn(async () => ({ rooms: 3, assets: 1 }));
+    const sweep = vi.fn<ServerAppOptions['sweep']>(async () => ({ rooms: 3, assets: 1 }));
     const app = serverApp({ backendFor: async () => storelessBackend(new WeakMap()), sweep });
     const call = (headers: Record<string, string> = {}) =>
       app.fetch(new Request('https://backend.example/internal/sweep', { headers }));
@@ -49,18 +50,20 @@ describe('serverApp', () => {
 
     expect([without.status, wrong.status]).toEqual([401, 401]);
     expect(await right.json()).toEqual({ rooms: 3, assets: 1 });
-    expect(sweep).toHaveBeenCalledTimes(1);
+    expect(sweep.mock.calls.map(([, keyed]) => keyed)).toEqual([true]);
   });
 
-  it('sweeps for anyone when no secret is set', async () => {
-    const app = serverApp({
-      backendFor: async () => storelessBackend(new WeakMap()),
-      sweep: async () => ({ rooms: 0, assets: 0 }),
-    });
+  it('sweeps for anyone when no secret is set, and says so when it swept a little while ago', async () => {
+    const sweep = vi.fn<ServerAppOptions['sweep']>().mockResolvedValueOnce({ rooms: 0, assets: 0 });
+    sweep.mockResolvedValueOnce(null);
+    const app = serverApp({ backendFor: async () => storelessBackend(new WeakMap()), sweep });
     rawEnv = { ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example' };
 
-    const res = await app.fetch(new Request('https://backend.example/internal/sweep'));
+    const first = await app.fetch(new Request('https://backend.example/internal/sweep'));
+    const again = await app.fetch(new Request('https://backend.example/internal/sweep'));
 
-    expect(await res.json()).toEqual({ rooms: 0, assets: 0 });
+    expect(await first.json()).toEqual({ rooms: 0, assets: 0 });
+    expect(again.status).toBe(429);
+    expect(sweep.mock.calls.map(([, keyed]) => keyed)).toEqual([false, false]);
   });
 });

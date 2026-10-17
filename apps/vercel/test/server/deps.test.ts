@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { MAX_PUT_BYTES } from '../../src/server/assets/backend.js';
 import { memoryBucket } from '../../src/server/assets/bucket.js';
 import { localBucket } from '../../src/server/assets/local-bucket.js';
-import { ORPHAN_SWEEP_EVERY, backendProvider, createServerDeps } from '../../src/server/deps.js';
+import {
+  ORPHAN_SWEEP_EVERY,
+  UNKEYED_SWEEP_EVERY_MS,
+  backendProvider,
+  createServerDeps,
+} from '../../src/server/deps.js';
 import { useRedis } from './redis-helpers.js';
 import { configOf, depsOf } from './server-helpers.js';
 
@@ -101,9 +106,23 @@ describe('the server dependencies', () => {
     await provider.backendFor(config);
 
     expect(await storeless.lobby.list()).toEqual([]);
-    expect(await provider.sweep(withoutStore)).toEqual({ rooms: 0, assets: 0 });
-    expect(await provider.sweep(config)).toEqual({ rooms: 0, assets: 0 });
+    expect(await provider.sweep(withoutStore, false)).toEqual({ rooms: 0, assets: 0 });
+    expect(await provider.sweep(config, true)).toEqual({ rooms: 0, assets: 0 });
     expect(provider.depsFor(broken)).toBeUndefined();
     (await provider.depsFor(config))?.redis.destroy();
+  });
+
+  it('sweep without the secret only once in a while, and with it whenever called', async () => {
+    const provider = backendProvider({ bucketOf: () => memoryBucket() });
+    const config = configOf();
+
+    const first = await provider.sweep(config, false);
+    const again = await provider.sweep(config, false);
+    const keyed = await provider.sweep(config, true);
+
+    expect([first, again, keyed]).toEqual([{ rooms: 0, assets: 0 }, null, { rooms: 0, assets: 0 }]);
+    const deps = await provider.depsFor(config);
+    expect(await deps?.redis.pTTL(deps.key('sweep', 'unkeyed'))).toBeGreaterThan(UNKEYED_SWEEP_EVERY_MS - 60_000);
+    deps?.redis.destroy();
   });
 });

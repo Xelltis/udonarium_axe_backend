@@ -36,7 +36,10 @@ describe('the sweep of assets left behind', () => {
     await put(`uploads/here/${ID}/old`, old);
     await put(`uploads/here/${ID}/new`, Date.now());
 
+    const lookups = vi.spyOn(connection.redis, 'hmGet');
+
     expect(await orphanSweeper(connection.redis, key, bucket)()).toBe(4);
+    expect(lookups).toHaveBeenCalledTimes(2);
 
     expect(bucket.paths().sort()).toEqual(
       [roomAssetKey('here', ID), roomAssetKey('gone', OTHER), 'blocked/x', `uploads/here/${ID}/new`].sort()

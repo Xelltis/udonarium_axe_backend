@@ -25,22 +25,38 @@ export const orphanSweeper = (redis: Redis, key: KeyOf, bucket: AssetBucket) => 
   const cursorKey = key('sweep', 'blob-cursor');
   const page = await bucket.list('', await redis.get(cursorKey));
   const settled = Date.now() - ORPHAN_AGE_MS;
-  const orphans = await Promise.all(
-    page.items.map(async (item) => {
-      if (item.uploadedAt > settled) return null;
-      if (item.path.startsWith(UPLOADS_PREFIX)) return item.path;
-      if (!item.path.startsWith(ROOMS_PREFIX)) return null;
-      const roomKey = roomKeyOf(item.path);
-      if (!roomKey) return item.path;
-      const id = item.path.slice(roomAssetPrefix(roomKey).length);
+  const paths: string[] = [];
+  const byRoom = new Map<string, { id: string; path: string }[]>();
+  for (const item of page.items) {
+    if (item.uploadedAt > settled) continue;
+    if (item.path.startsWith(UPLOADS_PREFIX)) {
+      paths.push(item.path);
+      continue;
+    }
+    if (!item.path.startsWith(ROOMS_PREFIX)) continue;
+    const roomKey = roomKeyOf(item.path);
+    if (!roomKey) {
+      paths.push(item.path);
+      continue;
+    }
+    const held = byRoom.get(roomKey) ?? [];
+    held.push({ id: item.path.slice(roomAssetPrefix(roomKey).length), path: item.path });
+    byRoom.set(roomKey, held);
+  }
+  await Promise.all(
+    [...byRoom].map(async ([roomKey, held]) => {
       const [room, indexed] = await Promise.all([
         redis.exists(roomKeysOf(key, roomKey).meta),
-        redis.hExists(assetIndexOf(key, roomKey), id),
+        redis.hmGet(
+          assetIndexOf(key, roomKey),
+          held.map((asset) => asset.id)
+        ),
       ]);
-      return room === 1 && indexed === 1 ? null : item.path;
+      held.forEach((asset, at) => {
+        if (room !== 1 || indexed[at] === null) paths.push(asset.path);
+      });
     })
   );
-  const paths = orphans.filter((path): path is string => path !== null);
   await bucket.delete(paths);
   if (page.cursor) await redis.set(cursorKey, page.cursor);
   else await redis.del(cursorKey);

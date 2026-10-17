@@ -222,8 +222,9 @@ Axe側の設定の詳しい意味は、[Axeの設定](/guide/client-config#サ�
 
 ## 掃除の鍵を入れる（任意）
 
-時間が過ぎた部屋を消す掃除は、`vercel.json`に書いたVercel Cronが1日1回呼びます（`/internal/sweep`）。
+時間が過ぎた部屋と、消し残した画像や音声を消す掃除は、`vercel.json`に書いたVercel Cronが1日1回呼びます（`/internal/sweep`）。
 環境変数`CRON_SECRET`に乱数を入れておくと、Vercel Cronのほかからは呼べなくなります。
+入れないときは、だれでも呼べるので、掃除は12時間に1回までです。それより早く呼ばれると、掃除せずに`429`を返します。
 
 1. [設置の準備](/guide/prepare#乱数を作る-session-secret)と同じ方法で、乱数を作ります。`SESSION_SECRET`とは別のものにします。
 2. 左のサイドバーの**Environment Variables**で、**Name**を`CRON_SECRET`、**Value**を作った乱数にし、種類を**Secret**にして**Save**を押します。
