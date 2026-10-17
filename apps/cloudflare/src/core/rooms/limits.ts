@@ -48,8 +48,10 @@ export const ROLL_TIME_TOLERANCE_MS = 10 * 60 * 1000;
  * How long, after something was kept from being deleted, its descendants are also kept from being
  * deleted (milliseconds). When Axe deletes a tab, it deletes the lines in it one by one after the tab,
  * so that, after the tab was kept from being deleted, the lines in it do not get deleted on their own.
+ * Each delete of them starts it again. Axe sends the lines of a long tab in steps eleven seconds
+ * apart, keeping inside the rate window, so this is well longer than that.
  */
-export const KEEP_FROM_DELETING_MS = 10_000;
+export const KEEP_FROM_DELETING_MS = 20_000;
 
 /** How many dice can wait to be rolled in the whole room. Any more are not rolled. */
 export const MAX_PENDING_ROLLS = 64;

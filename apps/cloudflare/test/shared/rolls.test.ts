@@ -689,6 +689,11 @@ describe('a rolled result', () => {
     // A seat pacing what it sends may send the lines of a long tab well after the tab.
     clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'first' } }]);
     await clients.alice.events();
+    // Axe leaves eleven seconds between the steps it sends a long tab's lines in.
+    await harness.inside(clients.roomKey, ({ engine }) => {
+      const room = engine as unknown as { keptFromDeleting: Map<string, { until: number }> };
+      for (const kept of room.keptFromDeleting.values()) expect(kept.until - Date.now()).toBeGreaterThan(15_000);
+    });
     await new Promise((resolve) => setTimeout(resolve, 100));
     clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat', identifier: 'second' } }]);
 
