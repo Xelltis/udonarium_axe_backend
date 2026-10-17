@@ -703,6 +703,31 @@ describe('a rolled result', () => {
     await clients.bob.expectQuiet();
   });
 
+  it('stays awake while it keeps lines from deleting, and lets them go once their time is up', async () => {
+    const clients = await room();
+    await rolledIn(clients);
+    clients.alice.emit([{ eventName: SyncEvent.DELETE, data: { aliasName: 'chat-tab', identifier: 'main' } }]);
+    await clients.alice.events();
+    interface Keeping {
+      keptFromDeleting: Map<string, { until: number }>;
+      keepTimer: unknown;
+      letKeepGo(): void;
+    }
+
+    await harness.inside(clients.roomKey, ({ engine }) => {
+      const room = engine as unknown as Keeping;
+      expect(room.keepTimer).not.toBeNull();
+      room.letKeepGo();
+      expect(room.keptFromDeleting.size).toBe(1);
+      expect(room.keepTimer).not.toBeNull();
+
+      for (const kept of room.keptFromDeleting.values()) kept.until = 0;
+      room.letKeepGo();
+      expect(room.keptFromDeleting.size).toBe(0);
+      expect(room.keepTimer).toBeNull();
+    });
+  });
+
   it('lets those lines go once the while it keeps them has passed, and keeps the lines of two tabs at once', async () => {
     const clients = await room();
     await rolledIn(clients);

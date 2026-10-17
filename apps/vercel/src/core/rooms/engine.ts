@@ -133,6 +133,11 @@ export class RoomEngine<C extends object> {
   private withdrawnPending = new Map<string, Set<string>>();
   /** For each seat, what it was kept from deleting along with the descendants, and until when that lasts. */
   private keptFromDeleting = new Map<string, { ids: Set<string>; until: number }>();
+  /**
+   * Waits for the last of what is kept from deleting to be let go. A timer waiting keeps the room
+   * from hibernating, which would lose what is kept between the steps a seat paces its deletes in.
+   */
+  private keepTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly host: RoomHost<C>) {}
 
@@ -179,6 +184,25 @@ export class RoomEngine<C extends object> {
   dropStrayCursors(): void {
     this.dropCursors(this.removeStrayCursors());
   }
+
+  /** Keeps the room awake until the last of what is kept from deleting is let go. */
+  private keepAwake(): void {
+    if (this.keepTimer !== null) clearTimeout(this.keepTimer);
+    this.keepTimer = null;
+    const untils = [...this.keptFromDeleting.values()].map((kept) => kept.until);
+    if (untils.length === 0) return;
+    this.keepTimer = setTimeout(this.letKeepGo, Math.max(0, Math.max(...untils) - Date.now()));
+  }
+
+  /** Lets go of what is kept from deleting once its time is up, staying awake for the rest. */
+  private readonly letKeepGo = (): void => {
+    this.keepTimer = null;
+    const now = Date.now();
+    for (const [peerId, kept] of this.keptFromDeleting) {
+      if (kept.until <= now) this.keptFromDeleting.delete(peerId);
+    }
+    this.keepAwake();
+  };
 
   /** Stops writing changes in batches. It is for when the room is deleted. */
   stopFlushing(): void {
@@ -1161,6 +1185,7 @@ export class RoomEngine<C extends object> {
     // Axe paces what it sends, and the lines of a long tab come over more than one window.
     if (kept && kept.until > Date.now() && kept.ids.has(identifier)) {
       kept.until = Date.now() + KEEP_FROM_DELETING_MS;
+      this.keepAwake();
       return this.refuseWrite(identifier, seat, reply);
     }
     const doomed = [identifier, ...this.store.descendantsOf(identifier)];
@@ -1174,6 +1199,7 @@ export class RoomEngine<C extends object> {
       const ids = kept && kept.until > Date.now() ? kept.ids : new Set<string>();
       for (const id of doomed) ids.add(id);
       this.keptFromDeleting.set(seat.peerId, { ids, until: Date.now() + KEEP_FROM_DELETING_MS });
+      this.keepAwake();
       return;
     }
     const others = this.seats(sender);
