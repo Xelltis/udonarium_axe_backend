@@ -1,6 +1,6 @@
 # SkyWay版で困ったとき
 
-トークン発行サーバー（PHP版とVercel版）で、よくあるつまずきと、その直しかたをまとめました。
+トークン発行サーバー（PHP版・Vercel版・Cloudflare版）で、よくあるつまずきと、その直しかたをまとめました。
 まずブラウザで、トークン発行サーバーのURLの後ろに`/v1/status`を付けたものを開き、何が出るかを見てください（例：`https://example.com/backend/v1/status`）。
 
 ## `/v1/status`の結果から探す
@@ -52,7 +52,7 @@ Axeを開いたブラウザで開発者ツールを開き、**コンソール**�
 | 見えるもの                                                 | 原因と直しかた                                                                                                        |
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | CORSのエラー（`Access-Control-Allow-Origin`が無い、違う）  | `ACCESS_CONTROL_ALLOW_ORIGIN`が、Axeを開いているページのOriginと一致していない。PHP版では末尾の`/`も確かめる          |
-| `403`（PHP版は`Forbidden.`、Vercel版は`ORIGIN_FORBIDDEN`） | 上と同じ。許可していないOriginから来ている                                                                            |
+| `403`（PHP版は`Forbidden.`、Vercel版とCloudflare版は`ORIGIN_FORBIDDEN`） | 上と同じ。許可していないOriginから来ている                                                                            |
 | 混在コンテンツ（Mixed Content）のエラー                    | Axeが`https://`なのに、`backend.url`が`http://`になっている                                                           |
 | リクエストが飛んでいない                                   | Axeの`assets/config.json`の`backend.url`が空か、間違っている                                                          |
 | `404`                                                      | `backend.url`にパスが余分に付いている（例：`.../v1`まで書いている）か、足りない（サブディレクトリの名前が抜けている） |

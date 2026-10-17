@@ -36,8 +36,11 @@ Environmentごとに、次のSecretを入れます。
 | `DISCORD_CLIENT_ID`           | ログインに使うDiscordのアプリのClient ID（ログインと部屋を使うとき）                    |
 | `DISCORD_CLIENT_SECRET`       | 同じアプリのClient Secret                                                               |
 | `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数。Environmentごとに別のものにする                 |
+| `SKYWAY_APP_ID`               | SkyWayのアプリケーションID（SkyWay版のトークンを発行するとき）                          |
+| `SKYWAY_SECRET`               | 同じアプリのシークレットキー                                                            |
 
 ログインの3つは、そろえて入れるか、どれも入れないかのどちらかにします。一部だけだと、デプロイのジョブが止まります。
+SkyWayの2つも同じです。ログインの3つだけを入れたEnvironmentは部屋のサーバーに、SkyWayの2つだけを入れたEnvironmentはSkyWay版のトークン発行サーバー（→ [Cloudflareに置く（SkyWay版）](/skyway/cloudflare)）になり、両方を入れると両方を受け持ちます。
 Discordのアプリの作りかたは[Discordのアプリを作る](/server/discord)にあります。
 
 `ACCESS_CONTROL_ALLOW_ORIGIN`とログインの3つは、デプロイのたびにWorkerのシークレットとして入れ直します。

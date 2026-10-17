@@ -215,6 +215,7 @@ export default defineConfig({
           { text: 'SkyWayのアプリを作る', link: '/skyway/app' },
           { text: 'Vercelに置く', link: '/skyway/vercel' },
           { text: 'レンタルサーバーに置く（PHP版）', link: '/skyway/php' },
+          { text: 'Cloudflareに置く', link: '/skyway/cloudflare' },
           { text: '設定項目', link: '/skyway/configuration' },
           { text: '困ったとき', link: '/skyway/troubleshooting' },
         ],

@@ -1,17 +1,17 @@
 # SkyWay版の設定項目
 
-トークン発行サーバー（PHP版とVercel版）の設定を説明します。
-PHP版は`.env`というテキストファイルから、Vercel版はVercelのプロジェクトの環境変数から、同じ名前の設定を読みます。
+トークン発行サーバー（PHP版・Vercel版・Cloudflare版）の設定を説明します。
+PHP版は`.env`というテキストファイルから、Vercel版はVercelのプロジェクトの環境変数から、Cloudflare版はWorkerの変数とシークレットから、同じ名前の設定を読みます。
 
 ## 項目
 
-| 名前                          | 必須 | 既定値  | PHP版 | Vercel版 | 内容                                                           |
-| ----------------------------- | :--: | ------- | :---: | :------: | -------------------------------------------------------------- |
-| `SKYWAY_APP_ID`               |  ○   | —       |   ○   |    ○     | SkyWayのアプリケーションID                                     |
-| `SKYWAY_SECRET`               |  ○   | —       |   ○   |    ○     | SkyWayのシークレットキー。トークンの署名に使う                 |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` |  ○   | —       |   ○   |    ○     | トークンの発行を受けるAxeのOrigin。カンマ区切りで複数書ける    |
-| `SKYWAY_UDONARIUM_LOBBY_SIZE` |      | `3`     |   ○   |    ○     | ロビーの数（1以上の整数）                                      |
-| `SKYWAY_TOKEN_TTL_SECONDS`    |      | `86400` |       |    ○     | 発行するトークンの有効期間（秒）。`60`（1分）〜`604800`（7日） |
+| 名前                          | 必須 | 既定値  | PHP版 | Vercel版 | Cloudflare版 | 内容                                                           |
+| ----------------------------- | :--: | ------- | :---: | :------: | :----------: | -------------------------------------------------------------- |
+| `SKYWAY_APP_ID`               |  ○   | —       |   ○   |    ○     |      ○       | SkyWayのアプリケーションID                                     |
+| `SKYWAY_SECRET`               |  ○   | —       |   ○   |    ○     |      ○       | SkyWayのシークレットキー。トークンの署名に使う                 |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` |  ○   | —       |   ○   |    ○     |      ○       | トークンの発行を受けるAxeのOrigin。カンマ区切りで複数書ける    |
+| `SKYWAY_UDONARIUM_LOBBY_SIZE` |      | `3`     |   ○   |    ○     |      ○       | ロビーの数（1以上の整数）                                      |
+| `SKYWAY_TOKEN_TTL_SECONDS`    |      | `86400` |       |    ○     |      ○       | 発行するトークンの有効期間（秒）。`60`（1分）〜`604800`（7日） |
 
 PHP版のトークンの有効期間は、24時間で変えられません。
 
@@ -35,7 +35,7 @@ https://axe.example.com,https://www.axe.example.com
 同時にロビーにいる人が数百人を超えるときに増やします。
 同じSkyWayのアプリケーションを使うトークン発行サーバーどうしでは、同じ値にそろえてください（→ [ロビーの数](/skyway/#ロビーの数)）。
 
-### `SKYWAY_TOKEN_TTL_SECONDS`（Vercel版）
+### `SKYWAY_TOKEN_TTL_SECONDS`（Vercel版とCloudflare版）
 
 トークンの有効期間です。
 Axeは部屋に入るときにトークンを受け取り、そのあいだSkyWayにつながり続けます。
@@ -81,6 +81,15 @@ PHP版は、次の順に`.env`を探し、最初に見つかったものを読�
 - 名前が`.`で始まるファイルとフォルダ（`.env`、`.git`など）。ただし、SSLの証明書の発行に使う`.well-known/`は通す
 - `composer.json`、`phpunit.xml`、`Dockerfile`など、開発用のファイル
 - `vendor/`、`tests/`、`bin/`、`docs/`などのフォルダ
+
+## Cloudflare版の変数とシークレット
+
+`SKYWAY_APP_ID`と`SKYWAY_SECRET`は、Workerのシークレットとして`npx wrangler secret put`で入れます。
+`ACCESS_CONTROL_ALLOW_ORIGIN`は、デプロイのときに`--var`で入れます（→ [Cloudflareに置く](/skyway/cloudflare)）。
+`SKYWAY_UDONARIUM_LOBBY_SIZE`と`SKYWAY_TOKEN_TTL_SECONDS`も、シークレットか`--var`で入れられます。
+
+同じWorkerにログインの3つも入れると、部屋のサーバーも受け持ちます（→ [サーバー版の設定項目](/server/configuration)）。
+SkyWayの2つを入れずに部屋のサーバーだけを使うと、SkyWayの経路（`/v1/status`、`/v1/skyway/*`、`/v1/skyway2023/*`）は`CONFIG_INVALID`を返します。
 
 ## Vercel版の環境変数
 

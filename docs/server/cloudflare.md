@@ -7,6 +7,8 @@ Deploy to Cloudflareのボタンを使うので、ブラウザの操作だけで
 
 <Journey mode="server" here="cloudflare" />
 
+同じWorkerは、SkyWayの2つの値を入れると、SkyWay版のトークン発行サーバーも受け持ちます（→ [Cloudflareに置く（SkyWay版）](/skyway/cloudflare)）。
+
 ::: info 画面の言葉
 Cloudflareの画面は、日本語でも表示できます（右上のプロフィールから**Settings**の**Language**で選びます）。
 このページでは、ボタンやメニューの名前を英語の表示で書きます。

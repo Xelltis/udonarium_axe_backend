@@ -19,6 +19,7 @@ const ROUTES: Record<'skyway' | 'server', { label: string; steps: Page[][] }> = 
       [
         { key: 'vercel', title: 'Vercelに置く', link: '/skyway/vercel' },
         { key: 'php', title: 'レンタルサーバーに置く', link: '/skyway/php' },
+        { key: 'cloudflare', title: 'Cloudflareに置く', link: '/skyway/cloudflare' },
       ],
       [{ key: 'config', title: 'Axeにつなぐ', link: '/guide/client-config' }],
     ],
