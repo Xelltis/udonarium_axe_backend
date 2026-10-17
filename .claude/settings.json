@@ -7,7 +7,7 @@
       "Read(**/.env.*.local)",
       "Read(**/.env.production)"
     ],
-    "ask": ["Bash(git push *)", "Bash(git commit *)", "WebFetch"],
+    "ask": ["Bash(git push *)"],
     "allow": [
       "Bash(npx vitest *)",
       "Bash(npx tsc *)",
