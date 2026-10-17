@@ -1,4 +1,4 @@
-// Types for only the synchronous gzip, PBKDF2 and HMAC, out of the node: modules nodejs_compat offers.
+// Types for only the synchronous gzip, PBKDF2, HMAC and SHA-256, out of the node: modules nodejs_compat offers.
 // Installing @types/node makes its global types clash with workers-types, so only what is needed is here.
 declare module 'node:zlib' {
   interface ZlibOptions {
@@ -10,6 +10,11 @@ declare module 'node:zlib' {
 }
 
 declare module 'node:crypto' {
+  interface Hash {
+    update(data: string): Hash;
+    digest(): Uint8Array;
+  }
+  export function createHash(algorithm: 'sha256'): Hash;
   interface Hmac {
     update(data: string): Hmac;
     digest(): Uint8Array;
