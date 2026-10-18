@@ -1,9 +1,9 @@
 name: Release
 
 # On a push to main, runs CI's jobs again (ci.yml) and makes the release. When a release comes out,
-# deploys the Cloudflare app at its tag (deploy.yml); a push that makes none deploys nothing. A fork
-# without RELEASE_TOKEN deploys every push instead. These live apart from ci.yml so that a pull
-# request does not list them as skipped checks.
+# deploys the Cloudflare app and the Vercel app at its tag (deploy.yml); a push that makes none
+# deploys nothing. A fork without RELEASE_TOKEN deploys every push instead. These live apart from
+# ci.yml so that a pull request does not list them as skipped checks.
 
 on:
   push:
