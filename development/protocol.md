@@ -5,7 +5,7 @@
 
 型と定数は`apps/cloudflare/contracts/protocol.ts`に、例は`apps/cloudflare/contracts/fixtures/`にあります。
 このページの内容と食い違うときは、そちらが正しいものです。
-いまの版は**2**です。
+いまの版は**3**です。
 
 部屋に入るには、`GET /v1/rooms/:roomKey/ws`でWebSocketにつなぎ替えます（→ [部屋のサーバーのAPI](https://xelltis.github.io/udonarium_axe_backend/reference/server-api#get-v1-rooms-roomkey-ws)）。
 
@@ -25,12 +25,13 @@
 ```json
 {
   "type": "hello",
-  "protocolVersion": 2,
+  "protocolVersion": 3,
   "peerId": "a1B2c3XyZq9W8e7r6-",
   "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
   "password": "secret",
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
-  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+  "invite": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+  "idleMs": 0
 }
 ```
 
@@ -41,6 +42,7 @@
 - `accessToken`は、ログインしているときに付けます。付けなければ見学（`guest`）として入ります。付けるなら、`userId`はアカウントの`userId`と同じにします。違うと`unauthorized`で切られます。部屋のサーバーからログインを外したあとは、付けると`unauthorized`で切られ、見学としてだけ入れます。
 - 付けないときは、`userId`を`acct_`で始めてはいけません（ログインした人のユーザーIDの形です）。この部屋にログインして入ったことのある`userId`（`acct_`の付かない前の形のアカウントを含む）も名乗れません。どちらも`unauthorized`で切られます。見え方はユーザーIDで決まるので、ほかの人のユーザーIDを名乗れば、その人の手札や秘話が見えてしまうためです。
 - `invite`は、招待リンクに付いてきた招待です。ログインした人がその部屋に初めて入るときの役割になります。役割を覚えるのは席に着けたときだけなので、`room-full`などで断られたときは、次に入るときにもその招待が効きます。
+- `idleMs`は、そのページが最後に操作されてからのミリ秒です（→ [`active`](#active)）。無ければ0とみなします。3時間（`IDLE_SECONDS`）以上なら`idle`で断ります。Axeは、つなぎ直すたびに付けます。付けないと、放っておかれたページが、自分でつなぎ直すたびに操作されたことになるためです。
 - `hello`のすぐあとに、返事を待たずに別のものを送っても構いません。入れたあとで順に処理します。
 
 ### `send`
@@ -91,6 +93,21 @@ Axeは、トークンを替えたらすぐ送ります。
 `{"type":"asset-token"}`を送ると、部屋のアセットの新しいトークンを`asset-token`で返します（→ [部屋のアセットのトークン](#部屋のアセットのトークン)）。
 どの役割の席からでも頼めます。
 部屋を消しているあいだは、渡し直しません。
+
+### `active`
+
+`{"type":"active"}`で、ページが操作されたことを知らせます。
+サーバーは何も返しません。
+Axeは、前に送ってから操作（ポインタ、キー、ホイール、タッチ）があれば、5分（`ACTIVE_REPORT_SECONDS`）に1回まで送ります。
+
+3時間（`IDLE_SECONDS`）のあいだ`active`が届かない席は、`idle`で閉じます。
+ページを開いたまま放っておくと、部屋が空にならないので消えず、Vercel版では接続のあいだFunctionとRedisのコマンドを使い続けるためです。
+数えはじめは、`hello`の`idleMs`だけさかのぼった時刻です。
+数えるのは`active`だけです。
+`ping`・`auth`・`asset-token`のような接続そのもののやりとりは、操作が無くても送られます。`send`も、人の操作から送られたものかを、サーバーは見分けられません。
+そうした席を外すのは、部屋にフレームが届いたときと、見回りのときです。
+Cloudflare版の見回りは、席が3時間を過ぎて1秒たったときにも置きます。
+トークンが切れた席が放っておかれてもいたときは、`unauthorized`ではなく`idle`で閉じます。
 
 ## サーバーから送るもの
 
@@ -326,6 +343,7 @@ GMでない人は、書き込みで自分に見えるものを増やせません
 | `replaced`          | 同じ人が同じピアIDで新しくつないだ。つなぎ直すと新しい方を追い出すので、つなぎ直さない                                                                                                                            |                    |
 | `unauthorized`      | `accessToken`が無効か期限切れ、または`userId`がアカウントと違う。トークンを替えてつなぎ直す                                                                                                                       |         ○          |
 | `room-deleted`      | GMが部屋を削除した。部屋はもう無いので、つなぎ直さない                                                                                                                                                            |                    |
+| `idle`              | 3時間（`IDLE_SECONDS`）のあいだ`active`が届かなかった。`hello`の`idleMs`がそれ以上のときも。自分ではつなぎ直さず、人が操作してからつなぎ直す                                                                      |         ○          |
 
 `accessToken`を付けずに、`acct_`で始まる`userId`か、この部屋にログインして入ったことのある`userId`を名乗ったときも、`unauthorized`で切ります。
 同じ`userId`でログインした人が入ってきたときに閉じる見学の席も、`unauthorized`です。見学の席はトークンを持たないので、つなぎ直しても入れません（ログインしてから入り直す）。
