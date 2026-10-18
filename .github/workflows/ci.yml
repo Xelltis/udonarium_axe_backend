@@ -1,7 +1,7 @@
 name: CI
 
-# Every app's checks, on a pull request to main whatever it changed. release.yml runs the same jobs
-# again on main, through workflow_call, before it deploys and releases.
+# Every app's checks and the docs build, on a pull request to main whatever it changed. release.yml
+# runs the same jobs again on main, through workflow_call, before it deploys and releases.
 
 on:
   pull_request:
@@ -173,3 +173,24 @@ jobs:
           flags: cloudflare
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Checks that every link to a heading, in docs/ and development/, leads to one, and that the site
+  # builds (that no link leads to a page that does not exist). docs.yml builds it again on main to
+  # publish it.
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run docs:check
+
+      - run: npm run docs:build
