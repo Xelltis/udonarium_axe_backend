@@ -21,13 +21,14 @@
 
 Workerの画面の**Deployments**から**View build history**を開き、失敗したビルドのログを見ます。
 
-| 見えるもの                                            | 原因と直しかた                                                                                                                                 |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Please enable R2 through the Cloudflare Dashboard`   | アカウントでR2を使い始めていない（→ [Cloudflareに置く](/server/cloudflare#_2-r2を使い始める-アカウントに一度だけ)）                            |
-| バケットを作れない、同じ名前のバケットがある          | 前に同じ名前のWorkerを消したあとなどで、「<Workerの名前>-assets」が残っている。いらなければ消すか、Workerの名前を変える                        |
-| Deployボタンの**Create and deploy**を押しても進まない | GitHubに入れた**Cloudflare Workers and Pages**のアプリに、リポジトリを作る権限が無い。GitHubの**Settings**の**Applications**でアプリを入れ直す |
-| リポジトリを作れない                                  | 複製先のGitHubのアカウントに、同じ名前のリポジトリがすでにある。リポジトリの名前を変える                                                       |
-| `Authentication error`                                | CIからデプロイしていて、APIトークンの権限が足りない（→ [自分のリポジトリから自動でデプロイする](/operate/auto-deploy#apiトークン)）            |
+| 見えるもの                                            | 原因と直しかた                                                                                                                                                                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Please enable R2 through the Cloudflare Dashboard`   | アカウントでR2を使い始めていない（→ [Cloudflareに置く](/server/cloudflare#r2)）                                                                                                                                          |
+| `You need to enable Analytics Engine`                 | アカウントでAnalytics Engineを使い始めていない（→ [Cloudflareに置く](/server/cloudflare#analytics-engine)）                                                                                                              |
+| バケットを作れない、同じ名前のバケットがある          | 前に同じ名前のWorkerを消したあとや、初めてのデプロイが途中で止まったあとで、「<Workerの名前>-assets」が残っている。いらなければ消すか、Workerの名前を変える（→ [Cloudflareに置く](/server/cloudflare#analytics-engine)） |
+| Deployボタンの**Create and deploy**を押しても進まない | GitHubに入れた**Cloudflare Workers and Pages**のアプリに、リポジトリを作る権限が無い。GitHubの**Settings**の**Applications**でアプリを入れ直す                                                                           |
+| リポジトリを作れない                                  | 複製先のGitHubのアカウントに、同じ名前のリポジトリがすでにある。リポジトリの名前を変える                                                                                                                                 |
+| `Authentication error`                                | CIからデプロイしていて、APIトークンの権限が足りない（→ [自分のリポジトリから自動でデプロイする](/operate/auto-deploy#apiトークン)）                                                                                      |
 
 初めてデプロイした直後に、WorkerのURLを開くとエラーの画面が出ることがあります。
 1分ほど待ってから、開き直してください。

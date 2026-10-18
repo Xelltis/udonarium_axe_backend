@@ -193,7 +193,7 @@ Cloudflare版（トークン発行） {.axe-option-name}
 短所 {.axe-cons}
 
 - ターミナルでwranglerのコマンドを打つ（Deployボタンはサーバー版だけ）
-- アカウントでR2を使い始めておく必要がある（空のバケットが1つ作られる）
+- アカウントでR2とAnalytics Engineを使い始めておく必要がある（空のバケットが1つ作られる）
 
 向いている人：Cloudflareをすでに使っている人、あとでサーバー版にも広げたい人 {.axe-option-fit}
 

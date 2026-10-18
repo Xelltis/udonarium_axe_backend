@@ -73,7 +73,8 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
   - `commit-msg`: `commitlint` / `pre-commit`: stagedのTypeScriptに`eslint`（整形も見る）、PHPに`php-cs-fixer`と`phpstan`、
     共有コードを変えたら写しの確認 / `pre-push`: pushに変更が入ったアプリの型検査とテスト（Vercel版は`check:esm`も）
 - mainへのPRでは[.github/workflows/ci.yml](.github/workflows/ci.yml)が、全アプリのlint・整形・型検査・テストと文書のビルドを回す。
-  デプロイとリリースはmainへのpushで動く[.github/workflows/release.yml](.github/workflows/release.yml)に置き、PRでは動かさない
+  リリースはmainへのpushで動く[.github/workflows/release.yml](.github/workflows/release.yml)が作り、PRでは動かさない。
+  Cloudflare版のデプロイは、リリースが出たときだけそのタグで[.github/workflows/deploy.yml](.github/workflows/deploy.yml)が行う（手でも起動できる）
 - `CHANGELOG.md`は手で直さない。semantic-releaseがConventional Commitsから生成する
 
 ## コメント・テスト名は英語

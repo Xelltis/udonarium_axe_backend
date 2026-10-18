@@ -7,10 +7,17 @@ Deployボタンで置いた人は、Cloudflareが自動でデプロイし直す�
 ## しくみ
 
 1. `main`にpushされると、`Release`のワークフローが、CIのジョブ（各アプリのlint、型検査、テストと、文書のビルド）を流します。
-2. それが通ると、`Deploy Cloudflare`ジョブが、デプロイ先のGitHub Environmentごとに`wrangler deploy`を実行します。
-3. 同じEnvironmentへのデプロイは、1つずつ順に行います。
+2. それが通ると、リリースを作ります。リリースが出るのは、前のリリースから`feat`か`fix`のコミットが入ったときです。
+3. リリースが出たら、`Deploy`のワークフローが、そのタグの中身を、デプロイ先のGitHub Environmentごとに`wrangler deploy`します。
+4. 同じEnvironmentへのデプロイは、1つずつ順に行います。
 
-デプロイ先を書かなければ、このジョブは何もしません。
+リリースが出ないpush（文書、CI、依存の更新だけのもの）では、デプロイしません。
+いくつかまとめて入れても、デプロイは次のリリースのときの1回で済みます。
+
+リリースを作るには、リポジトリのSecret`RELEASE_TOKEN`が要ります。
+`RELEASE_TOKEN`が無いリポジトリ（ふつうのフォーク）では、リリースを作らずに、pushのたびに`main`に入った中身をデプロイします。
+
+デプロイ先を書かなければ、`Deploy`は何もしません。
 フォークしただけのリポジトリで、勝手にデプロイが走ることはありません。
 
 ## 設定する
@@ -94,14 +101,21 @@ APIトークンは、Cloudflareのダッシュボードの「My Profile → API 
 ## 値を変えたとき
 
 SecretやVariableを変えても、すぐには反映されません。
-GitHubの「Actions」で、`main`の最新の`Release`を開き、**Re-run all jobs**を押すと、新しい値でデプロイし直します。
+手でデプロイし直します。
+
+1. GitHubの「Actions」で、左の一覧から`Deploy`を開き、**Run workflow**を押します。
+2. ブランチは`main`のままにします。Environmentは`main`からしか使えないためです。
+3. `ref`に、いま出ている版のタグ（リリースの一覧のいちばん新しいもの。例：`v1.1.0`）を入れます。リリースを作らないフォークでは`main`を入れます。
+4. **Run workflow**を押すと、新しい値でデプロイし直します。
 
 ## うまくいかないとき
 
-| ジョブのログ                                              | 原因と直しかた                                                                                                      |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `WORKER_NAME is not configured for the … environment`     | そのEnvironmentに`WORKER_NAME`が無い                                                                                |
-| `ACCESS_CONTROL_ALLOW_ORIGIN is not configured for the …` | そのEnvironmentに`ACCESS_CONTROL_ALLOW_ORIGIN`が無い                                                                |
-| `Please enable R2 through the Cloudflare Dashboard`       | アカウントでR2を使い始めていない（→ [Cloudflareに置く](/server/cloudflare#_2-r2を使い始める-アカウントに一度だけ)） |
-| `Authentication error`（`10000`など）                     | APIトークンの権限が足りない。初回は上の表の広い権限が要る                                                           |
-| ジョブが「skipped」になる                                 | `CLOUDFLARE_DEPLOY_ENVIRONMENTS`が空か、その前のCIのジョブが落ちた                                                  |
+| ジョブのログ                                              | 原因と直しかた                                                                                                                                              |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WORKER_NAME is not configured for the … environment`     | そのEnvironmentに`WORKER_NAME`が無い                                                                                                                        |
+| `ACCESS_CONTROL_ALLOW_ORIGIN is not configured for the …` | そのEnvironmentに`ACCESS_CONTROL_ALLOW_ORIGIN`が無い                                                                                                        |
+| `Please enable R2 through the Cloudflare Dashboard`       | アカウントでR2を使い始めていない（→ [Cloudflareに置く](/server/cloudflare#r2)）                                                                             |
+| `You need to enable Analytics Engine`（`10089`）          | アカウントでAnalytics Engineを使い始めていない（→ [Cloudflareに置く](/server/cloudflare#analytics-engine)）                                                 |
+| 同じ名前のR2のバケットがあって作れない                    | 初めてのデプロイが途中で止まり、バケットだけが残っている。空なのを確かめて消してから、やり直す（→ [Cloudflareに置く](/server/cloudflare#analytics-engine)） |
+| `Authentication error`（`10000`など）                     | APIトークンの権限が足りない。初回は上の表の広い権限が要る                                                                                                   |
+| `Deploy`が「skipped」になる                               | リリースが出なかった（`feat`か`fix`のコミットが無かった）、その前のCIのジョブが落ちた、または`CLOUDFLARE_DEPLOY_ENVIRONMENTS`が空                           |
