@@ -44,7 +44,9 @@ Cloudflareの画面は、日本語でも表示できます（右上のプロフ�
 無料のプラン（Free）のままで動きます。
 部屋のサーバーが使うDurable Objectsも、無料のプランで使えます。
 
-## 2. R2を使い始める（アカウントに一度だけ）
+## 2. R2とAnalytics Engineを使い始める（アカウントに一度だけ）
+
+### R2
 
 R2は、部屋に置いた画像と音声の置き場です。
 使い始めるには、アカウントで申し込みが要ります。
@@ -62,6 +64,21 @@ R2は、部屋に置いた画像と音声の置き場です。
 ::: warning 申し込みを忘れるとデプロイが失敗します
 R2を使い始めていないアカウントでは、バケットを作れずにデプロイが止まります。
 エラーに「Please enable R2 through the Cloudflare Dashboard」と出たら、この手順を済ませてからやり直してください。
+:::
+
+### Analytics Engine
+
+Analytics Engineは、部屋で起きたこと（入った・出た・削除したなど）の記録の置き場です（→ [部屋の記録](/operate/#部屋の記録)）。
+使い始めていないアカウントでは、Workerをデプロイできません。
+
+1. ダッシュボードで、`https://dash.cloudflare.com/<アカウントID>/workers/analytics-engine`を開きます。アカウントIDは、ダッシュボードのURLの`dash.cloudflare.com/`のすぐあとにある英数字です。
+2. 空のデータセットを作る画面が出たら、**Dataset Name**に`udonarium_axe_rooms`、**Dataset Binding**に`METRICS`を入れて作ります。部屋のサーバーが書くデータセットと同じ名前です。
+
+::: warning 使い始めていないとデプロイが失敗します
+エラーに「You need to enable Analytics Engine」（`code: 10089`）と出たら、この手順を済ませてからやり直してください。
+初めてのデプロイがここで止まったときは、その前にR2のバケット（「<Workerの名前>-assets」）だけが作られています。
+Workerがまだ無いので、やり直すと同じ名前のバケットを作ろうとして止まります。
+中身が空なのを確かめて、そのバケットを消してからやり直してください。
 :::
 
 ## 3. Discordのアプリを作る

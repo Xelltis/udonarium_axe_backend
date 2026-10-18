@@ -187,13 +187,20 @@ class IndexTest extends TestCase
             'timeout'       => 5,
         ]]);
 
-        $responseBody = file_get_contents($this->baseUrl . $path, false, $context);
+        $stream = fopen($this->baseUrl . $path, 'r', false, $context);
+        $this->assertNotFalse($stream);
+        // The headers come from the stream, as every PHP this runs on has them there. PHP 8.5 deprecates
+        // $http_response_header, and http_get_last_response_headers() is only in PHP 8.4 and later.
+        $headers      = stream_get_meta_data($stream)['wrapper_data'];
+        $responseBody = stream_get_contents($stream);
+        fclose($stream);
 
-        /** @var list<string> $http_response_header */
-        $this->assertNotEmpty($http_response_header);
+        $this->assertIsArray($headers);
+        /** @var list<string> $headers */
+        $this->assertNotEmpty($headers);
 
-        $status      = $this->parseStatusCode($http_response_header);
-        $contentType = $this->parseHeader($http_response_header, 'Content-Type');
+        $status      = $this->parseStatusCode($headers);
+        $contentType = $this->parseHeader($headers, 'Content-Type');
 
         return [
             'status'      => $status,

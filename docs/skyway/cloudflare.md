@@ -16,7 +16,7 @@ SkyWay版だけを置くときは、このページのとおり、手元からwr
 
 ## 0. 用意するもの
 
-- Cloudflareのアカウントと、R2を使い始める操作（→ [Cloudflareに置く（サーバー版）](/server/cloudflare#_1-cloudflareのアカウントを作る)の手順1と2）
+- Cloudflareのアカウントと、R2とAnalytics Engineを使い始める操作（→ [Cloudflareに置く（サーバー版）](/server/cloudflare#_1-cloudflareのアカウントを作る)の手順1と2）
 - SkyWayのアプリケーションIDとシークレットキー（→ [SkyWayのアプリを作る](/skyway/app)）
 - AxeのOrigin（→ [設置の準備](/guide/prepare#axeのoriginを確かめる)）
 - Node.jsとGitが入ったパソコン
