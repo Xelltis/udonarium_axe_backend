@@ -25,7 +25,7 @@
     "@cloudflare/vitest-pool-workers": "0.23.0",
     "@cloudflare/workers-types": "5.20261015.1",
     "@eslint/js": "^10.0.1",
-    "@vitest/coverage-istanbul": "4.1.11",
+    "@vitest/coverage-istanbul": "5.0.4",
     "@vitest/runner": "4.1.11",
     "@vitest/snapshot": "4.1.11",
     "eslint": "^10.9.0",
