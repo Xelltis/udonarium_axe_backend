@@ -194,6 +194,7 @@ export default defineConfig({
       { text: 'サーバー版を置く', link: '/server/' },
       { text: '運営する', link: '/operate/' },
       { text: 'リファレンス', link: '/reference/' },
+      { text: 'リリースノート', link: '/release-notes/' },
       { text: 'Axeの利用ガイド', link: axeGuide },
     ],
     sidebar: [
@@ -252,6 +253,18 @@ export default defineConfig({
           { text: 'リファレンスについて', link: '/reference/' },
           { text: 'トークン発行のAPI', link: '/reference/token-api' },
           { text: '部屋のサーバーのAPI', link: '/reference/server-api' },
+        ],
+      },
+      {
+        text: 'リリースノート',
+        collapsed: true,
+        items: [
+          { text: '一覧', link: '/release-notes/' },
+          { text: 'v1.1.1', link: '/release-notes/v1.1.1' },
+          { text: 'v1.1.0', link: '/release-notes/v1.1.0' },
+          { text: 'v1.0.2', link: '/release-notes/v1.0.2' },
+          { text: 'v1.0.1', link: '/release-notes/v1.0.1' },
+          { text: 'v1.0.0', link: '/release-notes/v1.0.0' },
         ],
       },
     ],
