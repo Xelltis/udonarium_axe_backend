@@ -1,13 +1,20 @@
 {
   "name": "udonarium-axe-backend",
   "private": true,
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:check": "node scripts/check-doc-anchors.mjs",
+    "docs:preview": "vitepress preview docs"
+  },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/git": "^11.0.1",
     "lefthook": "^2.1.14",
-    "semantic-release": "^25.0.9"
+    "semantic-release": "^25.0.9",
+    "vitepress": "2.0.0-alpha.19"
   },
   "overrides": {
     "npm": "file:./stubs/npm-cli-stub"

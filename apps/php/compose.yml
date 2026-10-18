@@ -1,0 +1,18 @@
+# Keeps the project name from before the move to apps/php, so the container names stay the same.
+name: udonarium_axe_backend
+
+services:
+  app:
+    build: .
+    image: udonarium-axe-backend-app
+    ports:
+      - "3000:80"
+    volumes:
+      # Mounts the source code (for hot reloading).
+      - .:/var/www/html
+    environment:
+      # Settings are read from the .env file (PHP reads it itself, apart from compose's env_file).
+      APACHE_LOG_DIR: /var/log/apache2
+    # Runs composer install on start, then starts Apache.
+    command: >-
+      bash -c "composer install --no-interaction --quiet && apache2-foreground"

@@ -55,7 +55,7 @@ npm error code EUSAGE
 npm error Missing: npm@11.19.0 from lock file
 ```
 
-でハードエラーになる。CI の release ジョブ（`.github/workflows/ci.yml`）が
+でハードエラーになる。Release ワークフロー（`.github/workflows/release.yml`）が
 これで落ちるので、package.json を触ったら必ず lock も併せてコミットすること。
 
 ## 解除するとき

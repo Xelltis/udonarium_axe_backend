@@ -1,0 +1,69 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "udonarium-axe-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-15",
+  // Rooms gzip their frames with node:zlib.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Keeps each room's pictures and sounds under their SHA-256 names, and deletes them with the room.
+  // No bucket name is written, so that the first deploy creates `<Worker name>-assets`. However many
+  // are put on one account, each Worker gets a bucket of its own.
+  "r2_buckets": [{ "binding": "ASSETS" }],
+  // One Durable Object for each room, and one that holds the room list. Both keep their data in SQLite.
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomDurableObject" },
+      { "name": "LOBBY", "class_name": "LobbyDurableObject" },
+      { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
+    ],
+  },
+  // Where what happens in rooms is written. The dataset is created by the first write. Workers on the
+  // same account share it, so each write carries the Worker's host name to tell them apart.
+  "analytics_engine_datasets": [{ "binding": "METRICS", "dataset": "udonarium_axe_rooms" }],
+  // To add classes, add a tag. Never rewrite the tags already here.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "LobbyDurableObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["AccountDurableObject"] },
+  ],
+  // Workers on the same account share a namespace_id, but the key carries the host name the request
+  // came to, so each Worker counts on its own.
+  "ratelimits": [
+    // Counts new uploads by sender (by /64 for IPv6). Loading a room sends up many pictures at once,
+    // so the limit leaves room for that.
+    {
+      "name": "UPLOAD_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 100, "period": 60 },
+    },
+    // Counts reads from R2 by sender. What a data center's cache answers is not counted.
+    {
+      "name": "READ_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 600, "period": 60 },
+    },
+    // Counts, by sender, the rooms made and the connections to rooms.
+    {
+      "name": "ROOM_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 30, "period": 60 },
+    },
+    // Counts, by sender, the returns from Discord and the tokens issued.
+    {
+      "name": "AUTH_LIMITER",
+      "namespace_id": "1004",
+      "simple": { "limit": 60, "period": 60 },
+    },
+  ],
+  "vars": {
+    // Comma-separated. Rooms, assets and login take requests from these origins only. A deploy from CI
+    // replaces them with the production origins, from the secret of the same name (see
+    // https://xelltis.github.io/udonarium_axe_backend/operate/auto-deploy).
+    "ACCESS_CONTROL_ALLOW_ORIGIN": "http://localhost:4200",
+    // How long after the last person leaves a room it is deleted.
+    "ROOM_RETENTION_HOURS": "24",
+    // DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET are set as secrets (see
+    // https://xelltis.github.io/udonarium_axe_backend/server/configuration).
+    // Locally, they go in .dev.vars.
+  },
+}

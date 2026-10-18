@@ -18,7 +18,9 @@
 #   ci:       CI 設定ファイルやスクリプトの変更
 #   chore:    その他の変更（src/ tests/ に影響しない）
 #
-# scope: 変更対象のスコープ（任意）
-# subject: 変更内容の簡潔な説明（命令形、小文字始まり、末尾にピリオドなし）
+# 件名も本文も英語で書く。本文には何より「なぜ」を書く
+#
+# scope: 変更対象のスコープ（任意）。php / vercel / cloudflare / ci / docs など
+# subject: 変更内容の簡潔な説明（命令形、小文字始まり、末尾にピリオドなし、72文字以内）
 #
 # BREAKING CHANGE: <description>  ← footer に書くとメジャーバージョンアップ

@@ -1,0 +1,32 @@
+#!/bin/bash
+# A wrapper script that runs PHP inside a Docker container.
+# The VS Code phpunit extension (recca0120.vscode-phpunit) calls
+# this script.
+#
+# Usage:
+#   bin/php [php arguments...]
+#
+# The arguments go to php as they are.
+# The project root is fixed as the mount point, so that paths
+# inside the container match paths on the host.
+
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# shellcheck source=bin/.config
+. "$(dirname "$0")/.config"
+
+# The VS Code extension passes absolute paths on the host as arguments.
+# The same paths do not exist inside the container, so the host's project root
+# in every argument is replaced with the mount point inside the container.
+args=()
+for arg in "$@"; do
+    args+=("${arg//${PROJECT_ROOT}/${DOCKER_CONTAINER_ROOT}}")
+done
+
+exec docker run --rm \
+  -v "${PROJECT_ROOT}:${DOCKER_CONTAINER_ROOT}" \
+  -w "${DOCKER_CONTAINER_ROOT}" \
+  "${DOCKER_IMAGE}" \
+  php "${args[@]}"

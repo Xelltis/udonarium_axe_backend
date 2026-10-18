@@ -1,0 +1,8 @@
+node_modules
+build
+dist
+coverage
+.wrangler
+
+# Prose is written by hand, its tables aligned to read in the source
+*.md

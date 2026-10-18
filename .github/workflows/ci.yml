@@ -1,10 +1,12 @@
 name: CI
 
+# Every app's checks and the docs build, on a pull request to main whatever it changed. release.yml
+# runs the same jobs again on main, through workflow_call, before it deploys and releases.
+
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 jobs:
   test:
@@ -14,6 +16,9 @@ jobs:
       fail-fast: false
       matrix:
         php: ["8.3", "8.4", "8.5"]
+    defaults:
+      run:
+        working-directory: apps/php
 
     steps:
       - uses: actions/checkout@v7
@@ -43,64 +48,149 @@ jobs:
         uses: codecov/codecov-action@v7
         if: matrix.php == '8.5'
         with:
-          files: coverage.xml
+          files: apps/php/coverage.xml
+          flags: php
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      # テストが落ちたときこそ結果を送りたいので、失敗後も実行する。
-      # 先行ステップの失敗で junit.xml が無い場合はエラー扱いにしない。
+      # Runs even after a failure, since the results matter most when a test fails.
+      # A missing junit.xml, after an earlier step failed, is not taken as an error.
       - name: Upload test results to Codecov
         uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           report_type: test_results
-          files: junit.xml
+          files: apps/php/junit.xml
           disable_search: true
           handle_no_reports_found: true
           flags: php${{ matrix.php }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  release:
-    name: Release
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  vercel:
+    name: Vercel
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+    defaults:
+      run:
+        working-directory: apps/vercel
+    # For the tests that use the room server's store (Redis).
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
-          fetch-depth: 0
-          persist-credentials: false
+          node-version-file: apps/vercel/package.json
+          cache: npm
+          cache-dependency-path: apps/vercel/package-lock.json
+
+      - run: npm ci
+
+      # src/core, contracts and test/shared are copied from apps/cloudflare. A stale copy fails here.
+      - name: Check that the code shared with the Cloudflare app is in step
+        run: node ../../scripts/sync-shared.mjs --check
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      # Only this step catches a relative import missing its extension.
+      # Vercel transpiles without checking types, so a missing one becomes
+      # ERR_MODULE_NOT_FOUND in production (see b0995cc).
+      - run: npm run typecheck
+
+      # The tests go through Vite, so they miss imports that bare Node cannot read (a JSON import
+      # missing its attribute, say). Reads what tsc puts out with bare Node, and rolls BCDice once.
+      - run: npm run check:esm
+
+      - run: npm test
+
+      # Uploads even when npm test fails on the coverage threshold, so that the lines
+      # that fell short can be traced on Codecov.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: apps/vercel/coverage/lcov.info
+          flags: vercel
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - run: npm run coverage:check
+
+  cloudflare:
+    name: Cloudflare
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cloudflare
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/cloudflare/package.json
+          cache: npm
+          cache-dependency-path: apps/cloudflare/package-lock.json
+
+      - run: npm ci
+
+      # The tests run on the wrangler and workerd that vitest-pool-workers carries. The wrangler for dev
+      # and deploy is kept at the same version, so that nothing runs on a runtime other than the tests'
+      # (upgrading wrangler alone fails here).
+      - name: Check that the tests and wrangler share one workerd
+        run: test "$(npm query '#workerd' | jq '[.[].version] | unique | length')" = 1
+
+      # src/core, contracts and test/shared are copied to apps/vercel. A stale copy fails here.
+      - name: Check that the code shared with the Vercel app is in step
+        run: node ../../scripts/sync-shared.mjs --check
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      - run: npm run typecheck
+
+      # Runs in the Workers runtime (workerd), with R2 and the rate limits stood up locally.
+      # Fails when coverage drops below 100%.
+      - run: npm test
+
+      # Uploads even when npm test fails on the coverage threshold, so that the lines
+      # that fell short can be traced on Codecov.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: apps/cloudflare/coverage/lcov.info
+          flags: cloudflare
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Checks that every link to a heading, in docs/ and development/, leads to one, and that the site
+  # builds (that no link leads to a page that does not exist). docs.yml builds it again on main to
+  # publish it.
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
+          cache: npm
 
-      - name: Build release archive
-        run: |
-          mkdir -p dist
-          zip -r dist/udonarium-axe-backend.zip \
-            index.php \
-            .htaccess \
-            .env.example \
-            src/ \
-            docs/ \
-            LICENSE \
-            README.md \
-            CHANGELOG.md \
-            CONTRIBUTING.md
+      - run: npm ci
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm run docs:check
 
-      - name: Release
-        run: npx semantic-release
-        env:
-          # main の ruleset で PR 必須・必須ステータスチェックを課しているため、
-          # GITHUB_TOKEN では @semantic-release/git のリリースコミットが弾かれる。
-          # bypass 対象である Organization 管理者の PAT を使う。
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      - run: npm run docs:build

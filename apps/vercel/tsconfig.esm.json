@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".esm-check",
+    "types": ["node"]
+  },
+  "include": ["api/**/*.ts", "src/**/*.ts"]
+}

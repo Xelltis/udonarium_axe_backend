@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: composer
-    directory: /
+    directory: /apps/php
     schedule:
       interval: weekly
     labels:
@@ -16,6 +16,32 @@ updates:
       - dependencies
     open-pull-requests-limit: 10
 
+  # apps/vercel and apps/cloudflare are separate npm projects, each with its own lockfile. The code
+  # they share needs its packages and Prettier at one version in both, which CI checks, so those go
+  # up in one pull request for both apps; everything else in one per app.
+  - package-ecosystem: npm
+    directories:
+      - /apps/vercel
+      - /apps/cloudflare
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    open-pull-requests-limit: 10
+    groups:
+      shared:
+        group-by: dependency-name
+        patterns:
+          - '@msgpack/msgpack'
+          - bcdice
+          - hono
+          - valibot
+          - prettier
+    ignore:
+      # Upgraded by hand, to the version @cloudflare/vitest-pool-workers carries. Upgraded alone,
+      # the tests and dev and deploy would run different workerd, failing CI's "one workerd" check.
+      - dependency-name: wrangler
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -25,7 +51,7 @@ updates:
     open-pull-requests-limit: 10
 
   - package-ecosystem: docker
-    directory: /
+    directory: /apps/php
     schedule:
       interval: weekly
     labels:
