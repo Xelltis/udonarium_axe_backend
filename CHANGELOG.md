@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.1.1...v1.1.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **auth:** log where and why Discord turned a login down ([fbfaa5d](https://github.com/Xelltis/udonarium_axe_backend/commit/fbfaa5d11057f9ef0bda622229bff7872efef116))
+
 ## [1.1.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.1.0...v1.1.1) (2026-10-18)
 
 
