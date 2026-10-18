@@ -181,9 +181,10 @@ jobs:
   #   - CLOUDFLARE_API_TOKEN (Workers Admin and R2 Storage Write and Read the first time, then narrowed
   #     to Workers Editor for that Worker alone. Keep it in an Environment only main can use)
   #   - CLOUDFLARE_ACCOUNT_ID (may be a repository Secret instead)
-  #   - DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET (for login and rooms; all three)
-  # ACCESS_CONTROL_ALLOW_ORIGIN and the three for login are put in as Worker secrets again on every
-  # deploy, at the same version as the code.
+  #   - DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET (for login and rooms; all three or none)
+  #   - SKYWAY_APP_ID and SKYWAY_SECRET (for SkyWay tokens; both or neither)
+  # ACCESS_CONTROL_ALLOW_ORIGIN, the three for login and the two for SkyWay are put in as Worker secrets
+  # again on every deploy, at the same version as the code.
   deploy-cloudflare:
     name: Deploy Cloudflare (${{ matrix.environment }})
     needs: [cloudflare]
