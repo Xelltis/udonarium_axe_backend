@@ -130,16 +130,18 @@ describe('GET /v1/login/discord/callback', () => {
   });
 
   it.each([
-    ['the token request fails', [undefined, 401]],
-    ['the token answer has no token', [undefined, { token_type: 'Bearer' }]],
-    ['the user request fails', [500]],
-    ['the user answer has no id', [{ username: 'kai' }]],
-  ] as const)('returns with provider-failed when %s', async (_name, args) => {
+    ['the token request fails', [undefined, 401], 'at the token request: 401 failed'],
+    ['the token answer has no token', [undefined, { token_type: 'Bearer' }], 'at the token answer, which had no'],
+    ['the user request fails', [500], 'at the user request: 500 failed'],
+    ['the user answer has no id', [{ username: 'kai' }], 'at the user answer, which was not a user'],
+  ] as const)('returns with provider-failed when %s, and logs where', async (_name, args, logged) => {
     fakeDiscord(...(args as unknown as Parameters<typeof fakeDiscord>));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const back = await signInWithDiscord();
 
     expect(fragmentOf(back).get('login_error')).toBe('provider-failed');
+    expect(error).toHaveBeenCalledWith(expect.stringContaining(`Discord turned the login down ${logged}`));
   });
 
   it('returns with denied when the user said no on Discord', async () => {

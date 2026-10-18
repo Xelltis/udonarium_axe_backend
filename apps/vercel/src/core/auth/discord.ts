@@ -31,6 +31,17 @@ export const authorizeUrl = (login: LoginConfig, redirectUri: string, state: str
 };
 
 /**
+ * Writes to the log where and why Discord turned a login down, and gives null. Discord's answer
+ * names the reason (invalid_grant for a code used twice or a redirect URL that is not the one the
+ * code was given for, invalid_client for a wrong secret) and holds no code or token.
+ */
+const turnedDown = async (step: string, response?: Response): Promise<null> => {
+  const why = response ? `: ${response.status} ${(await response.text()).slice(0, 200)}` : '';
+  console.error(`Discord turned the login down at ${step}${why}`);
+  return null;
+};
+
+/**
  * Uses the code that came back from Discord to get the person's details. Null when that fails.
  *
  * The Discord access token is used only to read the person's details once, and is kept nowhere.
@@ -48,16 +59,16 @@ export const fetchProfile = async (login: LoginConfig, code: string, redirectUri
       redirect_uri: redirectUri,
     }),
   });
-  if (!tokenResponse.ok) return null;
+  if (!tokenResponse.ok) return turnedDown('the token request', tokenResponse);
   const token = safeParse(tokenSchema, await tokenResponse.json());
-  if (!token.success) return null;
+  if (!token.success) return turnedDown('the token answer, which had no access_token');
 
   const userResponse = await fetch(CURRENT_USER_URL, {
     headers: { Authorization: `Bearer ${token.output.access_token}` },
   });
-  if (!userResponse.ok) return null;
+  if (!userResponse.ok) return turnedDown('the user request', userResponse);
   const user = safeParse(userSchema, await userResponse.json());
-  if (!user.success) return null;
+  if (!user.success) return turnedDown('the user answer, which was not a user');
 
   const { id, username, global_name: globalName, avatar } = user.output;
   return {
