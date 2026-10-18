@@ -58,12 +58,12 @@ Workerの画面の**Deployments**から**View build history**を開き、失敗�
 
 ## ログインできない
 
-| 見えるもの                                         | 原因と直しかた                                                                                                                                                                                                                    |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Discordの画面に`Invalid OAuth2 redirect_uri`と出る | Discordのアプリの**Redirects**に、`https://<部屋のサーバーのドメイン>/v1/login/discord/callback`が入っていない。ドメインは、Axeの`backend.url`と同じにする（→ [Discordのアプリを作る](/server/discord#_3-戻り先のurlを登録する)） |
-| Axeに戻ってきたが`login_error=provider-failed`     | `DISCORD_CLIENT_ID`か`DISCORD_CLIENT_SECRET`が、Discordのアプリと合っていない。Client Secretを作り直したときは、サーバーの値も入れ替える                                                                                          |
-| ログインを始めると`400 invalid-request`            | Axeを開いているページのOriginが、`ACCESS_CONTROL_ALLOW_ORIGIN`に名前で書かれていない（`*`は数えない）                                                                                                                             |
-| ログインの途中の画面で止まる                       | ログインを始めてから10分のうちにDiscordから戻らなかった（Discordのアカウントを作っていた、など）。Axeからログインをやり直す                                                                                                       |
+| 見えるもの                                         | 原因と直しかた                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discordの画面に`Invalid OAuth2 redirect_uri`と出る | Discordのアプリの**Redirects**に、`https://<部屋のサーバーのドメイン>/v1/login/discord/callback`が入っていない。ドメインは、Axeの`backend.url`と同じにする（→ [Discordのアプリを作る](/server/discord#_3-戻り先のurlを登録する)）                                                                              |
+| Axeに戻ってきたが`login_error=provider-failed`     | 理由は部屋のサーバーのログの`Discord turned the login down at …`の行に出る（→ [見ておくところ](/operate/#見ておくところ)）。`invalid_client`なら、Client IDかClient SecretがDiscordのアプリと合っていない（作り直したときはサーバーの値も替える）。`invalid_grant`なら、同じコードを2回使った。Axeからやり直す |
+| ログインを始めると`400 invalid-request`            | Axeを開いているページのOriginが、`ACCESS_CONTROL_ALLOW_ORIGIN`に名前で書かれていない（`*`は数えない）                                                                                                                                                                                                          |
+| ログインの途中の画面で止まる                       | ログインを始めてから10分のうちにDiscordから戻らなかった（Discordのアカウントを作っていた、など）。Axeからログインをやり直す                                                                                                                                                                                    |
 
 `*.workers.dev`で登録したままカスタムドメインから使うときや、Vercel版でプレビューのURL（`*-git-*.vercel.app`など）から使うときも、`Invalid OAuth2 redirect_uri`になります。
 
