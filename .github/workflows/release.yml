@@ -1,7 +1,9 @@
 name: Release
 
-# On a push to main, runs CI's jobs again (ci.yml), then deploys the Cloudflare app and makes the
-# release. These live apart from ci.yml so that a pull request does not list them as skipped checks.
+# On a push to main, runs CI's jobs again (ci.yml) and makes the release. When a release comes out,
+# deploys the Cloudflare app at its tag (deploy.yml); a push that makes none deploys nothing. A fork
+# without RELEASE_TOKEN deploys every push instead. These live apart from ci.yml so that a pull
+# request does not list them as skipped checks.
 
 on:
   push:
@@ -13,101 +15,6 @@ jobs:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
-  # Deploys what reached main to the Workers, once CI's jobs pass.
-  # The targets go in the repository Variable CLOUDFLARE_DEPLOY_ENVIRONMENTS, as a JSON array of
-  # GitHub Environment names (for example ["cloudflare-production", "cloudflare-public"]). Without it,
-  # nothing is deployed. Each Environment holds these Secrets:
-  #   - WORKER_NAME (the Worker's name. The first deploy creates the R2 bucket `<this name>-assets`)
-  #   - ACCESS_CONTROL_ALLOW_ORIGIN (the origins that serve the app, comma-separated)
-  #   - CLOUDFLARE_API_TOKEN (Workers Admin and R2 Storage Write and Read the first time, then narrowed
-  #     to Workers Editor for that Worker alone. Keep it in an Environment only main can use)
-  #   - CLOUDFLARE_ACCOUNT_ID (may be a repository Secret instead)
-  #   - DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET (for login and rooms; all three or none)
-  #   - SKYWAY_APP_ID and SKYWAY_SECRET (for SkyWay tokens; both or neither)
-  # ACCESS_CONTROL_ALLOW_ORIGIN, the three for login and the two for SkyWay are put in as Worker secrets
-  # again on every deploy, at the same version as the code.
-  deploy-cloudflare:
-    name: Deploy Cloudflare (${{ matrix.environment }})
-    needs: [ci]
-    if: vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS != ''
-    strategy:
-      fail-fast: false
-      matrix:
-        environment: ${{ fromJSON(vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS) }}
-    runs-on: ubuntu-latest
-    environment: ${{ matrix.environment }}
-    concurrency:
-      group: deploy-cloudflare-${{ matrix.environment }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: apps/cloudflare
-
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: apps/cloudflare/package.json
-          cache: npm
-          cache-dependency-path: apps/cloudflare/package-lock.json
-
-      - run: npm ci
-
-      # The secrets are written as JSON to the runner's temporary directory and sent along with the code
-      # by --secrets-file. The local origin (localhost) in wrangler.jsonc's vars gives way to the secret of
-      # the same name.
-      - name: Deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WORKER_NAME: ${{ secrets.WORKER_NAME }}
-          ACCESS_CONTROL_ALLOW_ORIGIN: ${{ secrets.ACCESS_CONTROL_ALLOW_ORIGIN }}
-          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
-          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          SKYWAY_APP_ID: ${{ secrets.SKYWAY_APP_ID }}
-          SKYWAY_SECRET: ${{ secrets.SKYWAY_SECRET }}
-          ENVIRONMENT: ${{ matrix.environment }}
-        run: |
-          for name in WORKER_NAME ACCESS_CONTROL_ALLOW_ORIGIN; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is not configured for the $ENVIRONMENT environment"
-              exit 1
-            fi
-          done
-          # The three for login go in together or not at all. With only some, the Worker answers config-invalid.
-          login=0
-          for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET; do
-            [ -n "${!name}" ] && login=$((login + 1))
-          done
-          if [ "$login" -ne 0 ] && [ "$login" -ne 3 ]; then
-            echo "::error::Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET together for the $ENVIRONMENT environment"
-            exit 1
-          fi
-          # The two for SkyWay tokens likewise go in together or not at all.
-          if { [ -n "$SKYWAY_APP_ID" ] && [ -z "$SKYWAY_SECRET" ]; } || { [ -z "$SKYWAY_APP_ID" ] && [ -n "$SKYWAY_SECRET" ]; }; then
-            echo "::error::Set SKYWAY_APP_ID and SKYWAY_SECRET together for the $ENVIRONMENT environment"
-            exit 1
-          fi
-          secrets="$RUNNER_TEMP/worker-secrets.json"
-          trap 'rm -f "$secrets"' EXIT
-          (umask 077 && jq -n '{ACCESS_CONTROL_ALLOW_ORIGIN: env.ACCESS_CONTROL_ALLOW_ORIGIN}
-            + if (env.SESSION_SECRET // "") != "" then {
-                DISCORD_CLIENT_ID: env.DISCORD_CLIENT_ID,
-                DISCORD_CLIENT_SECRET: env.DISCORD_CLIENT_SECRET,
-                SESSION_SECRET: env.SESSION_SECRET
-              } else {} end
-            + if (env.SKYWAY_SECRET // "") != "" then {
-                SKYWAY_APP_ID: env.SKYWAY_APP_ID,
-                SKYWAY_SECRET: env.SKYWAY_SECRET
-              } else {} end' > "$secrets")
-          npx wrangler deploy --name "$WORKER_NAME" --secrets-file "$secrets"
-
   release:
     name: Release
     needs: [ci]
@@ -116,6 +23,8 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+    outputs:
+      ref: ${{ steps.semantic.outputs.ref }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -143,10 +52,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Hands the deploy what to deploy as ref: the tag of the release made just now, or nothing when
+      # no release came out. A release commits CHANGELOG.md and tags that commit, so a new HEAD with a
+      # tag on it is that release. A fork without RELEASE_TOKEN makes no releases, and deploys what
+      # reached main instead, as on every push.
       - name: Release
-        run: npx semantic-release
+        id: semantic
+        run: |
+          if [ -z "$GITHUB_TOKEN" ]; then
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "::notice::No RELEASE_TOKEN, so no release is made and what reached main is deployed"
+            exit 0
+          fi
+          before=$(git rev-parse HEAD)
+          npx semantic-release
+          tag=$(git tag --points-at HEAD --list 'v*' | head -n 1)
+          if [ "$(git rev-parse HEAD)" != "$before" ] && [ -n "$tag" ]; then
+            echo "ref=$tag" >> "$GITHUB_OUTPUT"
+            echo "::notice::Released $tag"
+          fi
         env:
           # The main ruleset requires a PR and status checks, so GITHUB_TOKEN cannot push
           # @semantic-release/git's release commit. Uses the PAT of an organization admin,
           # who is on the bypass list.
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  deploy:
+    name: Deploy
+    needs: [release]
+    if: needs.release.outputs.ref != ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ needs.release.outputs.ref }}
+    secrets: inherit

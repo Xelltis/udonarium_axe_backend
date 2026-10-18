@@ -1,0 +1,120 @@
+name: Deploy
+
+# Deploys the Cloudflare app, at a release's tag, to each GitHub Environment named in
+# CLOUDFLARE_DEPLOY_ENVIRONMENTS. release.yml calls it once it has made a release, so what runs is
+# always a released version, and a push that makes no release (docs, CI, dependency updates)
+# deploys nothing. Run it by hand from main (Actions → Deploy → Run workflow) with the latest tag to
+# deploy again, as after changing an Environment's secrets. A fork that makes no releases deploys
+# a commit instead (main, by hand).
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: What to deploy, a release tag (v1.2.3) or a commit
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: What to deploy, a release tag (v1.2.3) or a commit (main in a fork that makes no releases)
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  # The targets go in the repository Variable CLOUDFLARE_DEPLOY_ENVIRONMENTS, as a JSON array of
+  # GitHub Environment names (for example ["cloudflare-production", "cloudflare-public"]). Without it,
+  # nothing is deployed. Each Environment holds these Secrets:
+  #   - WORKER_NAME (the Worker's name. The first deploy creates the R2 bucket `<this name>-assets`)
+  #   - ACCESS_CONTROL_ALLOW_ORIGIN (the origins that serve the app, comma-separated)
+  #   - CLOUDFLARE_API_TOKEN (Workers Admin and R2 Storage Write and Read the first time, then narrowed
+  #     to Workers Editor for that Worker alone. Keep it in an Environment only main can use)
+  #   - CLOUDFLARE_ACCOUNT_ID (may be a repository Secret instead)
+  #   - DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET (for login and rooms; all three or none)
+  #   - SKYWAY_APP_ID and SKYWAY_SECRET (for SkyWay tokens; both or neither)
+  # ACCESS_CONTROL_ALLOW_ORIGIN, the three for login and the two for SkyWay are put in as Worker secrets
+  # again on every deploy, at the same version as the code.
+  cloudflare:
+    name: Cloudflare (${{ matrix.environment }})
+    if: vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(vars.CLOUDFLARE_DEPLOY_ENVIRONMENTS) }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: deploy-cloudflare-${{ matrix.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloudflare
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/cloudflare/package.json
+          cache: npm
+          cache-dependency-path: apps/cloudflare/package-lock.json
+
+      - run: npm ci
+
+      # The secrets are written as JSON to the runner's temporary directory and sent along with the code
+      # by --secrets-file. The local origin (localhost) in wrangler.jsonc's vars gives way to the secret of
+      # the same name.
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ secrets.WORKER_NAME }}
+          ACCESS_CONTROL_ALLOW_ORIGIN: ${{ secrets.ACCESS_CONTROL_ALLOW_ORIGIN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          SKYWAY_APP_ID: ${{ secrets.SKYWAY_APP_ID }}
+          SKYWAY_SECRET: ${{ secrets.SKYWAY_SECRET }}
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          for name in WORKER_NAME ACCESS_CONTROL_ALLOW_ORIGIN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured for the $ENVIRONMENT environment"
+              exit 1
+            fi
+          done
+          # The three for login go in together or not at all. With only some, the Worker answers config-invalid.
+          login=0
+          for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET; do
+            [ -n "${!name}" ] && login=$((login + 1))
+          done
+          if [ "$login" -ne 0 ] && [ "$login" -ne 3 ]; then
+            echo "::error::Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET together for the $ENVIRONMENT environment"
+            exit 1
+          fi
+          # The two for SkyWay tokens likewise go in together or not at all.
+          if { [ -n "$SKYWAY_APP_ID" ] && [ -z "$SKYWAY_SECRET" ]; } || { [ -z "$SKYWAY_APP_ID" ] && [ -n "$SKYWAY_SECRET" ]; }; then
+            echo "::error::Set SKYWAY_APP_ID and SKYWAY_SECRET together for the $ENVIRONMENT environment"
+            exit 1
+          fi
+          secrets="$RUNNER_TEMP/worker-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          (umask 077 && jq -n '{ACCESS_CONTROL_ALLOW_ORIGIN: env.ACCESS_CONTROL_ALLOW_ORIGIN}
+            + if (env.SESSION_SECRET // "") != "" then {
+                DISCORD_CLIENT_ID: env.DISCORD_CLIENT_ID,
+                DISCORD_CLIENT_SECRET: env.DISCORD_CLIENT_SECRET,
+                SESSION_SECRET: env.SESSION_SECRET
+              } else {} end
+            + if (env.SKYWAY_SECRET // "") != "" then {
+                SKYWAY_APP_ID: env.SKYWAY_APP_ID,
+                SKYWAY_SECRET: env.SKYWAY_SECRET
+              } else {} end' > "$secrets")
+          npx wrangler deploy --name "$WORKER_NAME" --secrets-file "$secrets"
+
