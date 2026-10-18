@@ -36,7 +36,7 @@
     "@skyway-sdk/token": "^2.1.5",
     "@types/node": "^24.13.3",
     "@types/ws": "^8.18.2",
-    "@vitest/coverage-istanbul": "^4.1.11",
+    "@vitest/coverage-istanbul": "^5.0.4",
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^10.9.0",
     "eslint-config-prettier": "^10.1.8",
