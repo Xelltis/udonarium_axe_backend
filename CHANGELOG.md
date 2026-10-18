@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.1.0...v1.1.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deps:** override js-yaml and smol-toml to clear GHSA-2883-xcg3-v3hh and GHSA-r4xh-jqrq-34v2 ([42e1165](https://github.com/Xelltis/udonarium_axe_backend/commit/42e11657e9f0857927525c084783931d15bf4e62))
+
 # [1.1.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.0.2...v1.1.0) (2026-10-18)
 
 
