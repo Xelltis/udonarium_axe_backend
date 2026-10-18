@@ -74,7 +74,7 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
     共有コードを変えたら写しの確認 / `pre-push`: pushに変更が入ったアプリの型検査とテスト（Vercel版は`check:esm`も）
 - mainへのPRでは[.github/workflows/ci.yml](.github/workflows/ci.yml)が、全アプリのlint・整形・型検査・テストと文書のビルドを回す。
   リリースはmainへのpushで動く[.github/workflows/release.yml](.github/workflows/release.yml)が作り、PRでは動かさない。
-  Cloudflare版のデプロイは、リリースが出たときだけそのタグで[.github/workflows/deploy.yml](.github/workflows/deploy.yml)が行う（手でも起動できる）
+  Cloudflare版とVercel版のデプロイは、リリースが出たときだけそのタグで[.github/workflows/deploy.yml](.github/workflows/deploy.yml)が行う（手でも起動できる）
 - `CHANGELOG.md`は手で直さない。semantic-releaseがConventional Commitsから生成する
 
 ## コメント・テスト名は英語
