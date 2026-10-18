@@ -12,7 +12,7 @@
  */
 
 /** Raised when an envelope changes shape. The server refuses a hello of another version with protocol-mismatch. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * The room server's own peer id. It has a shape that cannot clash with a client's id.
@@ -134,6 +134,13 @@ export interface HelloMessage {
   accessToken?: string;
   /** The invite that came with an invite link. It sets the role of someone logged in on their first time in. */
   invite?: string;
+  /**
+   * How long ago the person last used the page (milliseconds), by the pointer, the keys, the wheel or
+   * touch. Without it, just now. Axe sends it on every connection, so that a page left alone does not
+   * count as used again each time it reconnects. A hello whose idleMs is IDLE_SECONDS or more is
+   * refused with idle.
+   */
+  idleMs?: number;
 }
 
 /** Sends a batch of events. With `to`, it reaches only that peer; without it, everyone but the sender. */
@@ -169,7 +176,18 @@ export interface AssetTokenRequest {
   type: 'asset-token';
 }
 
-export type ClientMessage = HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest;
+/**
+ * Tells the server that the person used the page. Nothing comes back. Axe sends it when the page has
+ * been used since it last sent one, at most once every ACTIVE_REPORT_SECONDS. A seat that sends none
+ * for IDLE_SECONDS is closed with idle, so that a page left open does not keep the room and its
+ * connection going.
+ */
+export interface ActiveMessage {
+  type: 'active';
+}
+
+export type ClientMessage =
+  HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest | ActiveMessage;
 
 // ---- server to client ----
 
@@ -298,6 +316,8 @@ export interface AssetTokenMessage {
  *   Also when someone claims the user id of someone logged in (one that begins with
  *   ACCOUNT_USER_ID_PREFIX) without a token
  * - room-deleted: a GM deleted the room. The room is gone, so do not reconnect
+ * - idle: no active came for IDLE_SECONDS (the page was left alone), or the hello's idleMs was that
+ *   long. Do not reconnect on your own; reconnect once the person asks to
  */
 export const ERROR_CODES = [
   'protocol-mismatch',
@@ -310,6 +330,7 @@ export const ERROR_CODES = [
   'replaced',
   'unauthorized',
   'room-deleted',
+  'idle',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -609,6 +630,15 @@ export const RATE_WINDOW_SECONDS = 10;
 
 /** How many rolls one connection may ask for in RATE_WINDOW_SECONDS. Any more are refused with rate-limited. */
 export const MAX_ROLLS_PER_WINDOW = 20;
+
+/**
+ * How long a seat may go without telling active (in seconds). Past it, the seat is closed with idle.
+ * It is long enough for someone who only watches and listens through a long scene.
+ */
+export const IDLE_SECONDS = 3 * 60 * 60;
+
+/** How often, at most, Axe sends active while the page is being used (in seconds). */
+export const ACTIVE_REPORT_SECONDS = 5 * 60;
 
 /**
  * Why a ROLL_REQUEST was not rolled.

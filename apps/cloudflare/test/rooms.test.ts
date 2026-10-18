@@ -5,7 +5,7 @@ import { AUTHORITY_PEER_ID, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { LOBBY_NAME } from '../src/rooms/lobby';
 import { ACCESS_TOKEN_SECONDS } from '../src/core/auth/tokens';
-import { OCCUPIED_CHECK_MS, TOKEN_GRACE_MS } from '../src/core/rooms/limits';
+import { IDLE_MS, OCCUPIED_CHECK_MS, TOKEN_GRACE_MS } from '../src/core/rooms/limits';
 import { CHUNK_BYTES } from '../src/rooms/store';
 import { connect, contextOf, createRoom, eventually, join, listRooms, refusalOf } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
@@ -220,6 +220,27 @@ describe('closing the room', () => {
     const clock = await clockOf(roomKey);
     expect(clock.emptiedAt).not.toBeNull();
     expect(clock.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
+  });
+
+  it('checks around when a seat would be left alone for long enough, and lets it out then', async () => {
+    const roomKey = await createRoom();
+    const { client } = await join(roomKey, 'alice', { accessToken: null, idleMs: IDLE_MS - 10 * 60_000 });
+
+    // A guest has no token to run out, so the check comes when the seat would be idle.
+    const occupied = await clockOf(roomKey);
+    expect(occupied.alarm).toBeGreaterThan(Date.now() + 9 * 60_000);
+    expect(occupied.alarm).toBeLessThanOrEqual(Date.now() + 10 * 60_000 + 1000);
+
+    await runInDurableObject(stubOf(roomKey), (_instance, state) => {
+      for (const ws of state.getWebSockets()) {
+        const seat = ws.deserializeAttachment() as Record<string, unknown>;
+        ws.serializeAttachment({ ...seat, activeAt: Date.now() - IDLE_MS - 1 });
+      }
+    });
+    expect(await runDurableObjectAlarm(stubOf(roomKey))).toBe(true);
+
+    expect((await client.next('error')).code).toBe('idle');
+    expect((await clockOf(roomKey)).emptiedAt).not.toBeNull();
   });
 
   it('deletes a room nobody entered', async () => {

@@ -1,4 +1,4 @@
-import { MAX_MEMBERS, RATE_WINDOW_SECONDS } from '../../../contracts/protocol.js';
+import { IDLE_SECONDS, MAX_MEMBERS, RATE_WINDOW_SECONDS } from '../../../contracts/protocol.js';
 
 /**
  * How long changes gather before they are written together (milliseconds). When the room server goes
@@ -78,3 +78,6 @@ export const MAX_VIEW_BYTES = 16 * 1024;
  * (milliseconds). It leaves time for a new token to arrive.
  */
 export const TOKEN_GRACE_MS = 60_000;
+
+/** How long a seat may go without telling active (milliseconds). Past it, the seat is closed with idle. */
+export const IDLE_MS = IDLE_SECONDS * 1000;

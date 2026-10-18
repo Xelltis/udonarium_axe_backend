@@ -39,6 +39,7 @@ import {
   FLUSH_TALLY_MS,
   HANDED_BACK_MS,
   HELLO_TIMEOUT_MS,
+  IDLE_MS,
   KEEP_FROM_DELETING_MS,
   MAX_EVENTS_PER_WINDOW,
   MAX_FRAMES_PER_WINDOW,
@@ -283,14 +284,18 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * Removes the seats whose access token ran out more than TOKEN_GRACE_MS ago with no new token
-   * since. This is so that someone who logged out or deleted their account does not stay connected
-   * and keep watching.
+   * Removes the seats left alone for more than IDLE_MS, and those whose access token ran out more
+   * than TOKEN_GRACE_MS ago with no new token since. The first is so that a page left open does not
+   * keep the room and its connection going; the second, so that someone who logged out or deleted
+   * their account does not stay connected and keep watching. A seat that is both goes as idle, which
+   * Axe does not reconnect on its own.
    */
   expireSeats(): void {
     const now = Date.now();
     for (const { conn, seat } of this.seats()) {
-      if (seat.expiresAt !== undefined && now > seat.expiresAt + TOKEN_GRACE_MS) {
+      if (now > seat.activeAt + IDLE_MS) {
+        this.refuse(conn, 'idle');
+      } else if (seat.expiresAt !== undefined && now > seat.expiresAt + TOKEN_GRACE_MS) {
         this.refuse(conn, 'unauthorized');
       }
     }
@@ -346,6 +351,8 @@ export class RoomEngine<C extends object> {
         ...this.assetTokenFor(seat, 'expiresAt'),
         role: seat.role,
       });
+    } else if (received.type === 'active') {
+      this.host.setSeat(conn, { ...seat, activeAt: Date.now() });
     }
     // A hello after coming in does nothing.
   }
@@ -364,6 +371,10 @@ export class RoomEngine<C extends object> {
     if (room.password && !verifyPassword(hello.password ?? '', room.password)) {
       return this.refuse(conn, 'wrong-password');
     }
+    // A page left alone that reconnects on its own (as on Vercel's rotate) keeps counting from when it
+    // was last used, rather than starting afresh.
+    const idleMs = hello.idleMs ?? 0;
+    if (idleMs >= IDLE_MS) return this.refuse(conn, 'idle');
 
     // Not logged in, it is a guest. Logged in, the userId must be that of the one the token is for.
     const seat: Seat = {
@@ -373,6 +384,7 @@ export class RoomEngine<C extends object> {
       role: 'guest',
       account: false,
       joinedAt: Date.now(),
+      activeAt: Date.now() - idleMs,
     };
     if (
       !hello.accessToken &&
@@ -564,13 +576,15 @@ export class RoomEngine<C extends object> {
 
   /**
    * When the next check comes. Usually it is every OCCUPIED_CHECK_MS. When a logged-in seat's token
-   * runs out sooner, it also looks at about TOKEN_GRACE_MS after the token runs out. This is so that
-   * a seat whose token has run out is removed even in a room where nobody sends anything.
+   * runs out sooner, it also looks at about TOKEN_GRACE_MS after the token runs out, and when a seat
+   * would be left alone for IDLE_MS sooner, just after that. This is so that such seats are removed
+   * even in a room where nobody sends anything.
    */
   nextCheckAt(): number {
-    const expiries = this.seats().flatMap(({ seat }) =>
-      seat.expiresAt === undefined ? [] : [seat.expiresAt + TOKEN_GRACE_MS + 1000]
-    );
+    const expiries = this.seats().flatMap(({ seat }) => [
+      seat.activeAt + IDLE_MS + 1000,
+      ...(seat.expiresAt === undefined ? [] : [seat.expiresAt + TOKEN_GRACE_MS + 1000]),
+    ]);
     return Math.min(Date.now() + OCCUPIED_CHECK_MS, ...expiries);
   }
 

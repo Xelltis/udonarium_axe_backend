@@ -19,6 +19,11 @@ export interface Seat {
   joinedAt: number;
   /** When the access token of someone who came in logged in runs out (Unix milliseconds). A new token extends it. */
   expiresAt?: number;
+  /**
+   * When the person last used the page, as the seat told it (Unix milliseconds). active brings it up
+   * to now. A seat left at it for IDLE_MS is closed.
+   */
+  activeAt: number;
   /** The server closed it (refused it, or it was replaced by a new connection with the same peer id). */
   closed?: boolean;
 }

@@ -17,6 +17,7 @@ import {
   MAX_PENDING_ROLLS,
   MAX_SOCKETS,
   MAX_VIEW_BYTES,
+  IDLE_MS,
   TOKEN_GRACE_MS,
 } from '../../src/core/rooms/limits.js';
 import type { RoomHost, RoomStore } from '../../src/core/rooms/host.js';
@@ -408,6 +409,24 @@ describe('a login that runs out while connected', () => {
     expect(await alice.client.next('leave')).toEqual({ type: 'leave', peerId: 'bob' });
   });
 
+  it('closes a seat as idle, rather than unauthorized, when it was also left alone', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+    await alice.client.next('join');
+    await inside(roomKey, (_room, host) => {
+      for (const conn of host.connections()) {
+        const seat = host.seatOf(conn);
+        if (seat?.peerId !== 'bob') continue;
+        host.setSeat(conn, { ...seat, expiresAt: Date.now() - TOKEN_GRACE_MS - 1, activeAt: Date.now() - IDLE_MS - 1 });
+      }
+    });
+
+    alice.client.emit([]);
+
+    expect((await bob.client.next('error')).code).toBe('idle');
+  });
+
   it('closes a seat that hands over somebody else’s token, and ignores one from a guest', async () => {
     const roomKey = await createRoom();
     const guest = await join(roomKey, 'guest', { accessToken: null, userId: 'guest-1' });
@@ -418,5 +437,59 @@ describe('a login that runs out while connected', () => {
     alice.client.send({ type: 'auth', accessToken: accessTokenFor('user-somebody') });
 
     expect((await alice.client.next('error')).code).toBe('unauthorized');
+  });
+});
+
+describe('a page left alone', () => {
+  it('closes a seat that tells nothing for IDLE_MS, and keeps one that tells active', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob', { accessToken: null, userId: 'guest-bob' });
+    await alice.client.next('join');
+    await inside(roomKey, (_room, host) => {
+      for (const conn of host.connections()) {
+        const seat = host.seatOf(conn);
+        // Alice has a minute left, which active puts back to the full IDLE_MS.
+        if (seat)
+          host.setSeat(conn, { ...seat, activeAt: Date.now() - IDLE_MS + (seat.peerId === 'alice' ? 60_000 : -1) });
+      }
+    });
+    const before = Date.now();
+
+    alice.client.send({ type: 'active' });
+
+    expect((await bob.client.next('error')).code).toBe('idle');
+    expect(await alice.client.next('leave')).toEqual({ type: 'leave', peerId: 'bob' });
+    await alice.client.expectQuiet();
+    const activeAt = await inside(
+      roomKey,
+      (_room, host) =>
+        host
+          .connections()
+          .map((conn) => host.seatOf(conn))
+          .find((seat) => seat?.peerId === 'alice' && !seat.closed)?.activeAt
+    );
+    expect(activeAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('turns away a hello from a page left alone for IDLE_MS, and counts on from the time one tells', async () => {
+    const roomKey = await createRoom();
+    const left = await connect(roomKey);
+    left.hello('alice', { idleMs: IDLE_MS });
+    expect((await left.next('error')).code).toBe('idle');
+
+    const before = Date.now();
+    await join(roomKey, 'alice', { idleMs: 60_000 });
+    const activeAt = await inside(
+      roomKey,
+      (_room, host) =>
+        host
+          .connections()
+          .map((conn) => host.seatOf(conn))
+          .find((seat) => seat && !seat.closed)?.activeAt
+    );
+
+    expect(activeAt).toBeGreaterThanOrEqual(before - 60_000);
+    expect(activeAt).toBeLessThanOrEqual(Date.now() - 60_000);
   });
 });

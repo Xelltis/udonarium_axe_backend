@@ -51,6 +51,7 @@ export const helloSchema = object({
   password: nullish(pipe(string(), maxLength(MAX_PASSWORD_LENGTH))),
   accessToken: nullish(string()),
   invite: nullish(string()),
+  idleMs: nullish(pipe(number(), finite(), minValue(0))),
 });
 
 export const clientMessageSchema = variant('type', [
@@ -64,6 +65,7 @@ export const clientMessageSchema = variant('type', [
   object({ type: literal('invite'), role: picklist(PEER_ROLES) }),
   object({ type: literal('auth'), accessToken: string() }),
   object({ type: literal('asset-token') }),
+  object({ type: literal('active') }),
 ]);
 
 export const roleRequestSchema = object({ peerId: string(), role: picklist(PEER_ROLES) });
