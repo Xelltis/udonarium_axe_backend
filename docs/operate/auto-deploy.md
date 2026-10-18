@@ -43,7 +43,7 @@ Environmentごとに、次のSecretを入れます。
 SkyWayの2つも同じです。ログインの3つだけを入れたEnvironmentは部屋のサーバーに、SkyWayの2つだけを入れたEnvironmentはSkyWay版のトークン発行サーバー（→ [Cloudflareに置く（SkyWay版）](/skyway/cloudflare)）になり、両方を入れると両方を受け持ちます。
 Discordのアプリの作りかたは[Discordのアプリを作る](/server/discord)にあります。
 
-`ACCESS_CONTROL_ALLOW_ORIGIN`とログインの3つは、デプロイのたびにWorkerのシークレットとして入れ直します。
+`ACCESS_CONTROL_ALLOW_ORIGIN`、ログインの3つ、SkyWayの2つは、デプロイのたびにWorkerのシークレットとして入れ直します。
 `wrangler.jsonc`に書いた手元用の値（`http://localhost:4200`）は、このシークレットで置き換わります。
 
 `gh`コマンドを使うと、次のように入れられます。
