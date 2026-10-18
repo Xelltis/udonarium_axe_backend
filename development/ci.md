@@ -4,7 +4,7 @@
 
 ## CIのジョブ
 
-`main`へのpushと、`main`へのPull Requestで、`.github/workflows/ci.yml`が走ります。
+`main`へのPull Requestで、`.github/workflows/ci.yml`が走ります。
 変更したアプリに関わらず、毎回すべてのジョブを流します。
 
 | ジョブ              | 内容                                                                                                                                                                          |
@@ -12,10 +12,24 @@
 | PHP 8.3 / 8.4 / 8.5 | PHP-CS-Fixer、PHPStan、PHPUnit（カバレッジ付き）。8.5のカバレッジをCodecovへ送る                                                                                              |
 | Vercel              | 共有のコードの写しが正本と同じかの確認、lint、整形の確認、型検査、素のNodeで読めるかの確認（`check:esm`）、テスト（Redisのサービスを立てて、カバレッジ100%）、Codecovへの送信 |
 | Cloudflare          | workerdが1つだけかの確認、共有のコードの写しがVercel版と同じかの確認、lint、整形の確認、型検査、テスト（カバレッジ100%）、Codecovへの送信                                     |
-| Deploy Cloudflare   | `main`へのpushのときだけ。Cloudflare版をデプロイする（→ [自分のリポジトリから自動でデプロイする](https://xelltis.github.io/udonarium_axe_backend/operate/auto-deploy)）                                                                   |
-| Release             | `main`へのpushのときだけ。PHP・Vercel・Cloudflareのジョブが通ったら、リリースを作る                                                                                           |
+| Docs                | 見出しへのリンクが切れていないかの確認（`docs:check`）、文書のビルド                                                                                                          |
 
-`main`のルールセットでは、Pull Requestを通すことと、必須のチェックが通ることを求めています。
+`main`のルールセットでは、Pull Requestを通すことと、`ci.yml`のすべてのジョブが通ることを求めています。
+必須のチェックにするジョブは、どのPull Requestでも走るようにします。
+`paths`で絞ったワークフローのジョブを必須にすると、そのジョブが走らなかったPull Requestは、待ちのままでマージできなくなります。
+
+## mainに入ったとき
+
+`main`へのpushで、`.github/workflows/release.yml`が走ります。
+Pull Requestでは走らないので、Pull Requestのチェックにはこれらのジョブが出ません。
+
+| ジョブ            | 内容                                                                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI                | `ci.yml`のジョブを、`main`でもう一度流す                                                                                                                    |
+| Deploy Cloudflare | CIが通ったら、Cloudflare版をデプロイする（→ [自分のリポジトリから自動でデプロイする](https://xelltis.github.io/udonarium_axe_backend/operate/auto-deploy)） |
+| Release           | CIが通ったら、リリースを作る（→ [リリース](#リリース)）                                                                                                     |
+
+文書は、`.github/workflows/docs.yml`が別に公開します（→ [文書の公開](docs.md#公開)）。
 
 ## カバレッジ
 
@@ -26,7 +40,7 @@
 
 ## リリース
 
-`main`にpushされ、CIが通ると、CIの`release`のジョブがリリースを作ります。
+`main`にpushされ、CIが通ると、`release.yml`の`Release`のジョブがリリースを作ります。
 
 1. PHP版の配布用zipを作ります。zipの直下に`apps/php`の中身が来るので、展開すればそのままドキュメントルートになります。
 2. [semantic-release](https://semantic-release.gitbook.io/)が、前のリリースからのコミットメッセージを読み、次の版を決めます（`fix`ならパッチ、`feat`ならマイナー、`BREAKING CHANGE`ならメジャー）。

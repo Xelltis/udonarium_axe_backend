@@ -84,4 +84,4 @@ GitHubは、見出しのidをサイトと違う決まりで作ります（`` `PO
 ## 公開
 
 `main`に`docs/`の変更が入ると、`.github/workflows/docs.yml`がビルドしてGitHub Pagesに公開します。
-Pull Requestでは、見出しへのリンクと、ビルドが通るかだけを確かめます。
+Pull Requestでは、CIの`Docs`ジョブが、見出しへのリンクと、ビルドが通るかだけを確かめます。

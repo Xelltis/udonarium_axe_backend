@@ -6,8 +6,8 @@ Deployボタンで置いた人は、Cloudflareが自動でデプロイし直す�
 
 ## しくみ
 
-1. `main`にpushされると、CIの`Cloudflare`ジョブ（lint、型検査、テスト）が走ります。
-2. それが通ると、`deploy-cloudflare`ジョブが、デプロイ先のGitHub Environmentごとに`wrangler deploy`を実行します。
+1. `main`にpushされると、`Release`のワークフローが、CIのジョブ（各アプリのlint、型検査、テストと、文書のビルド）を流します。
+2. それが通ると、`Deploy Cloudflare`ジョブが、デプロイ先のGitHub Environmentごとに`wrangler deploy`を実行します。
 3. 同じEnvironmentへのデプロイは、1つずつ順に行います。
 
 デプロイ先を書かなければ、このジョブは何もしません。
@@ -94,7 +94,7 @@ APIトークンは、Cloudflareのダッシュボードの「My Profile → API 
 ## 値を変えたとき
 
 SecretやVariableを変えても、すぐには反映されません。
-GitHubの「Actions」で、`main`の最新のCIを開き、**Re-run all jobs**を押すと、新しい値でデプロイし直します。
+GitHubの「Actions」で、`main`の最新の`Release`を開き、**Re-run all jobs**を押すと、新しい値でデプロイし直します。
 
 ## うまくいかないとき
 
@@ -104,4 +104,4 @@ GitHubの「Actions」で、`main`の最新のCIを開き、**Re-run all jobs**�
 | `ACCESS_CONTROL_ALLOW_ORIGIN is not configured for the …` | そのEnvironmentに`ACCESS_CONTROL_ALLOW_ORIGIN`が無い                                                                |
 | `Please enable R2 through the Cloudflare Dashboard`       | アカウントでR2を使い始めていない（→ [Cloudflareに置く](/server/cloudflare#_2-r2を使い始める-アカウントに一度だけ)） |
 | `Authentication error`（`10000`など）                     | APIトークンの権限が足りない。初回は上の表の広い権限が要る                                                           |
-| ジョブが「skipped」になる                                 | `CLOUDFLARE_DEPLOY_ENVIRONMENTS`が空か、`main`へのpushではない                                                      |
+| ジョブが「skipped」になる                                 | `CLOUDFLARE_DEPLOY_ENVIRONMENTS`が空か、その前のCIのジョブが落ちた                                                  |
