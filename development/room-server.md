@@ -341,6 +341,11 @@ Cloudflare版では、あるリクエストが始めた読み込みを、ほか�
 読めなかったときは、それまでの写しを使い続け、30秒たってからまた読みます。置き場所が答えないだけで、すべてのリクエストを止めないためです。
 読み直すはずのリクエストと`hello`も、読めなければそれまでの写しで確かめます。
 
+### 回数の上限を締める
+
+運営する人が上限を締めると（`Tighten`、上限ごとに1・2・4・10）、1つのリクエストをその回数として数えます（`notingLimits`）。Cloudflare版の上限は`wrangler.jsonc`の`ratelimits`で決まっていて動かせないので、バインディングの`limit`をその回数だけ呼びます。Vercel版は`INCRBY`でその数だけ足します。
+締めた具合は止めているもの・BANと一緒に読み（`ModerationStore.state`、Cloudflare版は`admin_state`の`tighten_*`、Vercel版は`mod:tighten`）、各インスタンスの写し（`BAN_CACHE_MS`）で見ます。リクエストごとに置き場所を読まないので、締めても費用は増えません。ほかのインスタンスには最大30秒遅れて効きます。
+
 ### 緊急停止
 
 止めているもの（`Pause`）は、BANと同じ置き場所に置きます（Cloudflare版は`ModerationDurableObject`の`admin_state`の表、Vercel版は`mod:pause`）。

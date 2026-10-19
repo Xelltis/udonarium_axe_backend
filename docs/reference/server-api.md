@@ -434,6 +434,8 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 | `DELETE` | `/admin/api/blocked/:sha256`                       | また置けるようにする。`204`                                                                                                   |
 | `GET`    | `/admin/api/pause`                                 | 緊急停止で止めているもの                                                                                                      |
 | `PUT`    | `/admin/api/pause`                                 | 緊急停止で止めるものを決める。本文は`{"rooms":true,"uploads":false,"logins":false}`の形                                       |
+| `GET`    | `/admin/api/tighten`                               | 回数の上限をどれだけ締めているか                                                                                              |
+| `PUT`    | `/admin/api/tighten`                               | 回数の上限を締める。本文は`{"upload":4,"read":1,"room":2,"auth":1}`の形（それぞれ1・2・4・10）                                |
 | `GET`    | `/admin/api/accounts/:discordId`                   | そのDiscordのユーザーIDのアカウント。無ければ`404 not-found`                                                                  |
 | `DELETE` | `/admin/api/accounts/:discordId`                   | そのアカウントを削除する。`204`、無ければ`404 not-found`                                                                      |
 | `GET`    | `/admin/api/settings`                              | いまの設定。秘密の値は、入っているかどうかだけ                                                                                |
