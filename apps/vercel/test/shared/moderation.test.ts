@@ -20,11 +20,19 @@ import {
 } from '../../src/core/moderation/alerts.js';
 import type { AlertKind } from '../../src/core/moderation/alerts.js';
 import type { Activity, ModerationStore } from '../../src/core/moderation/activity.js';
-import { BanList, NO_PAUSE, banCache, banValueOf, discordIdOf, seatBarredBy } from '../../src/core/moderation/bans.js';
+import {
+  BanList,
+  NO_PAUSE,
+  NO_TIGHTEN,
+  banCache,
+  banValueOf,
+  discordIdOf,
+  seatBarredBy,
+} from '../../src/core/moderation/bans.js';
 import type { Ban, ModerationState } from '../../src/core/moderation/bans.js';
 
 /** What the store gives: these bans, and nothing stopped. */
-const stateOf = (bans: Ban[]): ModerationState => ({ bans, pause: NO_PAUSE });
+const stateOf = (bans: Ban[]): ModerationState => ({ bans, pause: NO_PAUSE, tighten: NO_TIGHTEN });
 import type { Seat } from '../../src/core/rooms/host.js';
 
 // The pieces the operator's bans are made of. They touch no room server.
@@ -312,10 +320,13 @@ describe('banCache', () => {
 
   it('holds what is stopped along with the bans, and nothing stopped before the first read', async () => {
     const pause = { rooms: true, uploads: false, logins: true, since: 5 };
-    const cache = banCache(async () => ({ bans: [], pause }));
+    const tighten = { upload: 4, read: 1, room: 2, auth: 1, since: 6 } as const;
+    const cache = banCache(async () => ({ bans: [], pause, tighten }));
 
     expect(new BanList([]).pause).toEqual(NO_PAUSE);
+    expect(new BanList([]).tighten).toEqual(NO_TIGHTEN);
     expect((await cache.current()).pause).toEqual(pause);
+    expect((await cache.current()).tighten).toEqual(tighten);
   });
 
   it('does not count a failed read begun before forgetting as a read', async () => {
@@ -353,6 +364,7 @@ describe('moderationOf', () => {
     bans: async () => [banOf('discord', '42')],
     state: async () => stateOf([banOf('discord', '42')]),
     setPause: async () => undefined,
+    setTighten: async () => undefined,
     putBan: async () => undefined,
     deleteBan: async () => true,
     note: async () => undefined,
@@ -375,10 +387,11 @@ describe('moderationOf', () => {
     await moderation.ban(banOf('discord', '42'));
     expect(await moderation.unban('discord', '42')).toBe(true);
     await moderation.setPause(NO_PAUSE);
+    await moderation.setTighten(NO_TIGHTEN);
     await moderation.current();
     await moderation.fresh();
 
-    expect(cache.forget).toHaveBeenCalledTimes(3);
+    expect(cache.forget).toHaveBeenCalledTimes(4);
     expect(cache.current).toHaveBeenCalledTimes(1);
     expect(cache.fresh).toHaveBeenCalledTimes(1);
     expect(await moderation.bans()).toEqual([banOf('discord', '42')]);
@@ -447,6 +460,7 @@ describe('moderationOf', () => {
     expect(putStorageUsage).toHaveBeenCalledWith(usage);
     expect(alert.mock.calls).toEqual([['storage', { usage, limitBytes: 4 }]]);
     expect(await noModeration.storageUsage()).toBeNull();
+    await noModeration.setTighten(NO_TIGHTEN);
     await noModeration.putStorageUsage(usage);
     await noModeration.alertStorage(usage, 4);
   });

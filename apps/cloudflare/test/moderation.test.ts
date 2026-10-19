@@ -156,6 +156,16 @@ describe('ModerationDurableObject', () => {
     expect((await store.state()).pause).toEqual({ rooms: false, uploads: false, logins: false, since: null });
   });
 
+  it('keeps how tight the limits are, and when that began, until they go back', async () => {
+    const store = freshStore();
+
+    expect((await store.state()).tighten).toEqual({ upload: 1, read: 1, room: 1, auth: 1, since: null });
+    await store.setTighten({ upload: 4, read: 1, room: 10, auth: 2, since: 7 });
+    expect((await store.state()).tighten).toEqual({ upload: 4, read: 1, room: 10, auth: 2, since: 7 });
+    await store.setTighten({ upload: 1, read: 1, room: 1, auth: 1, since: null });
+    expect((await store.state()).tighten).toEqual({ upload: 1, read: 1, room: 1, auth: 1, since: null });
+  });
+
   it('lets a challenge be taken again once it has run out', async () => {
     const store = freshStore();
 

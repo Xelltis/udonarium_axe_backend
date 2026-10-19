@@ -10,7 +10,8 @@ import {
 import type { Activity, ActivityKind } from '../core/moderation/activity';
 import type { Passkey, PasskeyAlgorithm } from '../core/admin/webauthn';
 import type { AlertKind } from '../core/moderation/alerts';
-import type { Ban, BanKind, ModerationState, Pause } from '../core/moderation/bans';
+import { NO_TIGHTEN } from '../core/moderation/bans';
+import type { Ban, BanKind, ModerationState, Pause, Tighten, TightenWeight } from '../core/moderation/bans';
 import type { StorageUsage } from '../core/moderation/storage';
 
 /** The name of the Durable Object that keeps the bans and what happened. There is only one for each Worker. */
@@ -146,7 +147,7 @@ export class ModerationDurableObject extends DurableObject<Env> {
 
   /** The bans and what is stopped, read in one call. */
   state(): ModerationState {
-    return { bans: this.bans(), pause: this.pause() };
+    return { bans: this.bans(), pause: this.pause(), tighten: this.tighten() };
   }
 
   /** What is stopped now. Kept in admin_state, one row for each kind, and when it began. */
@@ -259,6 +260,32 @@ export class ModerationDurableObject extends DurableObject<Env> {
       sql.exec('INSERT OR IGNORE INTO challenges (challenge, expires_at) VALUES (?, ?)', challenge, now + ms)
         .rowsWritten > 0
     );
+  }
+
+  /** How tight the rate limits are now. Kept in admin_state, one row for each limit, and when it began. */
+  tighten(): Tighten {
+    const rows = this.ctx.storage.sql
+      .exec<{ name: string; value: number }>("SELECT name, value FROM admin_state WHERE name LIKE 'tighten_%'")
+      .toArray();
+    const value = (name: string) => rows.find((row) => row.name === name)?.value;
+    // Nothing kept is the usual limits.
+    if (value('tighten_upload') === undefined) return NO_TIGHTEN;
+    return {
+      upload: value('tighten_upload') as TightenWeight,
+      read: value('tighten_read') as TightenWeight,
+      room: value('tighten_room') as TightenWeight,
+      auth: value('tighten_auth') as TightenWeight,
+      since: value('tighten_since') ?? null,
+    };
+  }
+
+  setTighten(tighten: Tighten): void {
+    const sql = this.ctx.storage.sql;
+    for (const kind of ['upload', 'read', 'room', 'auth'] as const) {
+      sql.exec('INSERT OR REPLACE INTO admin_state (name, value) VALUES (?, ?)', `tighten_${kind}`, tighten[kind]);
+    }
+    if (tighten.since === null) sql.exec("DELETE FROM admin_state WHERE name = 'tighten_since'");
+    else sql.exec("INSERT OR REPLACE INTO admin_state (name, value) VALUES ('tighten_since', ?)", tighten.since);
   }
 
   /** The store's size as last counted. Kept in admin_state, as storage_bytes and the rest. */

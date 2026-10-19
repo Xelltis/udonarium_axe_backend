@@ -7,7 +7,8 @@ import {
 } from '../core/moderation/activity.js';
 import type { Activity, ModerationStore } from '../core/moderation/activity.js';
 import type { Passkey } from '../core/admin/webauthn.js';
-import type { Ban, BanKind, Pause } from '../core/moderation/bans.js';
+import { NO_TIGHTEN } from '../core/moderation/bans.js';
+import type { Ban, BanKind, Pause, Tighten, TightenWeight } from '../core/moderation/bans.js';
 import type { StorageUsage } from '../core/moderation/storage.js';
 import type { KeyOf, Redis } from './redis.js';
 
@@ -27,6 +28,7 @@ import type { KeyOf, Redis } from './redis.js';
 //   mod:challenge:<c> STRING  There once a passkey challenge has been answered, until it runs out.
 //   mod:pause         HASH    What the operator has stopped for now: rooms, uploads, logins ("1"), and since.
 //   mod:storage       STRING  JSON of the store's size as last counted (once a day, by the sweep).
+//   mod:tighten       HASH    How tight each rate limit is: upload, read, room, auth (1, 2, 4 or 10), and since.
 
 const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
@@ -38,6 +40,7 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
   const EPOCH = key('mod', 'admin-epoch');
   const PAUSE = key('mod', 'pause');
   const STORAGE = key('mod', 'storage');
+  const TIGHTEN = key('mod', 'tighten');
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
   const bans = async (): Promise<Ban[]> => {
@@ -61,12 +64,40 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
     };
   };
 
+  const tighten = async (): Promise<Tighten> => {
+    const kept = await redis.hGetAll(TIGHTEN);
+    // Nothing kept is the usual limits.
+    if (!kept.upload) return NO_TIGHTEN;
+    const weight = (kind: 'upload' | 'read' | 'room' | 'auth') => Number(kept[kind]) as TightenWeight;
+    return {
+      upload: weight('upload'),
+      read: weight('read'),
+      room: weight('room'),
+      auth: weight('auth'),
+      since: kept.since ? Number(kept.since) : null,
+    };
+  };
+
   return {
     bans,
 
     async state() {
-      const [kept, stopped] = await Promise.all([bans(), pause()]);
-      return { bans: kept, pause: stopped };
+      const [kept, stopped, tight] = await Promise.all([bans(), pause(), tighten()]);
+      return { bans: kept, pause: stopped, tighten: tight };
+    },
+
+    async setTighten({ since, ...weights }) {
+      await redis
+        .multi()
+        .del(TIGHTEN)
+        .hSet(TIGHTEN, {
+          upload: String(weights.upload),
+          read: String(weights.read),
+          room: String(weights.room),
+          auth: String(weights.auth),
+          ...(since === null ? {} : { since: String(since) }),
+        })
+        .exec();
     },
 
     async setPause({ rooms, uploads, logins, since }) {

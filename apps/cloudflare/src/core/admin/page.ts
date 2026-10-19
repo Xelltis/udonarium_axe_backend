@@ -195,6 +195,10 @@ form.ban .check { flex-direction: row; align-items: center; font-weight: 400; gr
 /* What was uploaded, accounts, stopping and the settings */
 .pause-banner { margin-bottom: 12px; border-color: var(--critical); align-items: center; flex-wrap: wrap; }
 .pause-banner button { margin-left: auto; }
+.pause-banner.warning { border-color: var(--warning); }
+.tighten-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16em, 100%), 1fr)); gap: 8px 16px; margin: 12px 0 4px;
+  align-items: end; }
+.tighten-kinds label { display: flex; flex-direction: column; gap: 4px; }
 .pause-kinds { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0 4px; }
 .pause-kinds label { display: inline-flex; align-items: center; gap: 6px; }
 .card .more { margin-top: 8px; }
@@ -233,6 +237,8 @@ const SCRIPT = `
   var me = null;
   /** What is stopped now, as the server last said. */
   var pauseState = null;
+  /** How tight the rate limits are now, as the server last said. */
+  var tightenState = null;
   /** The store's size as the daily count last found it, and the amount past which the operator is told. */
   var storageState = { usage: null, limitBytes: null };
   /** Every asset in the store as last read (on the uploads tab), and the barred ones. */
@@ -277,6 +283,8 @@ const SCRIPT = `
   /** What the operator can stop everyone from doing for a while. */
   var PAUSE_LABELS = { rooms: '部屋を作る', uploads: '画像と音声を置く', logins: '新しくログインする' };
   var PAUSE_KINDS = ['rooms', 'uploads', 'logins'];
+  /** The rate limits the operator can tighten for a while. */
+  var TIGHTEN_KINDS = ['upload', 'read', 'room', 'auth'];
   /** Why the way back from Discord turned the operator away. */
   var DENIED = {
     'not-allowed': 'このDiscordのアカウントは、管理画面に入れる人（ADMIN_DISCORD_IDS）にありません。',
@@ -1290,6 +1298,7 @@ const SCRIPT = `
     'delete account': 'アカウントを削除した',
     pause: '緊急停止した',
     resume: '緊急停止をやめ、すべて再開した',
+    loosen: '締めるのをやめ、元に戻した',
     ban: 'BANした',
     unban: 'BANを解いた'
   };
@@ -1340,6 +1349,13 @@ const SCRIPT = `
       facts.action = ADMIN_ACTIONS[words[0]];
       facts.targetKind = BAN_KINDS[words[1]] || words[1];
       facts.target = rest;
+    } else if (words[0] === 'tighten') {
+      facts.action = '回数の上限を締めた';
+      facts.targetKind = '締めたもの';
+      facts.target = String(words[1] || '').split(',').map(function (pair) {
+        var parts = pair.split('=');
+        return (LIMIT_LABELS[parts[0]] || parts[0]) + ' 1/' + parts[1];
+      }).join('・');
     } else if (words[0] === 'pause') {
       facts.action = ADMIN_ACTIONS.pause;
       facts.targetKind = '止めたもの';
@@ -1576,11 +1592,14 @@ const SCRIPT = `
     loading = true;
     $('refresh').disabled = true;
     $('app').classList.add('loading');
-    return Promise.all([api('GET', 'rooms'), api('GET', 'activity'), api('GET', 'bans'), api('GET', 'pause'), api('GET', 'storage')])
+    return Promise.all([api('GET', 'rooms'), api('GET', 'activity'), api('GET', 'bans'), api('GET', 'pause'), api('GET', 'storage'),
+      api('GET', 'tighten')])
       .then(function (results) {
         data = { rooms: results[0].rooms, activity: results[1].activity, bans: results[2].bans };
         pauseState = results[3].pause;
         storageState = results[4];
+        tightenState = results[5].tighten;
+        renderTighten();
         render();
         renderPause();
         renderUploads();
@@ -1617,8 +1636,7 @@ const SCRIPT = `
     var kinds = pausedKinds();
     var words = kinds.map(function (kind) { return PAUSE_LABELS[kind]; }).join('・');
     $('pause-banner').hidden = kinds.length === 0;
-    $('menu-paused').hidden = kinds.length === 0;
-    $('menu-paused').title = '緊急停止中です';
+    renderSafetyFlag();
     $('pause-text').textContent = kinds.length ? words + 'を止めています（' + time(pauseState.since) + 'から）。' : '';
     PAUSE_KINDS.forEach(function (kind) { $('pause-' + kind).checked = !!(pauseState && pauseState[kind]); });
     $('pause-state').textContent = kinds.length ? 'いま止めているもの：' + words + '（' + time(pauseState.since) + 'から）' : 'いまは何も止めていません。';
@@ -1634,6 +1652,44 @@ const SCRIPT = `
       pauseState = res.pause;
       renderPause();
       setStatus(stopping.length ? '止めました。原因が分かったら、ここで再開してください。' : 'すべて再開しました。', 'ok');
+    }).catch(function (err) { setStatus(messageOf(err), 'error'); });
+  }
+
+  /** The mark on the security menu while anything is stopped or tightened. */
+  function renderSafetyFlag() {
+    var stopped = pausedKinds().length > 0;
+    var tight = tightKinds().length > 0;
+    $('menu-paused').hidden = !stopped && !tight;
+    $('menu-paused').title = stopped ? '緊急停止中です' : '回数の上限を締めています';
+  }
+
+  // ---- Tightening the rate limits for a while ----
+
+  function tightKinds() {
+    return TIGHTEN_KINDS.filter(function (kind) { return tightenState && tightenState[kind] > 1; });
+  }
+  function fractionOf(weight) { return weight > 1 ? '1/' + weight : 'ふつう'; }
+
+  function renderTighten() {
+    var kinds = tightKinds();
+    var words = kinds.map(function (kind) { return LIMIT_LABELS[kind] + ' ' + fractionOf(tightenState[kind]); }).join('・');
+    $('tighten-banner').hidden = kinds.length === 0;
+    $('tighten-text').textContent = kinds.length ? words + 'に締めています（' + time(tightenState.since) + 'から）。' : '';
+    TIGHTEN_KINDS.forEach(function (kind) { $('tighten-' + kind).value = String(tightenState ? tightenState[kind] : 1); });
+    $('tighten-state').textContent = kinds.length ? 'いま締めているもの：' + words + '（' + time(tightenState.since) + 'から）' : 'いまはどれも締めていません。';
+    renderSafetyFlag();
+  }
+
+  function applyTighten(loosenAll) {
+    var body = {};
+    TIGHTEN_KINDS.forEach(function (kind) { body[kind] = loosenAll ? 1 : Number($('tighten-' + kind).value); });
+    var tight = TIGHTEN_KINDS.filter(function (kind) { return body[kind] > 1; });
+    if (tight.length && !confirm(tight.map(function (kind) { return LIMIT_LABELS[kind] + ' ' + fractionOf(body[kind]); }).join('・') +
+      'に締めますか。1つの送信元が1分にできる回数が、その分だけ減ります。ほかのインスタンスには30秒ほどで行き渡ります。')) return;
+    api('PUT', 'tighten', body).then(function (res) {
+      tightenState = res.tighten;
+      renderTighten();
+      setStatus(tight.length ? '締めました。落ち着いたら、ここで元に戻してください。' : '回数の上限を元に戻しました。', 'ok');
     }).catch(function (err) { setStatus(messageOf(err), 'error'); });
   }
 
@@ -2058,6 +2114,9 @@ const SCRIPT = `
   $('signout').addEventListener('click', logOut);
   $('passkey-add').addEventListener('click', addPasskey);
   $('pause-apply').addEventListener('click', function () { applyPause(false); });
+  $('tighten-apply').addEventListener('click', function () { applyTighten(false); });
+  $('tighten-loosen').addEventListener('click', function () { applyTighten(true); });
+  $('tighten-go').addEventListener('click', function () { show('security'); });
   $('pause-resume').addEventListener('click', function () { applyPause(true); });
   $('pause-go').addEventListener('click', function () { show('security'); });
   $('uploads-search').addEventListener('input', renderUploads);
@@ -2183,6 +2242,11 @@ const BODY = `
         <span class="alert-icon" aria-hidden="true">!</span><span class="alert-label">緊急停止中</span>
         <span id="pause-text"></span>
         <button type="button" id="pause-go">止めているものを見る</button>
+      </div>
+      <div class="alert warning pause-banner" id="tighten-banner" hidden>
+        <span class="alert-icon" aria-hidden="true">!</span><span class="alert-label">締めています</span>
+        <span id="tighten-text"></span>
+        <button type="button" id="tighten-go">締めているものを見る</button>
       </div>
       <p class="status" id="status" role="status"></p>
       <div id="tab-overview" role="tabpanel">
@@ -2406,6 +2470,29 @@ const BODY = `
           <div class="toolbar">
             <button type="button" class="danger" id="pause-apply">チェックしたものだけを止める</button>
             <button type="button" id="pause-resume">すべて再開する</button>
+          </div>
+        </section>
+        <section class="card">
+          <h2>回数の上限を締める</h2>
+          <p class="hint">緊急停止するほどではないが、回数の上限を超える送信元が多いときに、上限を一時的に厳しくします。1/2にすると、1つの送信元が1分にできる回数が半分になります。押したインスタンスではすぐに、ほかのインスタンスには30秒ほどで行き渡ります。</p>
+          <div class="tighten-kinds">
+            <label>画像と音声を置く（ふつうは1分に100回）
+              <select id="tighten-upload"><option value="1">ふつう</option><option value="2">1/2</option><option value="4">1/4</option><option value="10">1/10</option></select>
+            </label>
+            <label>読み出し（ふつうは1分に600回）
+              <select id="tighten-read"><option value="1">ふつう</option><option value="2">1/2</option><option value="4">1/4</option><option value="10">1/10</option></select>
+            </label>
+            <label>部屋を作る・入る（ふつうは1分に30回）
+              <select id="tighten-room"><option value="1">ふつう</option><option value="2">1/2</option><option value="4">1/4</option><option value="10">1/10</option></select>
+            </label>
+            <label>ログイン（ふつうは1分に60回）
+              <select id="tighten-auth"><option value="1">ふつう</option><option value="2">1/2</option><option value="4">1/4</option><option value="10">1/10</option></select>
+            </label>
+          </div>
+          <p id="tighten-state"></p>
+          <div class="toolbar">
+            <button type="button" class="danger" id="tighten-apply">この設定で締める</button>
+            <button type="button" id="tighten-loosen">すべて元に戻す</button>
           </div>
         </section>
         <section class="card">

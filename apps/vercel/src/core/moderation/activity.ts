@@ -3,7 +3,7 @@ import { ADMIN_DENIED, alertOf } from './alerts.js';
 import type { AlertFacts, AlertKind } from './alerts.js';
 import type { StorageUsage } from './storage.js';
 import { BanList } from './bans.js';
-import type { Ban, BanCache, BanKind, ModerationState, Pause } from './bans.js';
+import type { Ban, BanCache, BanKind, ModerationState, Pause, Tighten } from './bans.js';
 
 /**
  * What is written down for the operator, to find who is running up the bill.
@@ -69,6 +69,8 @@ export interface ModerationStore extends AdminStore {
   state(): Promise<ModerationState>;
   /** Stops what is set in it, or starts it again. */
   setPause(pause: Pause): Promise<void>;
+  /** Tightens the rate limits as set in it, or lets them go back. */
+  setTighten(tighten: Tighten): Promise<void>;
   /** Adds a ban, or replaces the one on the same target. */
   putBan(ban: Ban): Promise<void>;
   /** Lifts a ban. False when there was none. */
@@ -103,6 +105,11 @@ export interface Moderation {
   unban(kind: BanKind, value: string): Promise<boolean>;
   /** Stops what is set in it, or starts it again. This instance reads it again at once. */
   setPause(pause: Pause): Promise<void>;
+  /**
+   * Tightens the rate limits as set in it, or lets them go back. This instance reads it again at
+   * once; the others within BAN_CACHE_MS.
+   */
+  setTighten(tighten: Tighten): Promise<void>;
   /**
    * Writes it down after the response, and tells the operator when it calls for an alert. A failure
    * goes to the log and nowhere else.
@@ -141,6 +148,10 @@ export const moderationOf = (
     await store.setPause(pause);
     cache.forget();
   },
+  setTighten: async (tighten) => {
+    await store.setTighten(tighten);
+    cache.forget();
+  },
   note: (entry) => {
     defer(store.note(entry).catch((err: unknown) => console.error('Could not write down what happened:', err)));
     const kind = alert && alertOf(entry);
@@ -163,6 +174,7 @@ export const noModeration: Moderation = {
   ban: async () => undefined,
   unban: async () => false,
   setPause: async () => undefined,
+  setTighten: async () => undefined,
   note: () => undefined,
   activity: async () => [],
   storageUsage: async () => null,

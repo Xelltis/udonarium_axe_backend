@@ -30,6 +30,16 @@ const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', 
 const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
 
 describe('a Redis store for the operator', () => {
+  it('keeps how tight the limits are, and when that began, until they go back', async () => {
+    const store = redisModeration(connection.redis, freshKey());
+
+    expect((await store.state()).tighten).toEqual({ upload: 1, read: 1, room: 1, auth: 1, since: null });
+    await store.setTighten({ upload: 4, read: 1, room: 10, auth: 2, since: 7 });
+    expect((await store.state()).tighten).toEqual({ upload: 4, read: 1, room: 10, auth: 2, since: 7 });
+    await store.setTighten({ upload: 1, read: 1, room: 1, auth: 1, since: null });
+    expect((await store.state()).tighten).toEqual({ upload: 1, read: 1, room: 1, auth: 1, since: null });
+  });
+
   it('keeps the store’s size as last counted', async () => {
     const store = redisModeration(connection.redis, freshKey());
 

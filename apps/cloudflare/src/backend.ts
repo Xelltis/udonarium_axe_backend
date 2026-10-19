@@ -48,9 +48,13 @@ export const cloudflareBackend = (env: Env, waitUntil: (work: Promise<unknown>) 
    * the counts do not mix with those of another instance on the same account.
    */
   const limit = notingLimits(
-    async (request: Request, kind: LimitKind): Promise<boolean> => {
+    async (request: Request, kind: LimitKind, weight: number): Promise<boolean> => {
       const key = `${new URL(request.url).host}/${networkOf(addressOf(request))}`;
-      return (await env[LIMITERS[kind]].limit({ key })).success;
+      // A tightened limit: the request takes weight of the sender's count. The binding takes one a call.
+      for (let taken = 0; taken < weight; taken++) {
+        if (!(await env[LIMITERS[kind]].limit({ key })).success) return false;
+      }
+      return true;
     },
     { addressOf, moderation }
   );

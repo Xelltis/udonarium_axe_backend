@@ -98,15 +98,17 @@ export const note = (c: ServerContext, happening: Happening): void => {
 /**
  * The rate limit, writing down a sender that goes over it (once a minute for each sender and limit).
  * Each room server puts it around its own count, so that the counts it keeps for reading assets are
- * written down too.
+ * written down too. A limit the operator has tightened counts each request weight times, by the
+ * bans this instance read a short while ago (it reads nothing for it).
  */
 export const notingLimits =
   (
-    limit: (request: Request, kind: LimitKind) => Promise<boolean>,
+    limit: (request: Request, kind: LimitKind, weight: number) => Promise<boolean>,
     { addressOf, moderation }: Pick<ServerBackend, 'addressOf' | 'moderation'>
   ) =>
   async (request: Request, kind: LimitKind): Promise<boolean> => {
-    if (await limit(request, kind)) return true;
+    const weight = (await moderation.current()).tighten[kind];
+    if (await limit(request, kind, weight)) return true;
     const address = addressOf(request);
     if (noteOnce(`limited|${address}|${kind}`)) moderation.note(activityOf(address, { kind: 'limited', detail: kind }));
     return false;

@@ -1,9 +1,10 @@
 import type { Context, Hono } from 'hono';
-import { array, boolean, maxLength, object, pipe, regex, safeParse, string } from 'valibot';
+import { array, boolean, maxLength, object, picklist, pipe, regex, safeParse, string } from 'valibot';
 
 import { ASSET_ID } from '../../assets/keys.js';
 import type { AdminConfig } from '../../config/admin.js';
-import type { Pause } from '../../moderation/bans.js';
+import { TIGHTEN_WEIGHTS } from '../../moderation/bans.js';
+import type { Pause, Tighten } from '../../moderation/bans.js';
 import type { StorageUsage } from '../../moderation/storage.js';
 import { recentPasskeyRequired } from '../admin-session.js';
 import type { ServerEnv, StoredRoomAsset } from '../backend.js';
@@ -25,6 +26,9 @@ const MAX_ROOMS_PER_TAKEDOWN = 2000;
 const DISCORD_ID = /^\d{1,20}$/;
 
 const pauseSchema = object({ rooms: boolean(), uploads: boolean(), logins: boolean() });
+
+const weight = picklist(TIGHTEN_WEIGHTS);
+const tightenSchema = object({ upload: weight, read: weight, room: weight, auth: weight });
 
 const takedownSchema = object({
   rooms: pipe(array(pipe(string(), regex(ROOM_KEY))), maxLength(MAX_ROOMS_PER_TAKEDOWN)),
@@ -118,6 +122,28 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
     const what = (['rooms', 'uploads', 'logins'] as const).filter((kind) => pause[kind]);
     noteAdmin(c, what.length > 0 ? `pause ${what.join(',')}` : 'resume');
     return c.json<{ pause: Pause }>({ pause });
+  });
+
+  // ---- Tightening the rate limits for a while ----
+
+  admin.get('/api/tighten', async (c) =>
+    c.json<{ tighten: Tighten }>({ tighten: (await c.var.backend.moderation.fresh()).tighten })
+  );
+
+  /**
+   * Makes each rate limit as tight as set (each request counting 1, 2, 4 or 10 times), or lets them
+   * go back. Every instance follows within BAN_CACHE_MS.
+   */
+  admin.put('/api/tighten', async (c) => {
+    const parsed = safeParse(tightenSchema, await c.req.json().catch(() => null));
+    if (!parsed.success) return fail(c, 400, 'invalid-request');
+    const weights = parsed.output;
+    const before = (await c.var.backend.moderation.fresh()).tighten;
+    const tight = (['upload', 'read', 'room', 'auth'] as const).filter((kind) => weights[kind] > 1);
+    const tighten: Tighten = { ...weights, since: tight.length > 0 ? (before.since ?? Date.now()) : null };
+    await c.var.backend.moderation.setTighten(tighten);
+    noteAdmin(c, tight.length > 0 ? `tighten ${tight.map((kind) => `${kind}=${weights[kind]}`).join(',')}` : 'loosen');
+    return c.json<{ tighten: Tighten }>({ tighten });
   });
 
   // ---- Accounts ----

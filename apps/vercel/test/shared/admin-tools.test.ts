@@ -10,7 +10,7 @@ import type {
 } from '../../src/core/http/routes/admin-tools.js';
 import type { Activity } from '../../src/core/moderation/activity.js';
 import { noModeration } from '../../src/core/moderation/activity.js';
-import type { Pause } from '../../src/core/moderation/bans.js';
+import type { Pause, Tighten } from '../../src/core/moderation/bans.js';
 import { harness } from '../harness.js';
 import { ADMIN, callAdmin, sessionCookieOf } from './admin-helpers.js';
 import { fakeDiscord, logIn, signInWithDiscord } from './auth-helpers.js';
@@ -131,6 +131,43 @@ describe('stopping everyone for a while', () => {
     expect(await noted((entry) => entry.detail === 'resume')).not.toEqual([]);
     expect((await callAdmin('pause', { method: 'PUT', body: { rooms: 'yes' } })).status).toBe(400);
     expect((await callAdmin('pause', { method: 'PUT', body: '{' })).status).toBe(400);
+  });
+});
+
+describe('tightening the rate limits for a while', () => {
+  it('counts each request as many times as set on every instance, and lets the limits go back', async () => {
+    const loose = { upload: 1, read: 1, room: 1, auth: 1 };
+    try {
+      expect((await jsonOf<{ tighten: Tighten }>(await callAdmin('tighten'))).tighten).toMatchObject({
+        ...loose,
+        since: null,
+      });
+      const tight = await jsonOf<{ tighten: Tighten }>(
+        await callAdmin('tighten', { method: 'PUT', body: { ...loose, room: 2 } })
+      );
+      expect(tight.tighten).toEqual({ ...loose, room: 2, since: expect.any(Number) });
+      const again = await jsonOf<{ tighten: Tighten }>(
+        await callAdmin('tighten', { method: 'PUT', body: { ...loose, room: 2, upload: 10 } })
+      );
+      expect(again.tighten.since).toBe(tight.tighten.since);
+      await callAdmin('tighten', { method: 'PUT', body: { ...loose, room: 2 } });
+
+      // The tests let five rooms a minute be made from one sender; at two each, the third is over.
+      const ip = freshIp();
+      const statuses: number[] = [];
+      for (let i = 0; i < 3; i++)
+        statuses.push((await postRoom({ name: `tight ${i}` }, { 'CF-Connecting-IP': ip })).status);
+      expect(statuses).toEqual([201, 201, 429]);
+    } finally {
+      const loosened = await jsonOf<{ tighten: Tighten }>(await callAdmin('tighten', { method: 'PUT', body: loose }));
+      expect(loosened.tighten).toEqual({ ...loose, since: null });
+    }
+
+    expect(await noted((entry) => entry.detail === 'tighten room=2')).not.toEqual([]);
+    expect(await noted((entry) => entry.detail === 'tighten upload=10,room=2')).not.toEqual([]);
+    expect(await noted((entry) => entry.detail === 'loosen')).not.toEqual([]);
+    expect((await callAdmin('tighten', { method: 'PUT', body: { ...loose, room: 3 } })).status).toBe(400);
+    expect((await callAdmin('tighten', { method: 'PUT', body: '{' })).status).toBe(400);
   });
 });
 

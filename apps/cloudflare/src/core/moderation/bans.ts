@@ -1,5 +1,6 @@
 import { integer, maxLength, maxValue, minValue, nullish, number, object, picklist, pipe, string } from 'valibot';
 
+import type { LimitKind } from '../http/backend.js';
 import type { Seat } from '../rooms/host.js';
 import { formatRange, inRange, parseRange } from './address.js';
 import type { AddressRange } from './address.js';
@@ -51,10 +52,23 @@ export interface Pause {
 
 export const NO_PAUSE: Pause = { rooms: false, uploads: false, logins: false, since: null };
 
-/** The bans and what is stopped, read together. */
+/**
+ * How many times each request counts against a rate limit the operator has tightened for now: 1 as
+ * usual, and 2, 4 or 10 to let in only a half, a quarter or a tenth as many.
+ */
+export const TIGHTEN_WEIGHTS = [1, 2, 4, 10] as const;
+export type TightenWeight = (typeof TIGHTEN_WEIGHTS)[number];
+
+/** How tight each rate limit is now, and since when (Unix milliseconds; null when none is tightened). */
+export type Tighten = Record<LimitKind, TightenWeight> & { since: number | null };
+
+export const NO_TIGHTEN: Tighten = { upload: 1, read: 1, room: 1, auth: 1, since: null };
+
+/** The bans, what is stopped and how tight the limits are, read together. */
 export interface ModerationState {
   bans: Ban[];
   pause: Pause;
+  tighten: Tighten;
 }
 
 /** The body of a request to ban. */
@@ -95,7 +109,8 @@ export class BanList {
 
   constructor(
     bans: Ban[],
-    readonly pause: Pause = NO_PAUSE
+    readonly pause: Pause = NO_PAUSE,
+    readonly tighten: Tighten = NO_TIGHTEN
   ) {
     for (const ban of bans) {
       if (ban.kind === 'discord') {
@@ -159,8 +174,8 @@ export const banCache = (load: () => Promise<ModerationState>, ttlMs = BAN_CACHE
   const read = async (): Promise<BanList> => {
     const number = ++begun;
     try {
-      const { bans, pause } = await load();
-      const list = new BanList(bans, pause);
+      const { bans, pause, tighten } = await load();
+      const list = new BanList(bans, pause, tighten);
       if (number > heldFrom) {
         held = list;
         heldFrom = number;

@@ -23,16 +23,17 @@ export const clientIpOf = (request: Request): string =>
 /**
  * Counts in Redis whether a sender (each /64 for IPv6) is within the limit. The window is
  * LIMIT_WINDOW_MS from that sender's first request. The key carries the host name the request came
- * to, so the counts do not mix with another deploy that uses the same Redis.
+ * to, so the counts do not mix with another deploy that uses the same Redis. A limit the operator
+ * has tightened counts the request weight times.
  */
 export const redisLimiter =
   (redis: Redis, key: KeyOf, limits: Readonly<Record<LimitKind, number>> = LIMITS) =>
-  async (request: Request, kind: LimitKind): Promise<boolean> => {
+  async (request: Request, kind: LimitKind, weight = 1): Promise<boolean> => {
     const name = key('rl', kind, new URL(request.url).host, networkOf(clientIpOf(request)));
     const [, count] = await redis
       .multi()
       .set(name, '0', { condition: 'NX', expiration: { type: 'PX', value: LIMIT_WINDOW_MS } })
-      .incr(name)
+      .incrBy(name, weight)
       .exec();
     return Number(count) <= limits[kind];
   };
