@@ -764,6 +764,8 @@ const SCRIPT = `
   function ofKind(entries, kind) { return entries.filter(function (entry) { return entry.kind === kind; }); }
   /** Whether it is someone turned away from the dashboard (not an operator's own step). */
   function isDenied(entry) { return entry.kind === 'admin' && String(entry.detail || '').indexOf('denied') === 0; }
+  /** One of the operators' own steps, kept apart for 90 days. */
+  function isOperatorStep(entry) { return entry.kind === 'admin' && !isDenied(entry); }
   function deniedOf(entries) {
     return entries.filter(isDenied);
   }
@@ -789,8 +791,10 @@ const SCRIPT = `
       items.push(['critical', '画像と音声の置き場所が、知らせる量（' + gb(storageState.limitBytes) + '）を超えています。' + time(storageState.usage.at) +
         'に数えたときに' + gb(storageState.usage.bytes) + 'でした。「アップロード」の「場所を多く使っている部屋」で確かめてください。']);
     }
-    var oldest = data.activity.length ? data.activity[data.activity.length - 1].at : null;
-    if (data.activity.length >= MAX_ACTIVITY && oldest > period.start) {
+    // The operators' own steps are kept apart, so only the rest can reach the cap.
+    var rest = data.activity.filter(function (entry) { return !isOperatorStep(entry); });
+    var oldest = rest.length ? rest[rest.length - 1].at : null;
+    if (rest.length >= MAX_ACTIVITY && oldest > period.start) {
       items.push(['warning', '記録が上限の' + count(MAX_ACTIVITY) + '件に達しているので、' + time(oldest) + 'より前の出来事は数えていません。']);
     }
     return items;
@@ -1410,7 +1414,7 @@ const SCRIPT = `
     var rows = shownActivity();
     var columns = ACTIVITY_VIEWS[$('activity-kind').value] || ACTIVITY_VIEWS[''];
     var names = namesById();
-    $('activity-summary').textContent = rows.length + '件（7日以内、新しいものから最大2000件を残しています）';
+    $('activity-summary').textContent = rows.length + '件（運営する人の操作は90日・1000件まで、ほかは7日・2000件まで残しています）';
     var head = $('activity-head');
     head.replaceChildren.apply(head, columns.map(function (column) {
       return h('th', { className: ACTIVITY_COLUMNS[column].num ? 'num' : '' }, ACTIVITY_COLUMNS[column].head);

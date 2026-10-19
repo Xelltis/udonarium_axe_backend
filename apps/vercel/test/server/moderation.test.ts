@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ACTIVITY_MS, MAX_ACTIVITY } from '../../src/core/moderation/activity.js';
+import {
+  ACTIVITY_MS,
+  MAX_ACTIVITY,
+  MAX_OPERATOR_ACTIVITY,
+  OPERATOR_ACTIVITY_MS,
+} from '../../src/core/moderation/activity.js';
 import type { Activity } from '../../src/core/moderation/activity.js';
 import type { Passkey } from '../../src/core/admin/webauthn.js';
 import type { Ban } from '../../src/core/moderation/bans.js';
@@ -21,7 +26,8 @@ const banOf = (value: string, createdAt: number, expiresAt: number | null = null
   expiresAt,
 });
 
-const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.1', detail });
+const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
+const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
 
 describe('a Redis store for the operator', () => {
   it('keeps the store’s size as last counted', async () => {
@@ -115,6 +121,25 @@ describe('a Redis store for the operator', () => {
     expect(activity.at(-1)?.detail).toBe('n1');
     expect(await connection.redis.zCard(key('mod', 'activity'))).toBe(MAX_ACTIVITY);
     expect(await connection.redis.pTTL(key('mod', 'activity'))).toBeGreaterThan(ACTIVITY_MS - 60_000);
+  });
+
+  it('keeps the operators’ own steps apart, the newest MAX_OPERATOR_ACTIVITY for 90 days, however many of the rest come', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key);
+    const now = Date.now();
+    await store.note(stepOf(now - OPERATOR_ACTIVITY_MS - 1, 'too old'));
+    await store.note(stepOf(now - ACTIVITY_MS - 1, 'view asset a'));
+    await store.note(stepOf(now - 1, 'denied not-allowed'));
+    for (let i = 0; i < MAX_ACTIVITY; i++) await store.note(entryOf(now, `n${i}`));
+
+    const activity = await store.activity();
+
+    expect(activity).toHaveLength(MAX_ACTIVITY + 1);
+    expect(activity.at(-1)?.detail).toBe('view asset a');
+    expect(activity.some((entry) => entry.detail === 'denied not-allowed' || entry.detail === 'too old')).toBe(false);
+    expect(await connection.redis.pTTL(key('mod', 'operator-activity'))).toBeGreaterThan(OPERATOR_ACTIVITY_MS - 60_000);
+    for (let i = 0; i < MAX_OPERATOR_ACTIVITY; i++) await store.note(stepOf(now, `ban ip ${i}`));
+    expect(await connection.redis.zCard(key('mod', 'operator-activity'))).toBe(MAX_OPERATOR_ACTIVITY);
   });
 
   it('keeps two alike written at the same moment, and does not show one grown too old', async () => {

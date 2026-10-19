@@ -1,6 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
 
-import { ACTIVITY_MS, MAX_ACTIVITY } from '../core/moderation/activity';
+import {
+  ACTIVITY_MS,
+  MAX_ACTIVITY,
+  MAX_OPERATOR_ACTIVITY,
+  OPERATOR_ACTIVITY_MS,
+  isOperatorStep,
+} from '../core/moderation/activity';
 import type { Activity, ActivityKind } from '../core/moderation/activity';
 import type { Passkey, PasskeyAlgorithm } from '../core/admin/webauthn';
 import type { AlertKind } from '../core/moderation/alerts';
@@ -61,6 +67,11 @@ const activityOf = (row: ActivityRow): Activity => ({
   ...(row.detail === null ? {} : { detail: row.detail }),
 });
 
+/** Where what happened is kept, and how much of it. */
+const LOG = { table: 'activity', ms: ACTIVITY_MS, max: MAX_ACTIVITY };
+/** Where the operators' own steps are kept, apart and for longer. */
+const OPERATOR_LOG = { table: 'operator_activity', ms: OPERATOR_ACTIVITY_MS, max: MAX_OPERATOR_ACTIVITY };
+
 /**
  * The operator's bans, and what happened that the operator may want to look into (logins, rooms
  * made, assets stored, senders over a limit or turned away). Each instance of the Worker reads the
@@ -102,16 +113,19 @@ export class ModerationDurableObject extends DurableObject<Env> {
       kind TEXT PRIMARY KEY,
       sent_at INTEGER NOT NULL
     )`);
-    sql.exec(`CREATE TABLE IF NOT EXISTS activity (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      at INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      address TEXT NOT NULL,
-      discord_id TEXT,
-      name TEXT,
-      room_key TEXT,
-      detail TEXT
-    )`);
+    // What happened, and apart from it the operators' own steps, kept longer.
+    for (const table of ['activity', 'operator_activity']) {
+      sql.exec(`CREATE TABLE IF NOT EXISTS ${table} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        address TEXT NOT NULL,
+        discord_id TEXT,
+        name TEXT,
+        room_key TEXT,
+        detail TEXT
+      )`);
+    }
   }
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
@@ -176,8 +190,9 @@ export class ModerationDurableObject extends DurableObject<Env> {
   /** Writes one down, and lets go of those older than ACTIVITY_MS and those past the newest MAX_ACTIVITY. */
   note(entry: Activity): void {
     const sql = this.ctx.storage.sql;
+    const { table, ms, max } = isOperatorStep(entry) ? OPERATOR_LOG : LOG;
     sql.exec(
-      `INSERT INTO activity (at, kind, address, discord_id, name, room_key, detail) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ${table} (at, kind, address, discord_id, name, room_key, detail) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       entry.at,
       entry.kind,
       entry.address,
@@ -186,11 +201,8 @@ export class ModerationDurableObject extends DurableObject<Env> {
       entry.roomKey ?? null,
       entry.detail ?? null
     );
-    sql.exec('DELETE FROM activity WHERE at < ?', Date.now() - ACTIVITY_MS);
-    sql.exec(
-      'DELETE FROM activity WHERE id <= (SELECT id FROM activity ORDER BY id DESC LIMIT 1 OFFSET ?)',
-      MAX_ACTIVITY
-    );
+    sql.exec(`DELETE FROM ${table} WHERE at < ?`, Date.now() - ms);
+    sql.exec(`DELETE FROM ${table} WHERE id <= (SELECT id FROM ${table} ORDER BY id DESC LIMIT 1 OFFSET ?)`, max);
   }
 
   /** The passkeys of one operator, oldest first. */
@@ -286,16 +298,18 @@ export class ModerationDurableObject extends DurableObject<Env> {
     return true;
   }
 
-  /** What is kept, newest first. */
+  /** What is kept, the operators' own steps among the rest, newest first. */
   activity(): Activity[] {
-    return this.ctx.storage.sql
-      .exec<ActivityRow>(
-        `SELECT at, kind, address, discord_id, name, room_key, detail FROM activity
-         WHERE at >= ? ORDER BY id DESC LIMIT ?`,
-        Date.now() - ACTIVITY_MS,
-        MAX_ACTIVITY
-      )
-      .toArray()
-      .map(activityOf);
+    const read = ({ table, ms, max }: typeof LOG) =>
+      this.ctx.storage.sql
+        .exec<ActivityRow>(
+          `SELECT at, kind, address, discord_id, name, room_key, detail FROM ${table}
+           WHERE at >= ? ORDER BY id DESC LIMIT ?`,
+          Date.now() - ms,
+          max
+        )
+        .toArray()
+        .map(activityOf);
+    return [...read(LOG), ...read(OPERATOR_LOG)].sort((a, b) => b.at - a.at);
   }
 }

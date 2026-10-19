@@ -1,4 +1,10 @@
-import { ACTIVITY_MS, MAX_ACTIVITY } from '../core/moderation/activity.js';
+import {
+  ACTIVITY_MS,
+  MAX_ACTIVITY,
+  MAX_OPERATOR_ACTIVITY,
+  OPERATOR_ACTIVITY_MS,
+  isOperatorStep,
+} from '../core/moderation/activity.js';
 import type { Activity, ModerationStore } from '../core/moderation/activity.js';
 import type { Passkey } from '../core/admin/webauthn.js';
 import type { Ban, BanKind, Pause } from '../core/moderation/bans.js';
@@ -13,6 +19,8 @@ import type { KeyOf, Redis } from './redis.js';
 //                             The random id keeps two alike in the same millisecond apart. Kept to the
 //                             newest MAX_ACTIVITY and to ACTIVITY_MS, and the whole set goes
 //                             ACTIVITY_MS after the last write.
+//   mod:operator-activity ZSET  The same for the operators' own steps, kept apart: the newest
+//                             MAX_OPERATOR_ACTIVITY, for OPERATOR_ACTIVITY_MS.
 //   mod:alert:<kind>  STRING  There while that kind of alert may not be sent again (for ALERT_MS).
 //   mod:passkeys      HASH    credential id → JSON of an operator's passkey.
 //   mod:admin-epoch   STRING  The generation of the operators' sessions (raised to end them all).
@@ -24,7 +32,8 @@ const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
 export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
   const BANS = key('mod', 'bans');
-  const ACTIVITY = key('mod', 'activity');
+  const LOG = { key: key('mod', 'activity'), ms: ACTIVITY_MS, max: MAX_ACTIVITY };
+  const OPERATOR_LOG = { key: key('mod', 'operator-activity'), ms: OPERATOR_ACTIVITY_MS, max: MAX_OPERATOR_ACTIVITY };
   const PASSKEYS = key('mod', 'passkeys');
   const EPOCH = key('mod', 'admin-epoch');
   const PAUSE = key('mod', 'pause');
@@ -83,12 +92,13 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
     },
 
     async note(entry) {
+      const log = isOperatorStep(entry) ? OPERATOR_LOG : LOG;
       await redis
         .multi()
-        .zAdd(ACTIVITY, { score: entry.at, value: JSON.stringify([crypto.randomUUID(), entry]) })
-        .zRemRangeByScore(ACTIVITY, '-inf', `(${Date.now() - ACTIVITY_MS}`)
-        .zRemRangeByRank(ACTIVITY, 0, -(MAX_ACTIVITY + 1))
-        .pExpire(ACTIVITY, ACTIVITY_MS)
+        .zAdd(log.key, { score: entry.at, value: JSON.stringify([crypto.randomUUID(), entry]) })
+        .zRemRangeByScore(log.key, '-inf', `(${Date.now() - log.ms}`)
+        .zRemRangeByRank(log.key, 0, -(log.max + 1))
+        .pExpire(log.key, log.ms)
         .exec();
     },
 
@@ -101,14 +111,18 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
       return taken !== null;
     },
 
-    /** What is kept, newest first. */
+    /** What is kept, the operators' own steps among the rest, newest first. */
     async activity() {
-      const kept = await redis.zRange(ACTIVITY, '+inf', Date.now() - ACTIVITY_MS, {
-        BY: 'SCORE',
-        REV: true,
-        LIMIT: { offset: 0, count: MAX_ACTIVITY },
-      });
-      return kept.map((value) => (JSON.parse(value) as [string, Activity])[1]);
+      const read = async (log: typeof LOG) =>
+        (
+          await redis.zRange(log.key, '+inf', Date.now() - log.ms, {
+            BY: 'SCORE',
+            REV: true,
+            LIMIT: { offset: 0, count: log.max },
+          })
+        ).map((value) => (JSON.parse(value) as [string, Activity])[1]);
+      const [rest, operators] = await Promise.all([read(LOG), read(OPERATOR_LOG)]);
+      return [...rest, ...operators].sort((a, b) => b.at - a.at);
     },
 
     /** The passkeys of one operator, oldest first. An operator has only a few, so all are read. */

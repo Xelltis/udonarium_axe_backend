@@ -7,7 +7,12 @@ import {
 } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ACTIVITY_MS, MAX_ACTIVITY } from '../src/core/moderation/activity';
+import {
+  ACTIVITY_MS,
+  MAX_ACTIVITY,
+  MAX_OPERATOR_ACTIVITY,
+  OPERATOR_ACTIVITY_MS,
+} from '../src/core/moderation/activity';
 import type { Activity } from '../src/core/moderation/activity';
 import type { Passkey } from '../src/core/admin/webauthn';
 import type { Ban } from '../src/core/moderation/bans';
@@ -36,7 +41,8 @@ const banOf = (value: string, expiresAt: number | null): Ban => ({
   expiresAt,
 });
 
-const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.1', detail });
+const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
+const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -206,6 +212,32 @@ describe('ModerationDurableObject', () => {
     expect(activity).toHaveLength(MAX_ACTIVITY);
     expect(activity[0].detail).toBe(`n${MAX_ACTIVITY}`);
     expect(activity.at(-1)?.detail).toBe('n1');
+  });
+
+  it('keeps the operators’ own steps apart, for 90 days, however many of the rest come', async () => {
+    const store = freshStore();
+    const now = Date.now();
+    await runInDurableObject(store, (instance: ModerationDurableObject) => {
+      instance.note(stepOf(now - OPERATOR_ACTIVITY_MS - 1, 'too old'));
+      instance.note(stepOf(now - ACTIVITY_MS - 1, 'view asset a'));
+      instance.note(stepOf(now - 1, 'denied not-allowed'));
+      for (let i = 0; i < MAX_ACTIVITY; i++) instance.note(entryOf(now, `n${i}`));
+    });
+    const activity = await store.activity();
+
+    expect(activity).toHaveLength(MAX_ACTIVITY + 1);
+    expect(activity.at(-1)?.detail).toBe('view asset a');
+    expect(activity.some((entry) => entry.detail === 'denied not-allowed' || entry.detail === 'too old')).toBe(false);
+  });
+
+  it('keeps the newest MAX_OPERATOR_ACTIVITY of the operators’ own steps', async () => {
+    const store = freshStore();
+    const kept = await runInDurableObject(store, (instance: ModerationDurableObject, state) => {
+      for (let i = 0; i <= MAX_OPERATOR_ACTIVITY; i++) instance.note(stepOf(Date.now(), `ban ip ${i}`));
+      return state.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM operator_activity').one().n;
+    });
+
+    expect(kept).toBe(MAX_OPERATOR_ACTIVITY);
   });
 
   it('does not show what has grown too old since it was written', async () => {

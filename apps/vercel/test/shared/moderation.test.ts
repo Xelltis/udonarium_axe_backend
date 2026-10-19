@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { formatRange, inRange, parseAddress, parseRange } from '../../src/core/moderation/address.js';
 import type { AddressRange } from '../../src/core/moderation/address.js';
-import { NOTE_ONCE_MS, moderationOf, noModeration, noteOnce } from '../../src/core/moderation/activity.js';
+import {
+  NOTE_ONCE_MS,
+  isOperatorStep,
+  moderationOf,
+  noModeration,
+  noteOnce,
+} from '../../src/core/moderation/activity.js';
 import {
   ADMIN_DENIED,
   ADMIN_LOGIN,
@@ -327,6 +333,17 @@ describe('banCache', () => {
 
     expect((await failing).accountBan('discord:42')).toBeNull();
     expect((await cache.current()).accountBan('discord:42')).not.toBeNull();
+  });
+});
+
+describe('the operators’ own steps', () => {
+  it('are what an operator did, not someone turned away from the dashboard', () => {
+    const at = { at: 1, address: '192.0.2.1' };
+
+    expect(isOperatorStep({ ...at, kind: 'admin', detail: 'ban ip 192.0.2.1/32' })).toBe(true);
+    expect(isOperatorStep({ ...at, kind: 'admin' })).toBe(true);
+    expect(isOperatorStep({ ...at, kind: 'admin', detail: `${ADMIN_DENIED} not-allowed` })).toBe(false);
+    expect(isOperatorStep({ ...at, kind: 'login' })).toBe(false);
   });
 });
 

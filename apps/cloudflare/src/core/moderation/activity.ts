@@ -1,5 +1,5 @@
 import type { AdminStore } from '../admin/store.js';
-import { alertOf } from './alerts.js';
+import { ADMIN_DENIED, alertOf } from './alerts.js';
 import type { AlertFacts, AlertKind } from './alerts.js';
 import type { StorageUsage } from './storage.js';
 import { BanList } from './bans.js';
@@ -23,6 +23,21 @@ export const MAX_ACTIVITY = 2000;
 
 /** How long one is kept (milliseconds, seven days). */
 export const ACTIVITY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * How many of the operators' own steps are kept, and for how long (milliseconds, 90 days). They are
+ * kept apart from the rest, so that a flood of logins or uploads cannot push out who looked at what
+ * or deleted what.
+ */
+export const MAX_OPERATOR_ACTIVITY = 1000;
+export const OPERATOR_ACTIVITY_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether it is one of the operators' own steps (kept apart for longer). Someone turned away from
+ * the dashboard is not: anyone can cause as many of those as they like.
+ */
+export const isOperatorStep = (entry: Activity): boolean =>
+  entry.kind === 'admin' && !entry.detail?.startsWith(ADMIN_DENIED);
 
 /** How long the same thing about the same sender is written down only once (milliseconds). */
 export const NOTE_ONCE_MS = 60_000;
@@ -58,9 +73,12 @@ export interface ModerationStore extends AdminStore {
   putBan(ban: Ban): Promise<void>;
   /** Lifts a ban. False when there was none. */
   deleteBan(kind: BanKind, value: string): Promise<boolean>;
-  /** Writes one down, letting the oldest go past MAX_ACTIVITY or ACTIVITY_MS. */
+  /**
+   * Writes one down, letting the oldest go past MAX_ACTIVITY or ACTIVITY_MS (an operator's own step,
+   * past MAX_OPERATOR_ACTIVITY or OPERATOR_ACTIVITY_MS, kept apart).
+   */
   note(entry: Activity): Promise<void>;
-  /** Those kept, newest first. */
+  /** Those kept, the operators' own steps among them, newest first. */
   activity(): Promise<Activity[]>;
   /**
    * Whether this instance is the one to send that kind of alert now: true at most once in ms across
