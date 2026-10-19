@@ -126,7 +126,24 @@ describe('parseConfig', () => {
       allowedOrigins: ['https://a.example', 'https://b.example'],
       roomRetentionSeconds: 24 * 60 * 60,
       login: null,
+      admin: null,
+      adminWebhook: null,
     });
+  });
+
+  it('reads the webhook for alerts', () => {
+    const url = 'https://discord.com/api/webhooks/1/token';
+    expect(parseConfig({ ...valid, ADMIN_WEBHOOK_URL: url }).adminWebhook).toBe(url);
+    expect(parseConfig({ ...valid, ADMIN_WEBHOOK_URL: '' }).adminWebhook).toBeNull();
+  });
+
+  it('reads who may open the dashboard', () => {
+    expect(parseConfig({ ...valid, ADMIN_DISCORD_IDS: ' 1, 22 ,', ADMIN_PASSKEY_RESET: '22' }).admin).toEqual({
+      discordIds: ['1', '22'],
+      passkeyReset: ['22'],
+    });
+    expect(parseConfig({ ...valid, ADMIN_DISCORD_IDS: '1' }).admin).toEqual({ discordIds: ['1'], passkeyReset: [] });
+    expect(parseConfig({ ...valid, ADMIN_DISCORD_IDS: ' , ' }).admin).toBeNull();
   });
 
   it('reads the login settings when all three are there', () => {
@@ -153,6 +170,10 @@ describe('parseConfig', () => {
       'a session secret that is too short',
       { DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 'c', SESSION_SECRET: 'short' },
     ],
+    ['an operator that is not a Discord user id', { ADMIN_DISCORD_IDS: '1,someone' }],
+    ['a reset for one that is not a Discord user id', { ADMIN_DISCORD_IDS: '1', ADMIN_PASSKEY_RESET: 'x' }],
+    ['a webhook that is not https', { ADMIN_WEBHOOK_URL: 'http://discord.com/api/webhooks/1/token' }],
+    ['a webhook that is not a URL', { ADMIN_WEBHOOK_URL: 'discord' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
   });

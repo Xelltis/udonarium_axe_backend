@@ -38,6 +38,10 @@ const fakeUpgrade = (upgrades: Upgrades, request: Request) => {
 };
 
 describe('the Vercel backend', () => {
+  it('has nobody in a room that is not there', async () => {
+    expect(await vercelBackend(await depsOf(connection.redis)).rooms.seats('missing')).toEqual([]);
+  });
+
   it('answers whether a user may upload from the seats its holder wrote, while the room is held elsewhere', async () => {
     const deps = await depsOf(connection.redis);
     const backend = vercelBackend(deps);

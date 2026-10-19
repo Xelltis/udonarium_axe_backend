@@ -3,6 +3,7 @@ import { encode } from '@msgpack/msgpack';
 import { PROTOCOL_VERSION } from '../../contracts/protocol.js';
 import type { AssetUploadPolicy, ObjectContext, PeerRole, ServerMessage } from '../../contracts/protocol.js';
 import { ACCESS_TOKEN_SECONDS, signToken } from '../../src/core/auth/tokens.js';
+import { BanList } from '../../src/core/moderation/bans.js';
 import { decodeFrame } from '../../src/core/rooms/codec.js';
 import { RoomEngine } from '../../src/core/rooms/engine.js';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, RoomStore, Seat } from '../../src/core/rooms/host.js';
@@ -89,6 +90,13 @@ export class FakeHost implements RoomHost<FakeConn> {
    * the Vercel version.
    */
   policy: AssetUploadPolicy | null = { maxPutBytes: 4_000_000, directUpload: true };
+  /**
+   * The operator's bans. At hand by default, so that a hello is let in at once; a test makes it a
+   * promise to have the hello wait, as on a room server.
+   */
+  bansOf: () => BanList | Promise<BanList> = () => new BanList([]);
+  /** When the room list has been told of the changes. */
+  listedOf: () => Promise<void> = () => Promise.resolve();
   readonly engine = new RoomEngine<FakeConn>(this);
 
   connections(): FakeConn[] {
@@ -150,6 +158,14 @@ export class FakeHost implements RoomHost<FakeConn> {
     this.notices.push('lobby');
   }
 
+  listed(): Promise<void> {
+    return this.listedOf();
+  }
+
+  bans(): BanList | Promise<BanList> {
+    return this.bansOf();
+  }
+
   record(event: RoomEvent, detail: string, value: number): void {
     this.events.push([event, detail, value]);
   }
@@ -158,11 +174,11 @@ export class FakeHost implements RoomHost<FakeConn> {
     this.deferred.push(work);
   }
 
-  /** Connects, and has the room take the connection. */
-  connect(): FakeConn {
+  /** Connects, and has the room take the connection. address is the sender's IP address. */
+  connect(address?: string): FakeConn {
     const conn = new FakeConn();
     this.conns.push(conn);
-    this.engine.accept(conn);
+    this.engine.accept(conn, address);
     return conn;
   }
 

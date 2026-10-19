@@ -4,11 +4,13 @@ import type { MiddlewareHandler } from 'hono';
 import { cloudflareBackend } from './backend';
 import { parseConfig } from './config';
 import { onError } from './core/http/errors';
+import { adminRoutes } from './core/http/routes/admin';
 import { serverRoutes } from './core/http/routes/index';
 import type { AppEnv } from './http/context';
 import { skywayRoutes } from './skyway/routes';
 
 export { AccountDurableObject } from './auth/account';
+export { ModerationDurableObject } from './moderation/store';
 export { LobbyDurableObject } from './rooms/lobby';
 export { RoomDurableObject } from './rooms/room';
 
@@ -33,5 +35,9 @@ app.get('/', (c) => c.json({ message: 'Hello udonarium-axe-backend!' }));
 app.use('/v1/*', configLoader);
 app.route('/v1', skywayRoutes());
 app.route('/v1', serverRoutes());
+// The operator's dashboard. Only when ADMIN_DISCORD_IDS is set.
+app.use('/admin', configLoader);
+app.use('/admin/*', configLoader);
+app.route('/admin', adminRoutes());
 
 export default app;

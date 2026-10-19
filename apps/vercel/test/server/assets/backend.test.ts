@@ -222,3 +222,46 @@ describe('the buckets', () => {
     expect(bucket.paths()).toEqual(['x']);
   });
 });
+
+describe('the operator’s view of the store', () => {
+  it('lists every room’s assets page by page, however many rooms there are', async () => {
+    const key = freshKey();
+    const assets = vercelAssets(
+      connection.redis,
+      key,
+      memoryBucket(),
+      async () => true,
+      () => undefined
+    );
+    const rooms = Array.from({ length: 250 }, (_, i) => `r${i}`);
+    const writing = connection.redis.multi();
+    for (const room of rooms) {
+      writing.hSet(
+        assetIndexOf(key, room),
+        'a'.repeat(64),
+        JSON.stringify({ type: 'image/png', size: 1, name: '', uploadedAt: 1 })
+      );
+    }
+    await writing.exec();
+
+    const seen: string[] = [];
+    let pages = 0;
+    let cursor: string | null = null;
+    do {
+      const page = await assets.inventory(cursor);
+      seen.push(...page.assets.map((asset) => asset.roomKey));
+      cursor = page.cursor;
+      pages++;
+    } while (cursor !== null);
+
+    expect(new Set(seen)).toEqual(new Set(rooms));
+    expect(pages).toBeGreaterThan(1);
+  });
+
+  it('gives nothing to look at for an asset whose contents are gone from the store', async () => {
+    const { assets, bucket, id } = await stored();
+    await bucket.delete([roomAssetKey(ROOM, id)]);
+
+    expect(await assets.content(ROOM, id)).toBeNull();
+  });
+});

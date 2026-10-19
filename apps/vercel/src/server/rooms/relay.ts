@@ -1,5 +1,6 @@
 import { decode, encode } from '@msgpack/msgpack';
 
+import type { Ban } from '../../core/moderation/bans.js';
 import type { KeyOf, Redis } from '../redis.js';
 
 // When a room's WebSocket lands on an instance that is not the room's owner, Redis pub/sub carries
@@ -9,6 +10,7 @@ import type { KeyOf, Redis } from '../redis.js';
 //   i:<ID>:out     An instance listens. From the owner: send, close.
 //   r:<key>:ctl    The instances with a WebSocket for the room listen. The owner changes, the room
 //                  was deleted.
+//   r:<key>:own    The owner alone listens. Delete the room, or close the seats a ban covers.
 //   i:<ID>         The mark that an instance is alive. Extended every HEARTBEAT_MS.
 //
 // The traffic from one instance goes in order over one connection, so the order within one
@@ -21,9 +23,9 @@ export const HEARTBEAT_MS = 5_000;
 /** The limit on how much one publish carries. Anything over it is sent in parts. */
 export const PART_BYTES = 512 * 1024;
 
-/** To the owner. */
+/** To the owner. a is the sender's IP address, for the operator's bans. */
 export type Inbound =
-  | { t: 'open'; c: string; i: string }
+  | { t: 'open'; c: string; i: string; a?: string }
   | { t: 'frame'; c: string; d: Uint8Array | string }
   | { t: 'close'; c: string; rotated: boolean };
 
@@ -36,10 +38,8 @@ export interface Control {
   t: 'moved';
 }
 
-/** To the owner alone. */
-export interface OwnerControl {
-  t: 'delete';
-}
+/** To the owner alone. A deletion by the operator says so, for the room's log. */
+export type OwnerControl = { t: 'delete'; operator?: boolean } | { t: 'expel'; ban: Ban };
 
 /** One of the parts. m is the number the sender gives each message. */
 interface Part {

@@ -12,6 +12,17 @@ export type ErrorCode =
   | 'invalid-grant'
   | 'login-required'
   | 'login-unavailable'
+  | 'banned'
+  | 'paused'
+  | 'forbidden'
+  | 'passkey-required'
+  | 'reauth-required'
+  | 'invalid-challenge'
+  | 'passkey-refused'
+  | 'passkey-exists'
+  | 'no-passkeys'
+  | 'last-passkey'
+  | 'too-many-passkeys'
   | 'blocked'
   | 'hash-mismatch'
   | 'origin-not-allowed'
@@ -34,7 +45,7 @@ export const failure = (status: number, error: ErrorCode): Response => Response.
 
 export const fail = (
   c: Context,
-  status: 400 | 401 | 403 | 404 | 411 | 412 | 413 | 415 | 426 | 429 | 451 | 500 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 411 | 412 | 413 | 415 | 426 | 429 | 451 | 500 | 503,
   error: ErrorCode
 ) => c.json({ error }, status);
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PROTOCOL_VERSION } from '../../../contracts/protocol.js';
 import { ACCESS_TOKEN_SECONDS, signToken } from '../../../src/core/auth/tokens.js';
+import { BanList } from '../../../src/core/moderation/bans.js';
 import { redisLobby } from '../../../src/server/lobby.js';
 import { createRoom, expiryKeyOf, roomKeysOf } from '../../../src/server/rooms/keys.js';
 import { VercelRoom } from '../../../src/server/rooms/room.js';
@@ -51,6 +52,7 @@ const roomDepsOf = async (redis: Redis, overrides: Partial<RoomDeps> = {}) => {
     sessionSecret: () => SECRET,
     assetUpload: null,
     deleteAssets: async () => undefined,
+    readBans: async () => new BanList([]),
     defer: () => undefined,
     // Long enough not to fail to be extended even on a busy machine. The tests that wait for the
     // lease to run out take the lease away from outside.
@@ -76,8 +78,8 @@ const connOf = (id: string): Conn & { closedWith: { code: number; reason: string
   return conn;
 };
 
-/** Joins the room. */
-const seat = (room: VercelRoom, peerId: string) => {
+/** Joins the room, once the bans have been read for the hello. */
+const seat = async (room: VercelRoom, peerId: string) => {
   const conn = connOf(peerId);
   room.accept(conn);
   room.receive(
@@ -94,6 +96,7 @@ const seat = (room: VercelRoom, peerId: string) => {
       ),
     })
   );
+  await vi.waitFor(() => expect(conn.seat).not.toBeNull());
   return conn;
 };
 
@@ -174,7 +177,7 @@ describe('a room held on Vercel', () => {
   it('gives the room up when another takes its lease, asking its sockets to come back', async () => {
     const { deps, key } = await roomDepsOf(connection.redis);
     const room = await VercelRoom.open(deps, 'room');
-    const alice = seat(room, 'alice');
+    const alice = await seat(room, 'alice');
 
     await connection.redis.set(roomKeysOf(key, 'room').lease, 'there:2');
     await vi.waitFor(() => expect(room.isReleased).toBe(true));
@@ -202,7 +205,7 @@ describe('a room held on Vercel', () => {
     const deleteAt = () => connection.redis.zScore(expiryKeyOf(key), 'room');
     const created = await deleteAt();
 
-    seat(room, 'alice');
+    await seat(room, 'alice');
 
     await vi.waitFor(async () => expect(await deleteAt()).toBeGreaterThan(created as number));
     const occupied = await deleteAt();
@@ -230,7 +233,7 @@ describe('a room held on Vercel', () => {
   it('looks around while people are in, and no longer once it has let go', async () => {
     const { deps, lobby } = await roomDepsOf(connection.redis);
     const room = await VercelRoom.open(deps, 'room');
-    seat(room, 'alice');
+    await seat(room, 'alice');
 
     await vi.waitFor(async () => expect((await lobby.find('room'))?.members).toBe(1));
     await room.release();
@@ -280,7 +283,7 @@ describe('a room held on Vercel', () => {
     const deferred: Promise<unknown>[] = [];
     const { deps, key } = await roomDepsOf(connection.redis, { defer: (work) => void deferred.push(work) });
     const room = await VercelRoom.open(deps, 'room');
-    const conn = seat(room, 'alice');
+    const conn = await seat(room, 'alice');
 
     room.closed(conn);
     await Promise.all(deferred);

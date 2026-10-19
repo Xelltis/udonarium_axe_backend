@@ -7,6 +7,7 @@ import { MAX_ANY_BYTES, MAX_BYTES } from '../../src/core/assets/limits.js';
 import { UPLOAD_TICKET_SECONDS, signToken } from '../../src/core/auth/tokens.js';
 import type { DirectUploads, ServerBackend, ServerEnv } from '../../src/core/http/backend.js';
 import { serverRoutes } from '../../src/core/http/routes/index.js';
+import { noModeration } from '../../src/core/moderation/activity.js';
 import { harness } from '../harness.js';
 import type { Bytes } from './helpers.js';
 import {
@@ -59,7 +60,9 @@ const setUp = (options: { direct?: boolean } = {}) => {
     discard: async (path) => void uploaded.delete(path),
   };
   const backend = {
+    addressOf: () => '192.0.2.1',
     limit: vi.fn(async () => true),
+    moderation: noModeration,
     rooms: {
       canUpload: vi.fn<ServerBackend['rooms']['canUpload']>(async () => 'ok'),
     },
@@ -93,6 +96,9 @@ const setUp = (options: { direct?: boolean } = {}) => {
         discordClientSecret: 'secret',
         sessionSecret: SESSION_SECRET,
       },
+      admin: null,
+      adminWebhook: null,
+      roomRetentionSeconds: 3600,
     });
     c.set('backend', backend as unknown as ServerBackend);
     await next();

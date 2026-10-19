@@ -1,5 +1,6 @@
 import type { AssetUploadPolicy } from '../../contracts/protocol.js';
 import type { RoomInit } from '../../src/core/http/backend.js';
+import type { Ban } from '../../src/core/moderation/bans.js';
 import type { RoomEngine } from '../../src/core/rooms/engine.js';
 import type { RoomHost } from '../../src/core/rooms/host.js';
 
@@ -69,4 +70,11 @@ export interface Harness {
   expireLoginCode(accountKey: string, id: string): Promise<void>;
   /** Makes all of an account's refresh tokens expire. */
   expireRefreshTokens(accountKey: string): Promise<void>;
+  /**
+   * Bans straight in the store, as the operator would through another instance: the bans this
+   * instance holds do not hear of it.
+   */
+  banElsewhere(ban: Ban): Promise<void>;
+  /** The generation of the operators' sessions in the store. */
+  adminEpoch(): Promise<number>;
 }

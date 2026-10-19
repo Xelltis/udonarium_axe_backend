@@ -1,12 +1,30 @@
 import type { Account, DirectUploadTarget, RoomAsset, RoomSummary } from '../../../contracts/protocol.js';
 import type { Profile, Secret, Session } from '../auth/secrets.js';
+import type { AdminConfig } from '../config/admin.js';
 import type { LoginConfig } from '../config/login.js';
+import type { Moderation } from '../moderation/activity.js';
+import type { Ban } from '../moderation/bans.js';
+import type { Seat } from '../rooms/host.js';
 
 /** The settings the room server's routes need. Each room server keeps its own settings on top of these. */
 export interface ServerConfig {
   /** The Origins accepted for rooms, assets and login. */
   allowedOrigins: string[];
   login: LoginConfig | null;
+  /** Who may open the operator's dashboard. Null when there is no dashboard. */
+  admin: AdminConfig | null;
+  /** The Discord webhook the operator's alerts go to. Null when there are none. */
+  adminWebhook: string | null;
+  /** The seconds from the last person leaving a room until the room is deleted. */
+  roomRetentionSeconds: number;
+}
+
+/** Who made a room, kept for the operator. */
+export interface RoomCreator {
+  /** The account (`discord:<ID>`). */
+  accountKey: string;
+  /** The sender's IP address. */
+  address: string;
 }
 
 /** What is handed over to make a room. */
@@ -20,6 +38,19 @@ export interface RoomInit {
   creatorUserId: string;
   /** The host name the request came to. It keeps the log apart from other instances on the same store. */
   host: string;
+  /** Who made the room, for the operator's dashboard. */
+  creator?: RoomCreator;
+}
+
+/** How many rooms the operator's list holds. When there are more, the newest are listed. */
+export const MAX_ADMIN_ROOMS = 2000;
+
+/** A room as the operator sees it. */
+export interface AdminRoom extends RoomSummary {
+  /** When it was made (Unix milliseconds). */
+  createdAt: number;
+  /** Who made it. Null for a room made before this was kept. */
+  creator: RoomCreator | null;
 }
 
 /** What each sender may do only so many times. The room server decides the limits. */
@@ -33,6 +64,17 @@ export interface AccountPort {
   signOut(token: Secret): Promise<void>;
   account(): Promise<Account | null>;
   erase(userId: string): Promise<boolean>;
+}
+
+/** A room asset as the operator sees it in the store. */
+export interface StoredRoomAsset {
+  roomKey: string;
+  id: string;
+  type: string;
+  size: number;
+  name: string;
+  /** When it was stored (Unix milliseconds). */
+  uploadedAt: number;
 }
 
 /** The store for room assets. */
@@ -67,6 +109,19 @@ export interface AssetBackend {
   /** Extra work done after something new is stored (such as cleaning up what failed to be deleted). */
   afterStore(): void;
   /**
+   * For the operator: one page of every room asset in the store, from cursor on (null for the
+   * first), and the cursor of the next page (null after the last).
+   */
+  inventory(cursor: string | null): Promise<{ assets: StoredRoomAsset[]; cursor: string | null }>;
+  /** For the operator to look at: the contents and their type. Null when there is no such asset. */
+  content(roomKey: string, id: string): Promise<{ body: ReadableStream<Uint8Array>; type: string } | null>;
+  /** Bars it from being stored again, in any room (what is stored already stays). */
+  block(id: string): Promise<void>;
+  /** Lets it be stored again. */
+  unblock(id: string): Promise<void>;
+  /** What is barred from being stored. */
+  blockedIds(): Promise<string[]>;
+  /**
    * The steps for uploading straight to the store. Only a room server with a limit on the body of
    * one request (the Vercel version) has them.
    */
@@ -93,22 +148,34 @@ export interface DirectUploads {
  * Request.
  */
 export interface ServerBackend {
+  /** The sender's IP address, as the platform gives it. `unknown` when it gives none. */
+  addressOf(request: Request): string;
   /** Whether it is within the limit counted for each sender. */
   limit(request: Request, kind: LimitKind): Promise<boolean>;
   lobby: {
     /** The room list. Given userId, it adds deletable to the rooms where that person is GM. */
     list(userId?: string): Promise<RoomSummary[]>;
     find(roomKey: string, userId?: string): Promise<RoomSummary | null>;
+    /** The rooms for the operator, newest first, up to MAX_ADMIN_ROOMS. */
+    all(): Promise<AdminRoom[]>;
+    /** The keys of the rooms with someone in them. */
+    occupied(): Promise<string[]>;
   };
   rooms: {
     create(init: RoomInit): Promise<void>;
-    remove(roomKey: string, userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'>;
+    /** Deletes a room. Its GM can delete it; with userId null, the operator, whoever is GM. */
+    remove(roomKey: string, userId: string | null): Promise<'deleted' | 'not-found' | 'not-game-master'>;
     canUpload(roomKey: string, userId: string): Promise<'ok' | 'room-not-found' | 'not-a-player'>;
     /** Connects to the room's WebSocket. The Origin and the rate limit have been checked. */
     connect(request: Request, roomKey: string): Promise<Response>;
+    /** Who is in the room now, for the operator. None for a room that is not there. */
+    seats(roomKey: string): Promise<Seat[]>;
+    /** Closes the connections in the room that the ban covers. */
+    expel(roomKey: string, ban: Ban): Promise<void>;
   };
   account(accountKey: string): AccountPort;
   assets: AssetBackend;
+  moderation: Moderation;
 }
 
 /** The Hono type of the shared routes. The room server sets config and backend first. */

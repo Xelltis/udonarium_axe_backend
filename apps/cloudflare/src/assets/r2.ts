@@ -1,7 +1,7 @@
 import type { RoomAsset } from '../../contracts/protocol';
 import { privately } from '../core/assets/headers';
-import { ASSET_ID, blockedKeyOf, roomAssetKey, roomAssetPrefix } from '../core/assets/keys';
-import type { AssetBackend, LimitKind } from '../core/http/backend';
+import { ASSET_ID, ROOMS_PREFIX, blockedKeyOf, roomAssetKey, roomAssetPrefix } from '../core/assets/keys';
+import type { AssetBackend, LimitKind, StoredRoomAsset } from '../core/http/backend';
 import { failure } from '../core/http/errors';
 import { LOBBY_NAME } from '../rooms/lobby';
 import { objectHeaders, setContentRange } from './response';
@@ -19,6 +19,12 @@ const SWEEP_CHANCE = 1 / 20;
 
 /** The limit on how many R2 pages a listing reads. A page holds 1000 objects. */
 const MAX_LIST_PAGES = 10;
+
+/** Where the marks that bar an asset are kept. */
+const BLOCKED_PREFIX = blockedKeyOf('');
+
+/** A room's key (as in the store's key of its assets). */
+const ROOM_KEY = /^[0-9a-f]{32}$/;
 
 /** Keeps a room's assets in R2 and serves them through the Cache API. */
 export const r2Assets = (
@@ -123,6 +129,53 @@ export const r2Assets = (
       cursor = listed.cursor;
     }
     return assets;
+  },
+
+  inventory: async (cursor) => {
+    const listed = await env.ASSETS.list({
+      prefix: ROOMS_PREFIX,
+      include: ['httpMetadata', 'customMetadata'],
+      ...(cursor ? { cursor } : {}),
+    });
+    const assets: StoredRoomAsset[] = [];
+    for (const object of listed.objects) {
+      const [roomKey, id, ...rest] = object.key.slice(ROOMS_PREFIX.length).split('/');
+      if (!ROOM_KEY.test(roomKey) || !ASSET_ID.test(id) || rest.length > 0) continue;
+      assets.push({
+        roomKey,
+        id,
+        type: object.httpMetadata?.contentType ?? 'application/octet-stream',
+        size: object.size,
+        name: object.customMetadata?.name ?? '',
+        uploadedAt: object.uploaded.getTime(),
+      });
+    }
+    return { assets, cursor: listed.truncated ? listed.cursor : null };
+  },
+
+  content: async (roomKey, id) => {
+    const object = await env.ASSETS.get(roomAssetKey(roomKey, id));
+    return object && { body: object.body, type: object.httpMetadata?.contentType ?? 'application/octet-stream' };
+  },
+
+  block: async (id) => {
+    await env.ASSETS.put(blockedKeyOf(id), new Uint8Array());
+  },
+
+  unblock: async (id) => {
+    await env.ASSETS.delete(blockedKeyOf(id));
+  },
+
+  blockedIds: async () => {
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+      const listed = await env.ASSETS.list({ prefix: BLOCKED_PREFIX, ...(cursor ? { cursor } : {}) });
+      ids.push(...listed.objects.map((object) => object.key.slice(BLOCKED_PREFIX.length)));
+      if (!listed.truncated) break;
+      cursor = listed.cursor;
+    }
+    return ids;
   },
 
   afterStore: () => {

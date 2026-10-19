@@ -642,6 +642,49 @@ describe('a room whose sockets reach different instances', () => {
     expect(room.size).toBe(1);
   });
 
+  it('closes the seats a ban covers, on the instance that holds the room or by asking it', async () => {
+    const { a, b } = await twoInstances();
+    const alice = await enter(a, 'alice');
+    const bob = new FakeWs();
+    b.runtime.attach(bob as unknown as WebSocket, 'room', '192.0.2.7');
+    bob.hello('bob');
+    await welcomed(bob);
+    const banOf = (kind: 'ip' | 'discord', value: string) => ({
+      kind,
+      value,
+      reason: '',
+      createdAt: 0,
+      expiresAt: null,
+    });
+    const refused = (ws: FakeWs) =>
+      ws.messages().some((message) => message.type === 'error' && message.code === 'unauthorized');
+
+    await b.runtime.expel('room', banOf('ip', '192.0.2.0/24'));
+
+    await vi.waitFor(() => expect(refused(bob)).toBe(true));
+    await vi.waitFor(() => expect(left(alice, 'bob')).toBe(true));
+    expect(refused(alice)).toBe(false);
+
+    await a.runtime.expel('room', banOf('discord', 'alice'));
+
+    expect(refused(alice)).toBe(true);
+    // A room nobody holds has nobody in it to close.
+    await b.runtime.expel('nobody-here', banOf('discord', 'alice'));
+  });
+
+  it('deletes the room for the operator from an instance that does not hold it, whoever is GM', async () => {
+    const { a, b } = await twoInstances();
+    const alice = await enter(a, 'alice');
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    expect(await b.runtime.deleteRoom('room', null)).toBe('deleted');
+
+    await vi.waitFor(() =>
+      expect(alice.messages().some((message) => message.type === 'error' && message.code === 'room-deleted')).toBe(true)
+    );
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('"event":"delete","detail":"operator"'));
+  });
+
   it('finds no room to delete from another instance when it went meanwhile', async () => {
     const { a, b } = await twoInstances();
     await enter(a, 'alice');

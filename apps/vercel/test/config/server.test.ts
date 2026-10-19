@@ -24,6 +24,8 @@ describe('parseServerConfig', () => {
       redisKeyPrefix: 'axe:',
       blob: null,
       cronSecret: null,
+      admin: null,
+      adminWebhook: null,
     });
   });
 
@@ -38,6 +40,8 @@ describe('parseServerConfig', () => {
         ROOM_RETENTION_HOURS: '2',
         ROOM_SOCKET_SECONDS: '120',
         CRON_SECRET: 'cron',
+        ADMIN_DISCORD_IDS: '1,2',
+        ADMIN_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/token',
       })
     ).toMatchObject({
       login: {
@@ -51,6 +55,8 @@ describe('parseServerConfig', () => {
       redisKeyPrefix: 'mine:',
       blob: { kind: 'vercel' },
       cronSecret: 'cron',
+      admin: { discordIds: ['1', '2'], passkeyReset: [] },
+      adminWebhook: 'https://discord.com/api/webhooks/1/token',
     });
   });
 
@@ -84,6 +90,9 @@ describe('parseServerConfig', () => {
     ['no origins', {}],
     ['a socket that rotates too soon', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_SOCKET_SECONDS: '30' }],
     ['only part of the login', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', DISCORD_CLIENT_ID: 'id' }],
+    ['a webhook that is not https', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'http://discord.com/x' }],
+    ['a webhook that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'discord' }],
+    ['an operator that is not a Discord user id', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_DISCORD_IDS: 'someone' }],
   ])('turns away %s', (_name, env) => {
     expect(() => parseServerConfig(env)).toThrow(ConfigError);
   });

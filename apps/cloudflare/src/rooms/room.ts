@@ -7,7 +7,10 @@ import { parseConfig } from '../config';
 import { hashPassword } from '../core/rooms/password';
 import { RoomEngine } from '../core/rooms/engine';
 import type { RoomInit } from '../core/http/backend';
+import { banCache, seatBarredBy } from '../core/moderation/bans';
+import type { Ban, BanList } from '../core/moderation/bans';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../core/rooms/host';
+import { MODERATION_NAME } from '../moderation/store';
 import { LOBBY_NAME } from './lobby';
 import { RoomStore, migrate } from './store';
 
@@ -44,6 +47,8 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
    */
   private deleting = false;
   private readonly engine = new RoomEngine<WebSocket>(this);
+  /** The operator's bans, read afresh for each hello. */
+  private readonly banned = banCache(() => this.env.MODERATION.getByName(MODERATION_NAME).state());
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -87,27 +92,31 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     );
     // When nobody comes in, the room goes after the retention period, as when everyone in it has left.
     await this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
-    await this.lobby().register({
-      roomKey: init.roomKey,
-      roomId: init.roomId,
-      name: init.name,
-      hasPassword: password !== null,
-      members: 0,
-    });
+    await this.lobby().register(
+      {
+        roomKey: init.roomKey,
+        roomId: init.roomId,
+        name: init.name,
+        hasPassword: password !== null,
+        members: 0,
+      },
+      init.creator
+    );
     await this.lobby().setGameMasters(init.roomKey, [init.creatorUserId]);
   }
 
   /**
    * Deletes the room. Called from the Worker's DELETE /v1/rooms/:roomKey. Only a GM of the room can
-   * delete it. The people in it are sent room-deleted and then closed, and as when the retention period
-   * has passed, the room is taken off the list and everything kept is deleted.
+   * delete it, or the operator (userId null) from the dashboard. The people in it are sent
+   * room-deleted and then closed, and as when the retention period has passed, the room is taken off
+   * the list and everything kept is deleted.
    */
-  async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
+  async deleteRoom(userId: string | null): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const room = this.roomRow();
     if (!room || this.deleting) return 'not-found';
-    if (this.roles.roleOf(userId) !== 'gm') return 'not-game-master';
+    if (userId !== null && this.roles.roleOf(userId) !== 'gm') return 'not-game-master';
 
-    this.record('delete', 'gm', this.engine.seats().length);
+    this.record('delete', userId === null ? 'operator' : 'gm', this.engine.seats().length);
     this.engine.closeAll();
     await this.wipe(room.room_key);
     return 'deleted';
@@ -122,14 +131,25 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.engine.canUpload(userId);
   }
 
+  /** Who is in the room now, for the operator's dashboard. */
+  seats(): Seat[] {
+    return this.engine.seats().map(({ seat }) => seat);
+  }
+
+  /** Closes the connections the operator's ban covers. Returns how many it closed. */
+  expel(ban: Ban): number {
+    return this.engine.expel(seatBarredBy(ban));
+  }
+
   /**
-   * Takes a WebSocket connection, which the Worker passes on after checking the Origin and the rate
-   * limit. Even when there is no room or it is full, it connects, sends the reason, and then closes.
+   * Takes a WebSocket connection, which the Worker passes on after checking the Origin, the bans and
+   * the rate limit. Even when there is no room or it is full, it connects, sends the reason, and then
+   * closes. Its hello is checked against the bans as they stand (bans).
    */
-  override async fetch(): Promise<Response> {
+  override async fetch(request: Request): Promise<Response> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    this.engine.accept(server);
+    this.engine.accept(server, request.headers.get('CF-Connecting-IP') ?? undefined);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -354,6 +374,14 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       blobs: [room.host, event, detail],
       doubles: [value],
     });
+  }
+
+  listed(): Promise<void> {
+    return this.lobbyQueue;
+  }
+
+  bans(): Promise<BanList> {
+    return this.banned.fresh();
   }
 
   defer(work: Promise<unknown>): void {

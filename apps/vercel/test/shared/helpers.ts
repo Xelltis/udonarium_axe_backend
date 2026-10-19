@@ -17,6 +17,9 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 /** The same SESSION_SECRET as the one set on the room server under test. */
 export const SESSION_SECRET = 'test-session-secret-0123456789abcdef';
 
+/** The operator the room server under test lets into the dashboard (ADMIN_DISCORD_IDS). */
+export const ADMIN_ID = '100000000000000001';
+
 /** The access token of a logged-in person. Without a userId, always the same person. */
 export const accessTokenFor = (userId = 'uploader', seconds = ACCESS_TOKEN_SECONDS) =>
   signToken<'access'>({ aud: 'access', sub: `discord:${userId}`, uid: userId, name: userId }, seconds, SESSION_SECRET);

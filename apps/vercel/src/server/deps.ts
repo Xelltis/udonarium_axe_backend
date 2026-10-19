@@ -2,14 +2,19 @@ import type { WebSocket } from 'ws';
 
 import type { VercelServerConfig } from '../config/server.js';
 import type { LimitKind, ServerBackend } from '../core/http/backend.js';
+import { notingLimits } from '../core/http/moderation.js';
+import { moderationOf } from '../core/moderation/activity.js';
+import { webhookAlerts } from '../core/moderation/alerts.js';
+import { banCache } from '../core/moderation/bans.js';
 import { vercelAssets } from './assets/backend.js';
 import { bucketFor } from './assets/blob-bucket.js';
 import type { AssetBucket } from './assets/bucket.js';
 import { orphanSweeper } from './assets/sweep.js';
 import { storelessBackend, vercelBackend } from './backend.js';
 import type { ServerDeps, Upgrades } from './backend.js';
-import { LIMITS, redisLimiter } from './limits.js';
+import { LIMITS, clientIpOf, redisLimiter } from './limits.js';
 import { redisLobby } from './lobby.js';
+import { redisModeration } from './moderation.js';
 import { connectRedis, keyOf } from './redis.js';
 import type { Redis } from './redis.js';
 import { Relay } from './rooms/relay.js';
@@ -65,7 +70,6 @@ export const createServerDeps = async (
 ): Promise<ServerDeps> => {
   const connection = redis ?? (await connectRedis(config.redisUrl as string));
   const key = keyOf(config.redisKeyPrefix);
-  const limit = redisLimiter(connection, key, options.limits ?? LIMITS);
   const lobby = redisLobby(connection, key);
   // Work after the response does not bring the process down when it fails. Each piece of work logs
   // its own failure.
@@ -73,6 +77,20 @@ export const createServerDeps = async (
     const settled = work.catch(() => undefined);
     options.defer?.(settled);
   };
+  // The bans are kept on this instance for a while, so that each request does not read them.
+  const moderationStore = redisModeration(connection, key);
+  const moderation = moderationOf(
+    moderationStore,
+    banCache(() => moderationStore.state()),
+    defer,
+    config.adminWebhook
+      ? webhookAlerts(config.adminWebhook, (kind, ms) => moderationStore.claimAlert(kind, ms))
+      : undefined
+  );
+  const limit = notingLimits(redisLimiter(connection, key, options.limits ?? LIMITS), {
+    addressOf: clientIpOf,
+    moderation,
+  });
   const bucket = (options.bucketOf ?? bucketFor)(config);
   const orphans = orphanSweeper(connection, key, bucket);
   let stored = 0;
@@ -96,6 +114,7 @@ export const createServerDeps = async (
       // local directory there is no limit).
       assetUpload: assets.direct ? { maxPutBytes: assets.direct.maxPutBytes, directUpload: true } : null,
       deleteAssets,
+      readBans: () => moderation.fresh(),
       defer,
       timing: options.timing,
     },
@@ -112,6 +131,7 @@ export const createServerDeps = async (
     orphans,
     assets,
     limit,
+    moderation,
     upgrades,
     retentionSeconds: config.roomRetentionSeconds,
   };

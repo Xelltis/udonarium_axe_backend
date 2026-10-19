@@ -1,0 +1,164 @@
+import type { AdminStore } from '../admin/store.js';
+import { alertOf } from './alerts.js';
+import type { AlertKind } from './alerts.js';
+import { BanList } from './bans.js';
+import type { Ban, BanCache, BanKind, ModerationState, Pause } from './bans.js';
+
+/**
+ * What is written down for the operator, to find who is running up the bill.
+ *
+ * - login: someone logged in
+ * - room: someone made a room
+ * - upload: someone stored a new room asset
+ * - limited: a sender went over a rate limit (once a minute for each sender and limit)
+ * - refused: a banned sender or account was turned away (once a minute for each)
+ * - admin: the operator banned, lifted a ban or deleted a room, or the operator's key was wrong
+ */
+export const ACTIVITY_KINDS = ['login', 'room', 'upload', 'limited', 'refused', 'admin'] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+/** How many are kept. Past it, the oldest go. */
+export const MAX_ACTIVITY = 2000;
+
+/** How long one is kept (milliseconds, seven days). */
+export const ACTIVITY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** How long the same thing about the same sender is written down only once (milliseconds). */
+export const NOTE_ONCE_MS = 60_000;
+
+/** One thing that happened. */
+export interface Activity {
+  /** When (Unix milliseconds). */
+  at: number;
+  kind: ActivityKind;
+  /** The sender's IP address. */
+  address: string;
+  /** The Discord user id, when the person was logged in. */
+  discordId?: string;
+  /** The name the person goes by on Discord, when known. */
+  name?: string;
+  roomKey?: string;
+  /** What else there is to say: the room's name, the asset's type and size, the limit, the ban. */
+  detail?: string;
+}
+
+/**
+ * Where bans, what happened and the dashboard's passkeys are kept. Each room server keeps them in its
+ * own store.
+ */
+export interface ModerationStore extends AdminStore {
+  /** Every ban, those past their end left out. */
+  bans(): Promise<Ban[]>;
+  /** The bans and what is stopped, read together (what each instance keeps for a while). */
+  state(): Promise<ModerationState>;
+  /** Stops what is set in it, or starts it again. */
+  setPause(pause: Pause): Promise<void>;
+  /** Adds a ban, or replaces the one on the same target. */
+  putBan(ban: Ban): Promise<void>;
+  /** Lifts a ban. False when there was none. */
+  deleteBan(kind: BanKind, value: string): Promise<boolean>;
+  /** Writes one down, letting the oldest go past MAX_ACTIVITY or ACTIVITY_MS. */
+  note(entry: Activity): Promise<void>;
+  /** Those kept, newest first. */
+  activity(): Promise<Activity[]>;
+  /**
+   * Whether this instance is the one to send that kind of alert now: true at most once in ms across
+   * every instance.
+   */
+  claimAlert(kind: AlertKind, ms: number): Promise<boolean>;
+}
+
+/** What the routes use to check bans and write down what happened. */
+export interface Moderation {
+  /** The bans in force, as read a short while ago (see BAN_CACHE_MS). */
+  current(): Promise<BanList>;
+  /** The bans in force as they stand, read now (those read last when they cannot be read). */
+  fresh(): Promise<BanList>;
+  /** Every ban, read afresh. */
+  bans(): Promise<Ban[]>;
+  ban(ban: Ban): Promise<void>;
+  unban(kind: BanKind, value: string): Promise<boolean>;
+  /** Stops what is set in it, or starts it again. This instance reads it again at once. */
+  setPause(pause: Pause): Promise<void>;
+  /**
+   * Writes it down after the response, and tells the operator when it calls for an alert. A failure
+   * goes to the log and nowhere else.
+   */
+  note(entry: Activity): void;
+  activity(): Promise<Activity[]>;
+  /** Where the dashboard keeps passkeys and the generation of its sessions. */
+  admin: AdminStore;
+}
+
+/** Puts the store and the bans kept on this instance together. alert sends alerts (none without it). */
+export const moderationOf = (
+  store: ModerationStore,
+  cache: BanCache,
+  defer: (work: Promise<unknown>) => void,
+  alert?: (kind: AlertKind, entry: Activity) => Promise<void>
+): Moderation => ({
+  current: () => cache.current(),
+  fresh: () => cache.fresh(),
+  bans: () => store.bans(),
+  ban: async (ban) => {
+    await store.putBan(ban);
+    cache.forget();
+  },
+  unban: async (kind, value) => {
+    const lifted = await store.deleteBan(kind, value);
+    cache.forget();
+    return lifted;
+  },
+  setPause: async (pause) => {
+    await store.setPause(pause);
+    cache.forget();
+  },
+  note: (entry) => {
+    defer(store.note(entry).catch((err: unknown) => console.error('Could not write down what happened:', err)));
+    const kind = alert && alertOf(entry);
+    if (kind) defer(alert(kind, entry).catch((err: unknown) => console.error('Could not send the alert:', err)));
+  },
+  activity: () => store.activity(),
+  admin: store,
+});
+
+/** For a room server with no store (no login set up): no bans, and nothing to write down. */
+export const noModeration: Moderation = {
+  current: async () => new BanList([]),
+  fresh: async () => new BanList([]),
+  bans: async () => [],
+  ban: async () => undefined,
+  unban: async () => false,
+  setPause: async () => undefined,
+  note: () => undefined,
+  activity: async () => [],
+  // The dashboard answers 503 without login, so it asks nothing of these.
+  admin: {
+    passkeysOf: async () => [],
+    passkey: async () => null,
+    putPasskey: async () => undefined,
+    deletePasskey: async () => false,
+    adminEpoch: async () => 0,
+    raiseAdminEpoch: async () => 0,
+    takeChallenge: async () => false,
+  },
+};
+
+/** When each thing was last written down, for those written only once in a while. */
+const notedAt = new Map<string, number>();
+
+/** How many are remembered before all are let go (so that many senders do not fill memory). */
+const MAX_REMEMBERED = 10_000;
+
+/**
+ * Whether something that comes again and again (a sender over a limit, or turned away) is to be
+ * written down now: the first time, and then once NOTE_ONCE_MS has gone by. Each instance counts on
+ * its own, so it may be written down once on each.
+ */
+export const noteOnce = (key: string, now = Date.now()): boolean => {
+  const last = notedAt.get(key);
+  if (last !== undefined && now - last < NOTE_ONCE_MS) return false;
+  if (notedAt.size >= MAX_REMEMBERED) notedAt.clear();
+  notedAt.set(key, now);
+  return true;
+};

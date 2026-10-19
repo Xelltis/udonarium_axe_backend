@@ -6,6 +6,7 @@ import { readHead, rejoin } from '../../src/core/assets/upload.js';
 import type { ServerBackend, ServerEnv } from '../../src/core/http/backend.js';
 import { onError } from '../../src/core/http/errors.js';
 import { serverRoutes } from '../../src/core/http/routes/index.js';
+import { noModeration } from '../../src/core/moderation/activity.js';
 import { ORIGIN, PNG_HEAD, ROOM_KEY, SESSION_SECRET, assetTokenFor, fileOf, sha256Hex } from './helpers.js';
 
 // The routes and the small pieces they use. Checks, with a fake room server, what is hard to bring
@@ -73,7 +74,9 @@ describe('putting up an asset', () => {
     const discard = vi.fn(async () => undefined);
     const afterStore = vi.fn();
     const backend = {
+      addressOf: () => '192.0.2.1',
       limit: async () => true,
+      moderation: noModeration,
       rooms: { canUpload },
       assets: {
         blocked: async () => false,
@@ -92,6 +95,9 @@ describe('putting up an asset', () => {
           discordClientSecret: 'secret',
           sessionSecret: SESSION_SECRET,
         },
+        admin: null,
+        adminWebhook: null,
+        roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);
       await next();

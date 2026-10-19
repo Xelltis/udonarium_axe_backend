@@ -8,6 +8,7 @@ import { createApp } from '../src/http/app.js';
 import { memoryBucket } from '../src/server/assets/bucket.js';
 import { MAX_PUT_BYTES, assetIndexOf } from '../src/server/assets/backend.js';
 import { backendProvider, upgrades } from '../src/server/deps.js';
+import { redisModeration } from '../src/server/moderation.js';
 import { createServer } from '../src/server/node.js';
 import type { Harness, TestSocket } from './shared/harness-api.js';
 
@@ -19,6 +20,7 @@ const ENV: Record<string, string | undefined> = {
   DISCORD_CLIENT_ID: 'test-client',
   DISCORD_CLIENT_SECRET: 'test-client-secret',
   SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+  ADMIN_DISCORD_IDS: '100000000000000001',
   REDIS_URL: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
   REDIS_KEY_PREFIX: `test:${crypto.randomUUID()}:`,
   BLOB_STORE_ID: 'memory',
@@ -195,5 +197,15 @@ export const harness: Harness = {
 
   block: async (id) => {
     await bucket.put(blockedKeyOf(id), new Uint8Array(), 'application/octet-stream');
+  },
+
+  banElsewhere: async (ban) => {
+    const { redis, key } = await deps();
+    await redisModeration(redis, key).putBan(ban);
+  },
+
+  adminEpoch: async () => {
+    const { redis, key } = await deps();
+    return redisModeration(redis, key).adminEpoch();
   },
 };

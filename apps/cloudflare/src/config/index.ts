@@ -1,5 +1,7 @@
 import { safeParse, summarize } from 'valibot';
 
+import { adminOf, adminWebhookOf } from '../core/config/admin';
+import type { AdminConfig } from '../core/config/admin';
 import { ConfigError, loginOf } from '../core/config/login';
 import type { LoginConfig } from '../core/config/login';
 import { envSchema } from './schema';
@@ -15,6 +17,10 @@ export interface AppConfig {
   /** The seconds from the last person leaving a room until the room is deleted. */
   roomRetentionSeconds: number;
   login: LoginConfig | null;
+  /** Who may open the operator's dashboard. Null when there is no dashboard. */
+  admin: AdminConfig | null;
+  /** The Discord webhook the operator's alerts go to. Null when there are no alerts. */
+  adminWebhook: string | null;
 }
 
 export const parseConfig = (env: unknown): AppConfig => {
@@ -31,5 +37,7 @@ export const parseConfig = (env: unknown): AppConfig => {
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     // envSchema has already checked that all three are there.
     login: loginOf(parsed),
+    admin: adminOf(parsed),
+    adminWebhook: adminWebhookOf(parsed),
   };
 };

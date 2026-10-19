@@ -74,6 +74,19 @@ describe('the server dependencies', () => {
     expect(toDirectory).toBeNull();
   });
 
+  it('send the operator alerts when a webhook is set', async () => {
+    const url = 'https://discord.example/api/webhooks/1/token';
+    const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const work: Promise<unknown>[] = [];
+    const deps = await depsOf(connection.redis, { defer: (each) => void work.push(each) }, { ADMIN_WEBHOOK_URL: url });
+
+    deps.moderation.note({ at: Date.now(), kind: 'limited', address: '192.0.2.1', detail: 'read' });
+    await Promise.all(work);
+
+    expect(sent).toHaveBeenCalledWith(url, expect.objectContaining({ method: 'POST' }));
+    sent.mockRestore();
+  });
+
   it('sign nothing in rooms of a server without login', async () => {
     const deps = await depsOf(
       connection.redis,

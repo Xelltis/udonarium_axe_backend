@@ -9,6 +9,7 @@ import { LOGIN_STATE_SECONDS, readToken, signToken } from '../../auth/tokens.js'
 import type { LoginConfig } from '../../config/login.js';
 import type { ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
+import { accountBanOf, addressBanOf, note, pausedNow } from '../moderation.js';
 import { isAllowedOrigin, tryParseUrl } from '../origin.js';
 import { bearerOf } from '../request.js';
 
@@ -30,6 +31,13 @@ const tokenRequestSchema = variant('grant_type', [
 const logoutSchema = object({ refresh_token: string() });
 
 const callbackUrl = (c: Context<ServerEnv>): string => `${new URL(c.req.url).origin}/v1/login/discord/callback`;
+
+/** Sends the browser back to Axe's return address, with the code or the reason it failed in the fragment. */
+const backTo = (c: Context<ServerEnv>, redirect: string, fragment: Record<string, string>) => {
+  const url = new URL(redirect);
+  url.hash = new URLSearchParams(fragment).toString();
+  return c.redirect(url.toString(), 302);
+};
 
 /**
  * Where a login may return to: only pages on allowed Origins, and `*` does not count.
@@ -66,12 +74,13 @@ export const loginRoutes = new Hono<ServerEnv>();
  */
 loginRoutes.get(
   '/discord',
-  withLogin((c, login) => {
+  withLogin(async (c, login) => {
     const redirect = c.req.query('redirect_uri') ?? '';
     const challenge = c.req.query('code_challenge') ?? '';
     if (!isLoginRedirect(redirect, c.var.config.allowedOrigins) || !CHALLENGE.test(challenge)) {
       return fail(c, 400, 'invalid-request');
     }
+    if (await addressBanOf(c)) return backTo(c, redirect, { login_error: 'banned' });
     const state = signToken<'login'>({ aud: 'login', redirect, challenge }, LOGIN_STATE_SECONDS, login.sessionSecret);
     return c.redirect(authorizeUrl(login, callbackUrl(c), state), 302);
   })
@@ -86,18 +95,23 @@ loginRoutes.get(
   withLogin(async (c, login) => {
     const state = readToken(c.req.query('state') ?? '', 'login', login.sessionSecret);
     if (!state) return fail(c, 400, 'invalid-request');
-    const back = (fragment: Record<string, string>) => {
-      const url = new URL(state.redirect);
-      url.hash = new URLSearchParams(fragment).toString();
-      return c.redirect(url.toString(), 302);
-    };
+    const back = (fragment: Record<string, string>) => backTo(c, state.redirect, fragment);
 
     const code = c.req.query('code');
     if (!code) return back({ login_error: 'denied' });
+    if (await addressBanOf(c)) return back({ login_error: 'banned' });
     if (!(await c.var.backend.limit(c.req.raw, 'auth'))) return back({ login_error: 'rate-limited' });
     const profile = await fetchProfile(login, code, callbackUrl(c));
     if (!profile) return back({ login_error: 'provider-failed' });
+    // A banned sender or account is told so, and nothing about it is kept or brought up to date. It
+    // goes by the bans as they stand, read only for a login Discord vouched for.
+    if ((await addressBanOf(c, true)) ?? (await accountBanOf(c, profile.accountKey, true))) {
+      return back({ login_error: 'banned' });
+    }
+    // The operator may have stopped new logins for now. Those logged in already go on.
+    if (await pausedNow(c, 'logins')) return back({ login_error: 'paused' });
     const secret = await c.var.backend.account(profile.accountKey).signIn(profile, state.challenge);
+    note(c, { kind: 'login', accountKey: profile.accountKey, name: profile.name });
     return back({ login_code: packSecret(profile.accountKey, secret) });
   })
 );
@@ -116,12 +130,18 @@ authRoutes.post(
     const request = parsed.output;
     const handle = unpackSecret(request.grant_type === 'login_code' ? request.code : request.refresh_token);
     if (!handle) return fail(c, 400, 'invalid-grant');
+    // A banned account gets no new tokens. Answered as a grant no longer good, Axe logs it out. The
+    // bans this instance holds turn it away before the account is asked; the bans as they stand are
+    // read only once the account has found the grant good, so that made-up grants read nothing.
+    if (await accountBanOf(c, handle.accountKey)) return fail(c, 400, 'invalid-grant');
     const account = c.var.backend.account(handle.accountKey);
     const session =
       request.grant_type === 'login_code'
         ? await account.redeem(handle.secret, request.code_verifier)
         : await account.refresh(handle.secret);
     if (!session) return fail(c, 400, 'invalid-grant');
+    if (await addressBanOf(c, true)) return fail(c, 403, 'banned');
+    if (await accountBanOf(c, handle.accountKey, true)) return fail(c, 400, 'invalid-grant');
     return c.json<TokenResponse>(tokensOf(session, login));
   })
 );

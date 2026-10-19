@@ -1,4 +1,5 @@
 import type { AssetUploadPolicy, PeerRole } from '../../../contracts/protocol.js';
+import type { BanList } from '../moderation/bans.js';
 import type { ObjectIndex } from './object-index.js';
 import type { PasswordHash } from './password.js';
 
@@ -15,6 +16,10 @@ export interface Seat {
   role: PeerRole;
   /** Came in logged in. Someone not logged in stays a guest, whose role cannot be changed. */
   account: boolean;
+  /** The account (`discord:<ID>`) of someone who came in logged in. The operator's bans go by it. */
+  accountKey?: string;
+  /** The sender's IP address, as the room server was told it when the connection was made. */
+  address?: string;
   /** When the seat came in (Unix milliseconds). */
   joinedAt: number;
   /** When the access token of someone who came in logged in runs out (Unix milliseconds). A new token extends it. */
@@ -88,6 +93,14 @@ export interface RoomHost<C extends object> {
   emptied(): void;
   /** Updates the head count and the GMs in the room list. */
   lobbyChanged(roomKey: string): void;
+  /** Settles once the room list has been told of every change so far (lobbyChanged). Never fails. */
+  listed(): Promise<void>;
+  /**
+   * The operator's bans as they stand, which a hello is checked against. A room server that asks its
+   * store for them gives a promise, which never fails: when they cannot be read, it gives those read
+   * last.
+   */
+  bans(): BanList | Promise<BanList>;
   record(event: RoomEvent, detail: string, value: number): void;
   /** Work that goes on until it is done, even after returning. */
   defer(work: Promise<unknown>): void;

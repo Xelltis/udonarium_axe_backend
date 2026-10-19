@@ -1,4 +1,6 @@
 import type { RoomSummary } from '../../contracts/protocol.js';
+import { MAX_ADMIN_ROOMS } from '../core/http/backend.js';
+import type { AdminRoom, RoomCreator } from '../core/http/backend.js';
 import type { KeyOf, Redis } from './redis.js';
 
 // Keeps the room list in Redis. Does the same as the Cloudflare version's LobbyDurableObject.
@@ -8,6 +10,7 @@ import type { KeyOf, Redis } from './redis.js';
 //   lobby:members     HASH  room key → how many people are in.
 //   lobby:gms         HASH  room key → JSON array of the GMs' user ids.
 //   lobby:gm:<ID>     SET   The keys of the rooms where that person is GM.
+//   lobby:creators    HASH  room key → JSON of who made the room {accountKey, address}, for the operator.
 //
 // The list is kept by table, not by room, so that even a thousand rooms take only a few queries.
 
@@ -48,6 +51,7 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
   const META = key('lobby', 'meta');
   const MEMBERS = key('lobby', 'members');
   const GMS = key('lobby', 'gms');
+  const CREATORS = key('lobby', 'creators');
   const gmIndexOf = (userId: string) => key('lobby', 'gm', userId);
 
   const gameMastersOf = async (roomKey: string): Promise<string[]> =>
@@ -77,14 +81,15 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
   const mineOf = async (userId: string | undefined) => new Set(userId ? await redis.sMembers(gmIndexOf(userId)) : []);
 
   return {
-    async register(room: RoomSummary): Promise<void> {
+    async register(room: RoomSummary, creator?: RoomCreator): Promise<void> {
       const meta: Meta = { roomId: room.roomId, name: room.name, hasPassword: room.hasPassword };
-      await redis
+      const registering = redis
         .multi()
         .zAdd(ROOMS, { score: Date.now(), value: room.roomKey })
         .hSet(META, room.roomKey, JSON.stringify(meta))
-        .hSet(MEMBERS, room.roomKey, String(room.members))
-        .exec();
+        .hSet(MEMBERS, room.roomKey, String(room.members));
+      if (creator) registering.hSet(CREATORS, room.roomKey, JSON.stringify(creator));
+      await registering.exec();
     },
 
     async setMembers(roomKey: string, members: number): Promise<void> {
@@ -105,7 +110,13 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
 
     async remove(roomKey: string): Promise<void> {
       const before = await gameMastersOf(roomKey);
-      const removal = redis.multi().zRem(ROOMS, roomKey).hDel(META, roomKey).hDel(MEMBERS, roomKey).hDel(GMS, roomKey);
+      const removal = redis
+        .multi()
+        .zRem(ROOMS, roomKey)
+        .hDel(META, roomKey)
+        .hDel(MEMBERS, roomKey)
+        .hDel(GMS, roomKey)
+        .hDel(CREATORS, roomKey);
       for (const userId of before) removal.sRem(gmIndexOf(userId), roomKey);
       await removal.exec();
     },
@@ -138,6 +149,35 @@ export const redisLobby = (redis: Redis, key: KeyOf) => {
       const listed = new Set(ordered);
       const extra = [...mine].filter((roomKey) => !listed.has(roomKey));
       return summariesOf([...ordered, ...extra], mine);
+    },
+
+    /** The rooms for the operator, newest first, up to MAX_ADMIN_ROOMS, with who made them. */
+    async all(): Promise<AdminRoom[]> {
+      const newest = await redis.zRangeWithScores(ROOMS, '+inf', '-inf', {
+        BY: 'SCORE',
+        REV: true,
+        LIMIT: { offset: 0, count: MAX_ADMIN_ROOMS },
+      });
+      if (newest.length === 0) return [];
+      // Rooms made at the same time go in key order, as in the list.
+      newest.sort((a, b) => b.score - a.score || Number(a.value > b.value) - Number(a.value < b.value));
+      const roomKeys = newest.map(({ value }) => value);
+      const [summaries, creators] = await Promise.all([
+        summariesOf(roomKeys, new Set()),
+        redis.hmGet(CREATORS, roomKeys),
+      ]);
+      const made = new Map(newest.map(({ value, score }, index) => [value, { score, creator: creators[index] }]));
+      return summaries.map((room) => {
+        const { score, creator } = made.get(room.roomKey) as { score: number; creator: string | null };
+        return { ...room, createdAt: score, creator: creator === null ? null : (JSON.parse(creator) as RoomCreator) };
+      });
+    },
+
+    /** The keys of the rooms with someone in them. */
+    async occupied(): Promise<string[]> {
+      return Object.entries(await redis.hGetAll(MEMBERS))
+        .filter(([, members]) => Number(members) > 0)
+        .map(([roomKey]) => roomKey);
     },
 
     /**

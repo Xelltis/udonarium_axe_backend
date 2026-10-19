@@ -31,7 +31,7 @@ export const base64url = (bytes: Uint8Array): string =>
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
-const fromBase64url = (text: string): Uint8Array =>
+export const fromBase64url = (text: string): Uint8Array =>
   Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0));
 
 /**
@@ -82,6 +82,11 @@ const claimSchemas = {
      * may store.
      */
     uid: string(),
+    /**
+     * The account (`discord:<ID>`) of a seat that came in logged in, so that a banned account is
+     * turned away. Tokens in the older form, and those of guests, do not have it.
+     */
+    sub: optional(string()),
     exp: number(),
   }),
   /**
@@ -100,6 +105,45 @@ const claimSchemas = {
     name: string(),
     /** Where the upload waits. */
     path: string(),
+    exp: number(),
+  }),
+  /**
+   * The operator's trip to Discord and back, for the dashboard. The nonce is also set in a cookie,
+   * so that the way back is taken only in the browser that set out.
+   */
+  'admin-login': object({
+    aud: literal('admin-login'),
+    nonce: string(),
+    exp: number(),
+  }),
+  /**
+   * The operator's session on the dashboard, kept in an HttpOnly cookie. After Discord alone its
+   * stage is discord, which may only confirm a passkey (or register the first); after a passkey it is
+   * passkey, which may do the rest.
+   */
+  admin: object({
+    aud: literal('admin'),
+    /** The Discord user id. */
+    sub: string(),
+    name: string(),
+    /** The session's id, so that a passkey challenge is taken only in the session it was given to. */
+    sid: string(),
+    stage: picklist(['discord', 'passkey']),
+    /** The sessions' generation when it began. Raising it ends every session. */
+    epoch: number(),
+    /** When Discord let the operator in (Unix seconds). No session lasts long past it. */
+    start: number(),
+    /** When a passkey last confirmed it was the operator (Unix seconds). 0 before any. */
+    verified: number(),
+    exp: number(),
+  }),
+  /** A challenge for a passkey, given to one session for one purpose. */
+  'admin-challenge': object({
+    aud: literal('admin-challenge'),
+    sid: string(),
+    purpose: picklist(['register', 'confirm']),
+    /** The bytes the passkey signs (base64url). */
+    challenge: string(),
     exp: number(),
   }),
 } satisfies Record<string, GenericSchema>;

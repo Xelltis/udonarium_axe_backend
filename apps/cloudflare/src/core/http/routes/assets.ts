@@ -17,6 +17,7 @@ import type { Claims } from '../../auth/tokens.js';
 import type { LoginConfig } from '../../config/login.js';
 import type { DirectUploads, ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
+import { accountBanOf, note, pausedNow } from '../moderation.js';
 import { assetClaimsOf, declaredLengthOf } from '../request.js';
 
 type AssetContext = Context<ServerEnv>;
@@ -29,6 +30,27 @@ const ticketSchema = object({
 const completeSchema = object({ ticket: string() });
 
 /**
+ * The token for room assets, of an account the operator has not banned. A refusal when there is no
+ * token (401) or the account is banned (403).
+ */
+const claimsOf = async (c: AssetContext, roomKey: string): Promise<Response | Claims<'asset'>> => {
+  const claims = assetClaimsOf(c, c.var.config.login, roomKey);
+  if (!claims) return fail(c, 401, 'asset-token-required');
+  if (await accountBanOf(c, claims.sub)) return fail(c, 403, 'banned');
+  return claims;
+};
+
+/** Writes down that a new asset was stored, for the operator: its type, size and id. */
+const noteStored = (
+  c: AssetContext,
+  claims: Claims<'asset'>,
+  roomKey: string,
+  type: string,
+  size: number,
+  id: string
+) => note(c, { kind: 'upload', accountKey: claims.sub, roomKey, detail: `${type} ${size} ${id}` });
+
+/**
  * Checks whether it may be stored, in the same order for a PUT and for an upload straight to the
  * store. Returns a refusal when it cannot be stored, and the exists response when it is already
  * stored. With count, it also checks the limit counted each time something is stored.
@@ -39,9 +61,9 @@ const admit = async (
   id: string,
   count: boolean
 ): Promise<Response | Claims<'asset'>> => {
-  const { backend, config } = c.var;
-  const claims = assetClaimsOf(c, config.login, roomKey);
-  if (!claims) return fail(c, 401, 'asset-token-required');
+  const { backend } = c.var;
+  const claims = await claimsOf(c, roomKey);
+  if (claims instanceof Response) return claims;
   if (claims.role === 'guest') return fail(c, 403, 'not-a-player');
   if (await backend.assets.blocked(id)) return fail(c, 451, 'blocked');
 
@@ -52,13 +74,17 @@ const admit = async (
   }
 
   // A token can be used for 15 minutes, so the room is asked whether it is still there and whether
-  // that person has a role that may store.
+  // that person has a role that may store. Only someone seated now may store, and a ban closes the
+  // seats it covers and keeps them from coming back at once, so storing stops at once on every
+  // instance, though the bans checked above are those this instance read a short while ago.
   const allowed = await backend.rooms.canUpload(roomKey, claims.uid);
   if (allowed === 'room-not-found') return fail(c, 404, 'room-not-found');
   if (allowed === 'not-a-player') return fail(c, 403, 'not-a-player');
 
   // IPv6 is counted for each /64. Changing addresses alone does not get more.
   if (count && !(await backend.limit(c.req.raw, 'upload'))) return fail(c, 429, 'rate-limited');
+  // The operator may have stopped storing for now. Read as it stands, once past the limit.
+  if (await pausedNow(c, 'uploads')) return fail(c, 503, 'paused');
   return claims;
 };
 
@@ -71,9 +97,8 @@ export const getRoomAsset = async (c: AssetContext) => {
   const roomKey = c.req.param('roomKey') as string;
   const id = c.req.param('id') as string;
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
-  if (!assetClaimsOf(c, c.var.config.login, roomKey)) {
-    return fail(c, 401, 'asset-token-required');
-  }
+  const claims = await claimsOf(c, roomKey);
+  if (claims instanceof Response) return claims;
   const { assets } = c.var.backend;
   return c.req.method === 'HEAD' ? assets.head(c.req.raw, roomKey, id) : assets.read(c.req.raw, roomKey, id);
 };
@@ -115,6 +140,7 @@ export const putRoomAsset = async (c: AssetContext) => {
     return fail(c, 404, 'room-not-found');
   }
   backend.assets.afterStore();
+  noteStored(c, claims, roomKey, sniffed.type, length, id);
   return c.json<AssetStoredResponse>({ id, status: 'stored' }, 201);
 };
 
@@ -173,8 +199,8 @@ export const completeUpload = async (c: AssetContext) => {
   const parsed = safeParse(completeSchema, await c.req.json().catch(() => null));
   if (!parsed.success) return fail(c, 400, 'invalid-request');
 
-  const claims = assetClaimsOf(c, config.login, roomKey);
-  if (!claims) return fail(c, 401, 'asset-token-required');
+  const claims = await claimsOf(c, roomKey);
+  if (claims instanceof Response) return claims;
   // Only a ticket given to this person, for this asset in this room, is taken.
   const secret = (config.login as LoginConfig).sessionSecret;
   const ticket = readToken(parsed.output.ticket, 'upload', secret);
@@ -225,6 +251,7 @@ const keepUpload = async (
     return fail(c, 404, 'room-not-found');
   }
   backend.assets.afterStore();
+  noteStored(c, admitted, roomKey, sniffed.type, ticket.size, id);
   return c.json<AssetStoredResponse>({ id, status: 'stored' }, 201);
 };
 
@@ -235,9 +262,10 @@ const keepUpload = async (
  * room.
  */
 export const listRoomAssets = async (c: AssetContext) => {
-  const { backend, config } = c.var;
+  const { backend } = c.var;
   const roomKey = c.req.param('roomKey') as string;
-  if (!assetClaimsOf(c, config.login, roomKey)) return fail(c, 401, 'asset-token-required');
+  const claims = await claimsOf(c, roomKey);
+  if (claims instanceof Response) return claims;
   if (!(await backend.limit(c.req.raw, 'read'))) return fail(c, 429, 'rate-limited');
   const response = c.json<RoomAssetListResponse>({ assets: await backend.assets.list(roomKey) });
   response.headers.set('Cache-Control', 'private, no-store');

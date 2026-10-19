@@ -1,4 +1,5 @@
 import { safeParse } from 'valibot';
+import type { InferOutput } from 'valibot';
 
 import {
   ACCOUNT_USER_ID_PREFIX,
@@ -32,6 +33,7 @@ import type {
 } from '../../../contracts/protocol.js';
 import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../auth/tokens.js';
 import { rollLine } from '../dice/roll.js';
+import { BanList, barredBy } from '../moderation/bans.js';
 import { decodeFrame, encodeFrame } from './codec.js';
 import type { RoomHost, RoomStore, Seat } from './host.js';
 import {
@@ -46,6 +48,7 @@ import {
   MAX_OBJECTS,
   MAX_PENDING_ROLLS,
   MAX_SOCKETS,
+  MAX_WAITING_FRAMES,
   OCCUPIED_CHECK_MS,
   RATE_WINDOW_MS,
   TOKEN_GRACE_MS,
@@ -125,6 +128,13 @@ export class RoomEngine<C extends object> {
   private readonly refused = new WeakSet<C>();
   /** When a connection before its hello was taken in. One with no time here counts as having waited too long. */
   private readonly connectedAt = new WeakMap<C, number>();
+  /** The sender's IP address of each connection, kept on its seat for the operator. */
+  private readonly addresses = new WeakMap<C, string>();
+  /**
+   * The connections whose hello waits for the operator's bans to be read, and the frames that came
+   * on each meanwhile. Those are taken in after the hello, in the order they came.
+   */
+  private readonly waiting = new WeakMap<C, (ArrayBuffer | Uint8Array)[]>();
   /** How many dice are waiting to be rolled. */
   private pendingRolls = 0;
   /**
@@ -169,8 +179,10 @@ export class RoomEngine<C extends object> {
    * Accepts a connection. Even when there is no room or it is full, the connection is accepted, then
    * sent the reason and closed. Refused over HTTP before it is accepted, the browser cannot read the
    * reason and learns only that it did not connect.
+   * address is the sender's IP address, which goes on the seat so that the operator's bans can find it.
    */
-  accept(conn: C): void {
+  accept(conn: C, address?: string): void {
+    if (address !== undefined) this.addresses.set(conn, address);
     const missing = this.host.wiping() || !this.host.room();
     if (!missing) this.closeSilentSockets(conn);
     const full =
@@ -257,6 +269,17 @@ export class RoomEngine<C extends object> {
   }
 
   /**
+   * Closes the seats the operator's ban covers, as when a token is no longer good (unauthorized): a
+   * banned person cannot get a new token, and a banned sender cannot connect again. Returns how many
+   * it closed.
+   */
+  expel(barred: (seat: Seat) => boolean): number {
+    const seats = this.seats().filter(({ seat }) => barred(seat));
+    for (const { conn } of seats) this.refuse(conn, 'unauthorized');
+    return seats.length;
+  }
+
+  /**
    * Whether someone putting an asset still has a role in this room that may put one (GM or player).
    * The asset PUT asks it. A token lasts 15 minutes, so it is refused if the room has gone or the
    * seat has been made a guest in that time.
@@ -320,6 +343,13 @@ export class RoomEngine<C extends object> {
     this.expireSeats();
     const seat = this.host.seatOf(conn);
     if (seat?.closed || this.refused.has(conn)) return;
+    const waiting = this.waiting.get(conn);
+    if (waiting) {
+      // Axe sends nothing more until it is let in, so only a few may wait behind the hello.
+      if (waiting.length >= MAX_WAITING_FRAMES) return this.refuse(conn, 'too-many-messages');
+      waiting.push(message);
+      return;
+    }
     // Nothing that comes while the room is being deleted is taken in (no seat is made, and no token
     // is handed out again).
     if (this.host.wiping()) return this.refuse(conn, seat ? 'room-deleted' : 'room-not-found');
@@ -366,6 +396,58 @@ export class RoomEngine<C extends object> {
     if (!parsed.success) return this.refuse(conn, 'bad-message');
     const hello = parsed.output;
 
+    const bans = this.host.bans();
+    if (bans instanceof BanList) {
+      this.admit(conn, hello, bans);
+      return;
+    }
+    // The bans are read afresh for each hello, so that someone banned a moment ago, on whatever
+    // instance, is not let in on bans read a while before, even with an access token still good.
+    this.waiting.set(conn, []);
+    this.host.defer(
+      bans.then((read) => {
+        const frames = this.waiting.get(conn) as (ArrayBuffer | Uint8Array)[];
+        this.waiting.delete(conn);
+        // It may have gone or been refused meanwhile.
+        if (this.gone.has(conn) || this.refused.has(conn)) return;
+        this.admit(conn, hello, read);
+        this.checkAgain(conn);
+        for (const frame of frames) this.receive(conn, frame);
+      })
+    );
+  }
+
+  /**
+   * Checks a seat just let in against the bans once more, once the room list has been told it is in.
+   * A ban made while the hello waited is not in the bans it was let in on, and closing the seats a
+   * ban covers goes by the room list (only the rooms with someone in them). Read again after the list
+   * has been told, the bans have it, or else the list had the room by the time the ban closed seats.
+   */
+  private checkAgain(conn: C): void {
+    if (!this.host.seatOf(conn)) return;
+    this.host.defer(
+      this.host
+        .listed()
+        .then(() => this.host.bans())
+        .then((bans) => {
+          const seat = this.host.seatOf(conn);
+          // A seat closed meanwhile (refused, replaced, the room deleted) is marked refused.
+          if (!seat || this.refused.has(conn) || this.gone.has(conn)) return;
+          if (barredBy(bans)(seat)) this.refuse(conn, 'unauthorized');
+        })
+    );
+  }
+
+  /**
+   * Lets a hello in, or refuses it, against the bans as they stand. The operator's bans are refused
+   * as unauthorized, as when a token is no longer good: a banned account gets no new token, and Axe
+   * stops there.
+   */
+  private admit(conn: C, hello: InferOutput<typeof helloSchema>, bans: BanList): void {
+    // A banned sender is turned away before anything about the room is checked (such as its password).
+    const address = this.addresses.get(conn);
+    if (address !== undefined && bans.addressBan(address)) return this.refuse(conn, 'unauthorized');
+
     const room = this.host.room();
     if (!room) return this.refuse(conn, 'room-not-found');
     if (room.password && !verifyPassword(hello.password ?? '', room.password)) {
@@ -383,6 +465,7 @@ export class RoomEngine<C extends object> {
       roomKey: room.roomKey,
       role: 'guest',
       account: false,
+      ...(address === undefined ? {} : { address }),
       joinedAt: Date.now(),
       activeAt: Date.now() - idleMs,
     };
@@ -406,9 +489,11 @@ export class RoomEngine<C extends object> {
       const secret = this.host.sessionSecret();
       const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
       if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(conn, 'unauthorized');
+      if (bans.accountBan(claims.sub)) return this.refuse(conn, 'unauthorized');
       const { role, known } = this.roleOf(hello.userId, hello.invite ?? null, room.roomKey, secret);
       seat.role = role;
       seat.account = true;
+      seat.accountKey = claims.sub;
       seat.expiresAt = claims.exp * 1000;
       // The role is remembered only when the seat is taken. The invite of someone refused still works
       // the next time they come in.
@@ -463,8 +548,15 @@ export class RoomEngine<C extends object> {
     // On a room server running without login, the asset routes take no token either, so it is left
     // empty.
     if (!secret) return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
+    // The account goes in too, so that the asset routes turn a banned account away at once.
     const assetToken = signToken<'asset'>(
-      { aud: 'asset', room: seat.roomKey, role: seat.role, uid: seat.userId },
+      {
+        aud: 'asset',
+        room: seat.roomKey,
+        role: seat.role,
+        uid: seat.userId,
+        ...(seat.accountKey === undefined ? {} : { sub: seat.accountKey }),
+      },
       ASSET_TOKEN_SECONDS,
       secret
     );

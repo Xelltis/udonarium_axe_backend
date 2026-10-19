@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { RoomAsset } from '../../../contracts/protocol.js';
 import { assetHeaders, privately } from '../../core/assets/headers.js';
 import { blockedKeyOf, roomAssetKey } from '../../core/assets/keys.js';
-import type { AssetBackend, LimitKind } from '../../core/http/backend.js';
+import type { AssetBackend, LimitKind, StoredRoomAsset } from '../../core/http/backend.js';
 import { failure } from '../../core/http/errors.js';
 import type { KeyOf, Redis } from '../redis.js';
 import type { AssetBucket } from './bucket.js';
@@ -167,6 +167,43 @@ export const vercelAssets = (
       }),
 
     afterStore,
+
+    /** One page of the rooms' indexes (SCAN), with every asset in each. */
+    inventory: async (cursor) => {
+      const indexPrefix = assetIndexOf(key, '');
+      const page = await redis.scan(cursor ?? '0', { MATCH: `${indexPrefix}*`, COUNT: 100 });
+      const assets: StoredRoomAsset[] = [];
+      for (const indexKey of page.keys) {
+        const roomKey = indexKey.slice(indexPrefix.length);
+        for (const [id, value] of Object.entries(await redis.hGetAll(indexKey))) {
+          const { type, size, name, uploadedAt } = JSON.parse(value) as Indexed;
+          assets.push({ roomKey, id, type, size, name, uploadedAt });
+        }
+      }
+      return { assets, cursor: page.cursor === '0' ? null : page.cursor };
+    },
+
+    content: async (roomKey, id) => {
+      const asset = await indexed(roomKey, id);
+      const body = asset && (await bucket.get(roomAssetKey(roomKey, id)));
+      return body ? { body, type: (asset as Indexed).type } : null;
+    },
+
+    block: (id) => bucket.put(blockedKeyOf(id), new Uint8Array(), 'application/octet-stream'),
+
+    unblock: (id) => bucket.delete([blockedKeyOf(id)]),
+
+    blockedIds: async () => {
+      const prefix = blockedKeyOf('');
+      const ids: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await bucket.list(prefix, cursor);
+        ids.push(...page.items.map((item) => item.path.slice(prefix.length)));
+        cursor = page.cursor;
+      } while (cursor !== null);
+      return ids;
+    },
 
     // When the store can make a direct upload target (Blob), big assets are uploaded there instead.
     ...(bucket.target && {

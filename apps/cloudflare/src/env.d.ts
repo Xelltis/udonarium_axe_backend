@@ -14,6 +14,8 @@ declare namespace Cloudflare {
     LOBBY: DurableObjectNamespace<import('./rooms/lobby').LobbyDurableObject>;
     /** One for each person who logged in. Its name is `discord:<ID>`. */
     ACCOUNTS: DurableObjectNamespace<import('./auth/account').AccountDurableObject>;
+    /** The operator's bans and what happened (logins, rooms made, uploads). One for each Worker. */
+    MODERATION: DurableObjectNamespace<import('./moderation/store').ModerationDurableObject>;
     /**
      * The Workers Analytics Engine that records what happens in rooms (joins and leaves, why connections
      * closed, writes, dice).
@@ -29,6 +31,18 @@ declare namespace Cloudflare {
     DISCORD_CLIENT_SECRET?: string;
     /** The key that signs tokens. A random string of 32 characters or more (set as a secret). */
     SESSION_SECRET?: string;
+    /**
+     * The Discord user ids of those who may open the operator's dashboard (/admin), separated by
+     * commas. Without it, there is no dashboard.
+     */
+    ADMIN_DISCORD_IDS?: string;
+    /** Those of them who may register a passkey without one they have. Set only while needed. */
+    ADMIN_PASSKEY_RESET?: string;
+    /**
+     * The Discord webhook the operator's alerts go to (rate limits exceeded, banned senders coming back,
+     * logins to the dashboard and attempts turned away). Without it, there are no alerts.
+     */
+    ADMIN_WEBHOOK_URL?: string;
     /** The time from the last person leaving until the room is deleted. */
     ROOM_RETENTION_HOURS: string;
     /** The SkyWay app id. With it and SKYWAY_SECRET set, the Worker issues SkyWay tokens. */

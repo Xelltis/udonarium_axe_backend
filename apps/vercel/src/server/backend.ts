@@ -3,8 +3,12 @@ import type { WebSocket } from 'ws';
 import type { RoomSummary } from '../../contracts/protocol.js';
 import type { AssetBackend, LimitKind, ServerBackend } from '../core/http/backend.js';
 import { failure } from '../core/http/errors.js';
+import { noModeration } from '../core/moderation/activity.js';
+import type { Moderation } from '../core/moderation/activity.js';
+import type { Seat } from '../core/rooms/host.js';
 import { refusalFrame } from '../core/rooms/refusal.js';
 import { redisAccount } from './accounts.js';
+import { clientIpOf } from './limits.js';
 import type { RedisLobby } from './lobby.js';
 import type { KeyOf, Redis } from './redis.js';
 import { createRoom, expiryKeyOf, readRoomMeta, roomKeysOf } from './rooms/keys.js';
@@ -33,6 +37,8 @@ export interface ServerDeps {
   orphans: () => Promise<number>;
   assets: AssetBackend;
   limit: (request: Request, kind: LimitKind) => Promise<boolean>;
+  /** The operator's bans and what happened. */
+  moderation: Moderation;
   upgrades: Upgrades;
   retentionSeconds: number;
 }
@@ -45,7 +51,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
    * A room past its time to be deleted is not listed, even when deleting it is late. A room with no
    * time is already gone (the time is deleted along with the room).
    */
-  const live = async (rooms: RoomSummary[]): Promise<RoomSummary[]> => {
+  const live = async <T extends RoomSummary>(rooms: T[]): Promise<T[]> => {
     if (rooms.length === 0) return rooms;
     const now = Date.now();
     const wipeAt = await redis.zmScore(
@@ -56,6 +62,7 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
   };
 
   return {
+    addressOf: clientIpOf,
     limit: deps.limit,
     lobby: {
       // Along with listing, making and joining rooms, sweeps the rooms past their time to be deleted.
@@ -67,18 +74,23 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
         const room = await lobby.find(roomKey, userId);
         return room && ((await live([room]))[0] ?? null);
       },
+      all: async () => live(await lobby.all()),
+      occupied: () => lobby.occupied(),
     },
     rooms: {
       create: async (init) => {
         sweeper.soon();
         const hasPassword = await createRoom(redis, key, init, deps.retentionSeconds);
-        await lobby.register({
-          roomKey: init.roomKey,
-          roomId: init.roomId,
-          name: init.name,
-          hasPassword,
-          members: 0,
-        });
+        await lobby.register(
+          {
+            roomKey: init.roomKey,
+            roomId: init.roomId,
+            name: init.name,
+            hasPassword,
+            members: 0,
+          },
+          init.creator
+        );
         await lobby.setGameMasters(init.roomKey, [init.creatorUserId]);
       },
       remove: (roomKey, userId) => runtime.deleteRoom(roomKey, userId),
@@ -102,13 +114,20 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
         const accept = deps.upgrades.get(request);
         if (!accept) return failure(426, 'upgrade-required');
         sweeper.soon();
-        accept((ws) => runtime.attach(ws, roomKey));
+        accept((ws) => runtime.attach(ws, roomKey, clientIpOf(request)));
         // The connection has switched to a WebSocket, so this response is not used.
         return new Response(null);
       },
+      /** Who is in the room, from the copy of the seats the owner writes to Redis. */
+      seats: async (roomKey) => {
+        if (!(await readRoomMeta(redis, key, roomKey))) return [];
+        return (await redis.hVals(roomKeysOf(key, roomKey).seats)).map((value) => JSON.parse(value) as Seat);
+      },
+      expel: (roomKey, ban) => runtime.expel(roomKey, ban),
     },
     account: (accountKey) => redisAccount(redis, key, accountKey),
     assets: deps.assets,
+    moderation: deps.moderation,
   };
 };
 
@@ -121,12 +140,16 @@ export const storelessBackend = (upgrades: Upgrades): ServerBackend => {
     throw new Error('There are no rooms without a store');
   };
   return {
+    addressOf: clientIpOf,
     limit: async () => true,
-    lobby: { list: async () => [], find: async () => null },
+    // The operator's dashboard answers 503 without login, so it asks nothing of these.
+    lobby: { list: async () => [], find: async () => null, all: none, occupied: none },
     rooms: {
       create: none,
       remove: async () => 'not-found',
       canUpload: async () => 'room-not-found',
+      seats: none,
+      expel: none,
       connect: async (request) => {
         const accept = upgrades.get(request);
         if (!accept) return failure(426, 'upgrade-required');
@@ -147,6 +170,12 @@ export const storelessBackend = (upgrades: Upgrades): ServerBackend => {
       head: none,
       list: none,
       afterStore: none,
+      inventory: none,
+      content: none,
+      block: none,
+      unblock: none,
+      blockedIds: none,
     },
+    moderation: noModeration,
   };
 };
