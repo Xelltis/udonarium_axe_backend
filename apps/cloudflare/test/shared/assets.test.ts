@@ -507,6 +507,16 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     const badRoom = await harness.fetch(new Request(urlIn('not-a-room', id), { headers: { Origin: ORIGIN } }));
     expect(badRoom.status).toBe(400);
   });
+
+  it('answers 451 for what the operator took down, so that it is asked of nobody in the room either', async () => {
+    const { id } = await freshFile();
+    await harness.block(id);
+
+    const res = await call(id);
+
+    expect(res.status).toBe(451);
+    expect(await res.json()).toEqual({ error: 'blocked' });
+  });
 });
 
 describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
@@ -530,6 +540,13 @@ describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
     const { id } = await freshFile();
     const res = await call(id, { method: 'HEAD', headers: { 'If-None-Match': `"${id}"` } });
     expect(res.status).toBe(404);
+  });
+
+  it('answers 451 for what the operator took down, before anything is sent to be stored', async () => {
+    const { id } = await freshFile();
+    await harness.block(id);
+
+    expect((await call(id, { method: 'HEAD' })).status).toBe(451);
   });
 
   it('stops one address once it has asked R2 its share', async () => {

@@ -92,6 +92,9 @@ const admit = async (
  * GET and HEAD /v1/rooms/:roomKey/assets/:id. Sent back to whoever holds this room's token
  * (whoever is in the room now).
  * Hono sends HEAD down the GET route too, and throws away the body returned.
+ *
+ * What the operator took down is answered 451 rather than 404, so that Axe asks nobody in the room
+ * for it either. Only what is not there is asked about, so a read that finds it costs no more.
  */
 export const getRoomAsset = async (c: AssetContext) => {
   const roomKey = c.req.param('roomKey') as string;
@@ -100,7 +103,11 @@ export const getRoomAsset = async (c: AssetContext) => {
   const claims = await claimsOf(c, roomKey);
   if (claims instanceof Response) return claims;
   const { assets } = c.var.backend;
-  return c.req.method === 'HEAD' ? assets.head(c.req.raw, roomKey, id) : assets.read(c.req.raw, roomKey, id);
+  const res = await (c.req.method === 'HEAD'
+    ? assets.head(c.req.raw, roomKey, id)
+    : assets.read(c.req.raw, roomKey, id));
+  if (res.status === 404 && (await assets.blocked(id))) return fail(c, 451, 'blocked');
+  return res;
 };
 
 /** PUT /v1/rooms/:roomKey/assets/:id. Only this room's GM and players can store. */
