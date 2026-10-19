@@ -7,7 +7,14 @@ import type { ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
 import { accountBanOf, addressBanOf, note, pausedNow } from '../moderation.js';
 import { bearerOf } from '../request.js';
-import { completeUpload, getRoomAsset, listRoomAssets, putRoomAsset, requestUpload } from './assets.js';
+import {
+  completeUpload,
+  deleteRoomAsset,
+  getRoomAsset,
+  listRoomAssets,
+  putRoomAsset,
+  requestUpload,
+} from './assets.js';
 import { postReport } from './reports.js';
 
 /** A room's key: a 128-bit random number written in lowercase hex. */
@@ -114,6 +121,9 @@ roomRoutes.get('/:roomKey/assets/:id', (c) =>
 );
 roomRoutes.put('/:roomKey/assets/:id', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? putRoomAsset(c) : fail(c, 400, 'invalid-id')
+);
+roomRoutes.delete('/:roomKey/assets/:id', (c) =>
+  ROOM_KEY.test(c.req.param('roomKey')) ? deleteRoomAsset(c) : fail(c, 400, 'invalid-id')
 );
 // The steps for uploading straight to the store. A room server without them (the Cloudflare
 // version) answers not-found.

@@ -160,6 +160,29 @@ export const putRoomAsset = async (c: AssetContext) => {
 };
 
 /**
+ * DELETE /v1/rooms/:roomKey/assets/:id. The room's GM takes a picture or a sound out of the room.
+ * Answered 204 whether it was there or not, and not stopped while the operator has stopped storing.
+ */
+export const deleteRoomAsset = async (c: AssetContext) => {
+  const { backend } = c.var;
+  const roomKey = c.req.param('roomKey') as string;
+  const id = c.req.param('id') as string;
+  if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
+  const claims = await claimsOf(c, roomKey);
+  if (claims instanceof Response) return claims;
+
+  // The role in the token may be 15 minutes old, so the room is asked whether that person is
+  // seated as its GM now.
+  const allowed = await backend.rooms.canDiscard(roomKey, claims.uid);
+  if (allowed === 'room-not-found') return fail(c, 404, 'room-not-found');
+  if (allowed === 'not-game-master') return fail(c, 403, 'not-game-master');
+  // Counted with storing, which it undoes.
+  if (!(await backend.limit(c.req.raw, 'upload'))) return fail(c, 429, 'rate-limited');
+  await backend.assets.discard(roomKey, id);
+  return c.body(null, 204);
+};
+
+/**
  * POST /v1/rooms/:roomKey/assets/:id/uploads. For something that does not fit in the body of a
  * PUT, hands out where to upload it straight to the store. The checks go in the same order as for
  * PUT. The type and the contents are checked once the word comes that the upload is done.

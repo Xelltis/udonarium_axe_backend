@@ -1,10 +1,11 @@
 import type { WebSocket } from 'ws';
 
-import type { RoomSummary } from '../../contracts/protocol.js';
+import type { PeerRole, RoomSummary } from '../../contracts/protocol.js';
 import type { AssetBackend, LimitKind, ServerBackend } from '../core/http/backend.js';
 import { failure } from '../core/http/errors.js';
 import { noModeration } from '../core/moderation/activity.js';
 import type { Moderation } from '../core/moderation/activity.js';
+import { UPLOADER_ROLES, seatedAs } from '../core/rooms/host.js';
 import type { Seat } from '../core/rooms/host.js';
 import { refusalFrame } from '../core/rooms/refusal.js';
 import { redisAccount } from './accounts.js';
@@ -61,6 +62,16 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
     return rooms.filter((_, index) => Number(wipeAt[index]) > now);
   };
 
+  /**
+   * Whether that account is seated in the room with one of the roles, read from the copy of the
+   * seats the owner writes to Redis. Null when the room is not there.
+   */
+  const seatedInCopy = async (roomKey: string, userId: string, roles: readonly PeerRole[]) => {
+    if (!(await readRoomMeta(redis, key, roomKey))) return null;
+    const seats = await redis.hVals(roomKeysOf(key, roomKey).seats);
+    return seats.some((value) => seatedAs(JSON.parse(value) as Seat, userId, roles));
+  };
+
   return {
     addressOf: clientIpOf,
     limit: deps.limit,
@@ -102,13 +113,15 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
       canUpload: async (roomKey, userId) => {
         const open = await runtime.openRoom(roomKey);
         if (open && !open.isReleased) return open.engine.canUpload(userId);
-        if (!(await readRoomMeta(redis, key, roomKey))) return 'room-not-found';
-        const seats = await redis.hVals(roomKeysOf(key, roomKey).seats);
-        const seated = seats.some((value) => {
-          const seat = JSON.parse(value) as { userId: string; account: boolean; role: string };
-          return seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl');
-        });
-        return seated ? 'ok' : 'not-a-player';
+        const seated = await seatedInCopy(roomKey, userId, UPLOADER_ROLES);
+        return seated === null ? 'room-not-found' : seated ? 'ok' : 'not-a-player';
+      },
+      /** Whether someone taking an asset out of this room is its GM now, answered as for canUpload. */
+      canDiscard: async (roomKey, userId) => {
+        const open = await runtime.openRoom(roomKey);
+        if (open && !open.isReleased) return open.engine.canDiscard(userId);
+        const seated = await seatedInCopy(roomKey, userId, ['gm']);
+        return seated === null ? 'room-not-found' : seated ? 'ok' : 'not-game-master';
       },
       connect: async (request, roomKey) => {
         const accept = deps.upgrades.get(request);
@@ -148,6 +161,7 @@ export const storelessBackend = (upgrades: Upgrades): ServerBackend => {
       create: none,
       remove: async () => 'not-found',
       canUpload: async () => 'room-not-found',
+      canDiscard: async () => 'room-not-found',
       seats: none,
       expel: none,
       connect: async (request) => {

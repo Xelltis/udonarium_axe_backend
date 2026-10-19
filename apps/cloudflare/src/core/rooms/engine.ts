@@ -35,6 +35,7 @@ import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../au
 import { rollLine } from '../dice/roll.js';
 import { BanList, barredBy } from '../moderation/bans.js';
 import { decodeFrame, encodeFrame } from './codec.js';
+import { UPLOADER_ROLES, seatedAs } from './host.js';
 import type { RoomHost, RoomStore, Seat } from './host.js';
 import {
   FLUSH_DELAY_MS,
@@ -287,10 +288,21 @@ export class RoomEngine<C extends object> {
   canUpload(userId: string): 'ok' | 'room-not-found' | 'not-a-player' {
     if (this.host.wiping() || !this.host.room()) return 'room-not-found';
     // Only while seated. Someone who has left cannot put one, even with a token still left.
-    const seated = this.seats().some(
-      ({ seat }) => seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl')
-    );
-    return seated ? 'ok' : 'not-a-player';
+    return this.seatedAs(userId, UPLOADER_ROLES) ? 'ok' : 'not-a-player';
+  }
+
+  /**
+   * Whether someone taking an asset out of this room is its GM now. The asset DELETE asks it, for
+   * the role in a token may be 15 minutes old.
+   */
+  canDiscard(userId: string): 'ok' | 'room-not-found' | 'not-game-master' {
+    if (this.host.wiping() || !this.host.room()) return 'room-not-found';
+    return this.seatedAs(userId, ['gm']) ? 'ok' : 'not-game-master';
+  }
+
+  /** Whether that account is seated in the room now, with one of the roles. */
+  private seatedAs(userId: string, roles: readonly PeerRole[]): boolean {
+    return this.seats().some(({ seat }) => seatedAs(seat, userId, roles));
   }
 
   /**

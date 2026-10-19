@@ -3,6 +3,13 @@ import type { BanList } from '../moderation/bans.js';
 import type { ObjectIndex } from './object-index.js';
 import type { PasswordHash } from './password.js';
 
+/** The roles that may store an asset in a room. */
+export const UPLOADER_ROLES: readonly PeerRole[] = ['gm', 'pl'];
+
+/** Whether the seat is that account's, seated with one of the roles. */
+export const seatedAs = (seat: Seat, userId: string, roles: readonly PeerRole[]): boolean =>
+  seat.account && seat.userId === userId && roles.includes(seat.role);
+
 /**
  * What is kept for each connection, none until its hello is let in. The room server decides where it
  * is kept (the Cloudflare version keeps it with the WebSocket, so it outlasts waking from hibernation).

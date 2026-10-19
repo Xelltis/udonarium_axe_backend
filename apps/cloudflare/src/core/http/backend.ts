@@ -172,6 +172,8 @@ export interface ServerBackend {
     /** Deletes a room. Its GM can delete it; with userId null, the operator, whoever is GM. */
     remove(roomKey: string, userId: string | null): Promise<'deleted' | 'not-found' | 'not-game-master'>;
     canUpload(roomKey: string, userId: string): Promise<'ok' | 'room-not-found' | 'not-a-player'>;
+    /** Whether someone taking an asset out of the room is seated in it now as its GM. */
+    canDiscard(roomKey: string, userId: string): Promise<'ok' | 'room-not-found' | 'not-game-master'>;
     /** Connects to the room's WebSocket. The Origin and the rate limit have been checked. */
     connect(request: Request, roomKey: string): Promise<Response>;
     /** Who is in the room now, for the operator. None for a room that is not there. */

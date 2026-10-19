@@ -74,6 +74,7 @@ export const cloudflareBackend = (env: Env, waitUntil: (work: Promise<unknown>) 
       create: (init) => room(init.roomKey).create(init),
       remove: (roomKey, userId) => room(roomKey).deleteRoom(userId),
       canUpload: (roomKey, userId) => room(roomKey).canUpload(userId),
+      canDiscard: (roomKey, userId) => room(roomKey).canDiscard(userId),
       connect: (request, roomKey) => room(roomKey).fetch(request),
       seats: (roomKey) => room(roomKey).seats(),
       expel: async (roomKey, ban) => {

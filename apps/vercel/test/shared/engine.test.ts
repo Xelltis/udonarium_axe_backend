@@ -48,6 +48,7 @@ describe('a room being deleted', () => {
     expect(seated.of('error').at(-1)?.code).toBe('room-deleted');
     expect(waiting.of('error').at(-1)?.code).toBe('room-not-found');
     expect(host.engine.canUpload('user-seated')).toBe('room-not-found');
+    expect(host.engine.canDiscard('user-seated')).toBe('room-not-found');
   });
 
   it('turns away a hello once the room has gone', () => {

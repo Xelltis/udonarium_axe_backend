@@ -7,6 +7,7 @@ import type { ServerBackend, ServerEnv } from '../../src/core/http/backend.js';
 import { onError } from '../../src/core/http/errors.js';
 import { serverRoutes } from '../../src/core/http/routes/index.js';
 import { noModeration } from '../../src/core/moderation/activity.js';
+import { BanList, NO_PAUSE } from '../../src/core/moderation/bans.js';
 import { ORIGIN, PNG_HEAD, ROOM_KEY, SESSION_SECRET, assetTokenFor, fileOf, sha256Hex } from './helpers.js';
 
 // The routes and the small pieces they use. Checks, with a fake room server, what is hard to bring
@@ -63,6 +64,31 @@ describe('onError', () => {
   });
 });
 
+/** The routes, in front of a fake room server. */
+const appOf = (backend: ServerBackend) => {
+  const app = new Hono<ServerEnv>();
+  app.use('*', async (c, next) => {
+    c.set('config', {
+      allowedOrigins: [ORIGIN],
+      login: {
+        discordClientId: 'id',
+        discordClientSecret: 'secret',
+        sessionSecret: SESSION_SECRET,
+      },
+      admin: null,
+      adminWebhook: null,
+      storageAlertBytes: null,
+      roomStorageLimitBytes: null,
+      contactUrl: null,
+      roomRetentionSeconds: 3600,
+    });
+    c.set('backend', backend);
+    await next();
+  });
+  app.route('/v1', serverRoutes());
+  return app;
+};
+
 describe('putting up an asset', () => {
   it('takes it away again when the room went while it was being kept', async () => {
     const file = fileOf(PNG_HEAD, 64);
@@ -86,28 +112,7 @@ describe('putting up an asset', () => {
         afterStore,
       },
     } as unknown as ServerBackend;
-    const app = new Hono<ServerEnv>();
-    app.use('*', async (c, next) => {
-      c.set('config', {
-        allowedOrigins: [ORIGIN],
-        login: {
-          discordClientId: 'id',
-          discordClientSecret: 'secret',
-          sessionSecret: SESSION_SECRET,
-        },
-        admin: null,
-        adminWebhook: null,
-        storageAlertBytes: null,
-        roomStorageLimitBytes: null,
-        contactUrl: null,
-        roomRetentionSeconds: 3600,
-      });
-      c.set('backend', backend);
-      await next();
-    });
-    app.route('/v1', serverRoutes());
-
-    const res = await app.fetch(
+    const res = await appOf(backend).fetch(
       new Request(`https://backend.example/v1/rooms/${ROOM_KEY}/assets/${id}`, {
         method: 'PUT',
         body: file,
@@ -123,5 +128,45 @@ describe('putting up an asset', () => {
     expect(await res.json()).toEqual({ error: 'room-not-found' });
     expect(discard).toHaveBeenCalledWith(ROOM_KEY, id);
     expect(afterStore).not.toHaveBeenCalled();
+  });
+});
+
+describe('taking an asset out', () => {
+  const backendWith = (limit: () => Promise<boolean>) => {
+    const discard = vi.fn(async () => undefined);
+    const backend = {
+      addressOf: () => '192.0.2.1',
+      limit: vi.fn(limit),
+      // The operator has stopped storing for now.
+      moderation: { ...noModeration, fresh: async () => new BanList([], { ...NO_PAUSE, uploads: true }) },
+      rooms: { canDiscard: async () => 'ok' },
+      assets: { discard },
+    } as unknown as ServerBackend;
+    return { backend, discard };
+  };
+  const deleteIn = (backend: ServerBackend) =>
+    appOf(backend).fetch(
+      new Request(`https://backend.example/v1/rooms/${ROOM_KEY}/assets/${'a'.repeat(64)}`, {
+        method: 'DELETE',
+        headers: { Origin: ORIGIN, Authorization: `Bearer ${assetTokenFor('gm')}` },
+      })
+    );
+
+  it('is counted with storing, and is not stopped while storing is', async () => {
+    const { backend, discard } = backendWith(async () => true);
+
+    expect((await deleteIn(backend)).status).toBe(204);
+    expect(backend.limit).toHaveBeenCalledWith(expect.any(Request), 'upload');
+    expect(discard).toHaveBeenCalledWith(ROOM_KEY, 'a'.repeat(64));
+  });
+
+  it('takes nothing out past the limit', async () => {
+    const { backend, discard } = backendWith(async () => false);
+
+    const res = await deleteIn(backend);
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: 'rate-limited' });
+    expect(discard).not.toHaveBeenCalled();
   });
 });
