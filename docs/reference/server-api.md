@@ -426,7 +426,7 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 | `DELETE` | `/admin/api/bans?kind=…&value=…`                   | BANを解く。`204`、無ければ`404 not-found`                                                                                     |
 | `GET`    | `/admin/api/activity`                              | 記録。新しいものから                                                                                                          |
 | `GET`    | `/admin/api/assets?cursor=…`                       | 置き場所にあるすべての部屋のアセット（部屋の鍵、ID、種類、大きさ、名前、置いた時刻）を1ページずつ。続きがあれば`cursor`を返す |
-| `GET`    | `/admin/api/rooms/:roomKey/assets/:sha256/content` | そのアセットの中身。`Content-Security-Policy: default-src 'none'; sandbox`を付ける                                            |
+| `GET`    | `/admin/api/rooms/:roomKey/assets/:sha256/content` | そのアセットの中身。`Content-Security-Policy: default-src 'none'; sandbox`を付ける。見たことを記録に残す                      |
 | `DELETE` | `/admin/api/rooms/:roomKey/assets/:sha256`         | その部屋からアセットを消す。`204`                                                                                             |
 | `POST`   | `/admin/api/assets/:sha256/block`                  | 二度と置かせないようにし、本文の`rooms`（部屋の鍵の配列、2000件まで）から消す。消せた数と消せなかった数を返す                 |
 | `GET`    | `/admin/api/blocked`                               | 二度と置かせないもののIDの一覧                                                                                                |
