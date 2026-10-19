@@ -28,17 +28,24 @@ export const headersOf = (incoming: IncomingMessage): Headers => {
 const viaHttps = (headers: Headers): boolean => headers.get('x-forwarded-proto') === 'https';
 
 /**
- * The request with the URL the browser sent it to. Vercel ends HTTPS in front and hands the request
- * on over plain HTTP, so @hono/node-server makes an http:// URL. The login's callback URL is made
- * from it, and Discord takes only the https:// one registered.
+ * The request as the browser sent it: to the URL it used, and from where it came. Vercel ends HTTPS in
+ * front and hands the request on over plain HTTP, so @hono/node-server makes an http:// URL. The
+ * login's callback URL is made from it, and Discord takes only the https:// one registered.
+ * Vercel names the sender in x-real-ip. When nothing in front names one (the local server), the
+ * connecting socket's address goes in, as headersOf does for a WebSocket, so that the limits, the
+ * operator's bans and the record see who sent it.
  */
-export const asSent = (request: Request): Request => {
-  if (!viaHttps(request.headers)) return request;
+export const asSent = (request: Request, address?: string): Request => {
+  const https = viaHttps(request.headers);
+  const unnamed = address !== undefined && !request.headers.has('x-real-ip');
+  if (!https && !unnamed) return request;
   const url = new URL(request.url);
-  url.protocol = 'https:';
+  if (https) url.protocol = 'https:';
+  const headers = new Headers(request.headers);
+  if (unnamed) headers.set('x-real-ip', address);
   return new Request(url, {
     method: request.method,
-    headers: request.headers,
+    headers,
     body: request.body,
     signal: request.signal,
     duplex: 'half',
@@ -60,7 +67,9 @@ const answer = async (socket: Duplex, response: Response): Promise<void> => {
  * and the count, they are handed to ws through upgrades.
  */
 export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
-  const server = createAdaptorServer({ fetch: (request) => fetch(asSent(request)) }) as Server;
+  const server = createAdaptorServer({
+    fetch: (request, { incoming }) => fetch(asSent(request, incoming.socket.remoteAddress)),
+  }) as Server;
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_FRAME_BYTES,

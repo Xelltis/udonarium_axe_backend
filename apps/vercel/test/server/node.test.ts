@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
 import type { Upgrades } from '../../src/server/backend.js';
-import { createServer, headersOf } from '../../src/server/node.js';
+import { asSent, createServer, headersOf } from '../../src/server/node.js';
 
 const servers: { close: () => void }[] = [];
 
@@ -55,6 +55,19 @@ describe('the Node server', () => {
 
     expect(await res.text()).toBe('hello');
     expect(seen).toEqual([`http://127.0.0.1:${port}/`]);
+  });
+
+  it('names the sender by the socket it came on when nothing in front named one, and keeps one named', async () => {
+    const seen: (string | null)[] = [];
+    const port = await listen((request) => {
+      seen.push(request.headers.get('x-real-ip'));
+      return new Response('hello');
+    });
+
+    await fetch(`http://127.0.0.1:${port}/`);
+    await fetch(`http://127.0.0.1:${port}/`, { headers: { 'x-real-ip': '198.51.100.1' } });
+
+    expect(seen).toEqual(['127.0.0.1', '198.51.100.1']);
   });
 
   it('hands the app the https URL the browser used when a proxy in front ended HTTPS', async () => {
@@ -149,6 +162,29 @@ describe('the Node server', () => {
 
     expect(await tryUpgrade(port)).toMatchObject({ open: false, error: expect.any(String) });
     expect(error).toHaveBeenCalledWith('Upgrade failed:', expect.any(Error));
+  });
+});
+
+describe('asSent', () => {
+  it('keeps the sender a proxy in front named when it puts the URL right', () => {
+    const sent = asSent(
+      new Request('http://backend.example/v1/rooms', {
+        headers: { 'x-forwarded-proto': 'https', 'x-real-ip': '198.51.100.1' },
+      }),
+      '10.0.0.1'
+    );
+
+    expect(sent.url).toBe('https://backend.example/v1/rooms');
+    expect(sent.headers.get('x-real-ip')).toBe('198.51.100.1');
+  });
+
+  it('leaves a request as it is when there is nothing to put right', () => {
+    const request = new Request('http://backend.example/v1/rooms');
+
+    expect(asSent(request)).toBe(request);
+    expect(
+      asSent(new Request(request, { headers: { 'x-real-ip': '198.51.100.1' } }), '10.0.0.1').headers.get('x-real-ip')
+    ).toBe('198.51.100.1');
   });
 });
 
