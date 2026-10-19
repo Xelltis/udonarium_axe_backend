@@ -317,7 +317,8 @@ export interface AssetTokenMessage {
  *   ACCOUNT_USER_ID_PREFIX) without a token
  * - banned: the operator of the room server banned the sender or the account, at the hello or
  *   while in the room. Do not reconnect
- * - room-deleted: a GM deleted the room. The room is gone, so do not reconnect
+ * - room-deleted: the room's GM, or the operator of the room server, deleted the room. The room is
+ *   gone, so do not reconnect
  * - idle: no active came for IDLE_SECONDS (the page was left alone), or the hello's idleMs was that
  *   long. Do not reconnect on your own; reconnect once the person asks to
  */

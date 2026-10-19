@@ -227,6 +227,7 @@ SVGのときだけ、`Content-Security-Policy: default-src 'none'; img-src data:
 
 `If-None-Match`は、弱いETag（`W/"…"`）、複数のETagの並び、`*`も受け付けます。
 置かれていないものには、条件にかかわらず`404`を返します。
+ただし、運営する人が置かせないようにしたもの（→ [管理画面とBAN](/operate/admin#アップロード)）には、`451 blocked`を返します。HEADも同じです。
 
 #### キャッシュ（Cloudflare版）
 
