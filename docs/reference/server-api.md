@@ -505,6 +505,7 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 | 411  | `length-required`      | `PUT`に`Content-Length`がない                                                                                                                            |
 | 412  | `precondition-failed`  | `GET`の`If-Match`か`If-Unmodified-Since`に合わない                                                                                                       |
 | 413  | `too-large`            | 種類ごとの上限か、`maxPutBytes`を超えている                                                                                                              |
+| 413  | `room-storage-full`    | 置くと、部屋の画像と音声の合計が`ROOM_STORAGE_LIMIT_MB`を超える（→ [設定項目](/server/configuration#room-storage-limit-mb)）                             |
 | 415  | `unsupported-type`     | 受け付ける画像でも音声でもない                                                                                                                           |
 | 426  | `upgrade-required`     | 部屋に入るURLを、WebSocketでなく開いた                                                                                                                   |
 | 429  | `rate-limited`         | 送信元からの、アップロード、読み出し、部屋を作る・削除する・入る、ログインのどれかが上限を超えた                                                         |

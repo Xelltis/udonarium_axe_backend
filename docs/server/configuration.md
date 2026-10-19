@@ -12,6 +12,7 @@
 | `DISCORD_CLIENT_SECRET`       | ※    | —      | 同じアプリのClient Secret                                                                             |
 | `SESSION_SECRET`              | ※    | —      | アクセストークン、招待、部屋のアセットのトークンに署名する鍵。32文字以上の乱数                        |
 | `ROOM_RETENTION_HOURS`        |      | `24`   | 最後の1人が抜けてから部屋を消すまでの時間（1以上の整数）                                              |
+| `ROOM_STORAGE_LIMIT_MB`       |      | —      | 1つの部屋に置ける画像と音声の合計（MB）。入れなければ、合計の上限は無い                               |
 | `ADMIN_DISCORD_IDS`           |      | —      | 管理画面（`/admin`）に入れる運営する人のDiscordのユーザーID。カンマ区切り。入れなければ管理画面は無い |
 | `ADMIN_PASSKEY_RESET`         |      | —      | パスキーをすべて失くした運営する人のDiscordのユーザーID。入れたあいだだけ、新しいパスキーを登録できる |
 | `ADMIN_WEBHOOK_URL`           |      | —      | 運営する人への知らせを送るDiscordのWebhookのURL。入れなければ知らせは送らない                         |
@@ -63,6 +64,17 @@ DiscordのアプリのRedirectsに、`/admin/login/callback`も足してくだ�
 回数の上限を超えた送信元や、管理画面へのログインがあったときに、知らせを送るDiscordのWebhookのURLです（→ [Discordで知らせを受ける](/operate/admin#discordで知らせを受ける)）。
 `https://`で始まらないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
 
+### `ROOM_STORAGE_LIMIT_MB`
+
+1つの部屋に置ける画像と音声の合計を、MB（100万バイト）の整数で書きます（例：`500`）。
+置こうとしたものを足すとこれを超えるときは、`413 room-storage-full`で断ります（→ [部屋のサーバーのAPI](/reference/server-api#エラー)）。
+アカウントや回線を替えながら1つの部屋に置き続ける使われかたで、置き場所の費用が積み上がるのを抑えます。
+1つ1つの画像と音声の大きさの上限（画像2MiB、音声10MiB）とは別にかかります。
+
+- 入れたときは、置くたびにその部屋の画像と音声の一覧を読んで合計します。Cloudflare版ではR2の一覧を読む回数（Class A）が、置くたびに1回ほど増えます。
+- すでに上限を超えている部屋の画像と音声は消しません。新しく置くものだけを断ります。
+- 0より大きい整数でないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
+
 ### `ADMIN_STORAGE_ALERT_GB`
 
 部屋に置かれた画像と音声の合計が、この量を超えたら知らせます（→ [Discordで知らせを受ける](/operate/admin#discordで知らせを受ける)）。
@@ -82,10 +94,10 @@ Cloudflare版の既定値の`24`は、`wrangler.jsonc`の`vars`に書いてあ�
 
 Cloudflare版の設定は、2つの場所に分かれています。
 
-| 設定                                                                                                                                                      | 置き場所                 | 変えかた                                         |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
-| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                                                     | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
-| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL`、`ADMIN_STORAGE_ALERT_GB` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
+| 設定                                                                                                                                                                               | 置き場所                 | 変えかた                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
+| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                                                                              | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
+| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL`、`ADMIN_STORAGE_ALERT_GB`、`ROOM_STORAGE_LIMIT_MB` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
 
 `wrangler.jsonc`に書いた値は、デプロイのたびにWorkerの設定を上書きします。
 Deployボタンで置いたときは、複製したリポジトリに変更が入るたびにデプロイし直すので、`ACCESS_CONTROL_ALLOW_ORIGIN`は`wrangler.jsonc`の側で書き換えます（→ [Cloudflareに置く](/server/cloudflare#_8-originの設定を確かめる)）。
