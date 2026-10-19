@@ -370,6 +370,14 @@ BANしたときは、人のいる部屋（一覧の人数が1以上）をすべ�
 Vercel版で、部屋を受け持つのがほかのインスタンスのときは、受け持ちだけが聞くチャンネル（`r:<key>:own`）に`expel`を送ります。
 受け持つインスタンスが無ければ、部屋にはだれもいません。
 
+### 通報
+
+部屋の席は、部屋のアセットのトークンで`POST /v1/rooms/:roomKey/reports`を呼んで通報します（`src/core/http/routes/reports.ts`）。見学も通報できます。
+通報には、送信元のIPアドレス、トークンの`sub`から分かるDiscordのユーザーID、`uid`と`role`を、通報した人として付けて残します（`Report`）。虚偽の通報を見分けて、BANできるようにするためです。
+置き場所は、Cloudflare版は`ModerationDurableObject`の`reports`の表（1件をJSONで）、Vercel版は`mod:reports`のHASHで、90日（`REPORT_MS`）と1000件（`MAX_REPORTS`）まで残します。
+通報があると、知らせ（`report`、10分に1回まで）を送ります。知らせには通報した人のことは書きません。
+管理画面は`GET /admin/api/reports`で読み、`PUT /admin/api/reports/:id`で状態（`open`・`done`・`dismissed`）を変えます。変えた人と時刻を通報に残し、管理の記録にも`report <状態> <id>`を書きます。
+
 ### 記録
 
 ログイン、部屋を作った、新しく置いたアセット、回数の上限を超えた送信元、BANで断った送信元、管理画面での操作を、`ModerationStore.note`で残します。

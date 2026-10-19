@@ -19,6 +19,7 @@
 | `GET`     | `/v1/rooms/:roomKey/assets`                          | 部屋に置いてあるアセットの一覧                                                      |
 | `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads`          | 置き場所へ直接上げる先を受け取る（Vercel版だけ）                                    |
 | `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads/complete` | 直接上げ終えたことを知らせる（Vercel版だけ）                                        |
+| `POST`    | `/v1/rooms/:roomKey/reports`                         | 運営する人に通報する（部屋の席ならだれでも）                                        |
 | `GET`     | `/v1/auth/config`                                    | ログインに使える提供元（`{"providers":["discord"]}`）                               |
 | `GET`     | `/v1/login/discord`                                  | ログインを始める（ページとして開く）                                                |
 | `GET`     | `/v1/login/discord/callback`                         | Discordから戻ってくる（Discordのアプリに登録するURL）                               |
@@ -332,6 +333,30 @@ MP4やMOVの動画は受け付けません。
 - 上げていないうちに知らせると`404 not-found`です。上げたものは、確かめたあと（置けても置けなくても）消します。
 - 直接上げる流れの無い部屋のサーバーでは、どちらのパスも`404 not-found`です。
 
+## 通報
+
+### `POST /v1/rooms/:roomKey/reports`
+
+部屋にいる人が、部屋の画像か音声、または部屋そのものを、運営する人に知らせます。
+部屋のアセットのトークン（→ [部屋のアセットのトークン](#部屋のアセットのトークン)）で呼び、GM・PL・見学のだれでも通報できます。
+
+```json
+{ "target": "asset", "assetId": "0f0f…（SHA-256）", "reason": "他人の描いた絵を、作者に断らずに置いています" }
+```
+
+| フィールド | 型     | 内容                                       |
+| ---------- | ------ | ------------------------------------------ |
+| `target`   | 文字列 | `asset`（画像か音声）か`room`（部屋）      |
+| `assetId`  | 文字列 | `asset`のときだけ。その画像か音声のSHA-256 |
+| `reason`   | 文字列 | 理由。前後の空白を除いて1〜500文字         |
+
+`201`で`{"id":"…"}`を返します。
+部屋のサーバーは、通報した人（送信元のIPアドレス、ログインしていればDiscordのユーザーID、部屋のユーザーIDと役割）も一緒に残します。虚偽の通報をくり返す人を見分けて、BANできるようにするためです（→ [管理画面とBAN](/operate/admin#通報)）。
+
+- 形が違えば`400 invalid-request`、トークンが無いか違う部屋のものなら`401 asset-token-required`を返します。
+- 送信元ごとに、部屋を作る・入ると同じ回数の上限（1分に30回）に数えます。超えると`429 rate-limited`です。
+- BANされたアカウントのトークンには`403 banned`を返します。
+
 ## ログインとアカウント
 
 ログインの流れと、トークンの扱いは、開発者向けの[部屋のサーバーの中の動き](https://github.com/Xelltis/udonarium_axe_backend/blob/main/development/room-server.md#ログイン)にあります。
@@ -434,6 +459,8 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 | `POST`   | `/admin/api/assets/:sha256/block`                  | 二度と置かせないようにし、本文の`rooms`（部屋の鍵の配列、2000件まで）から消す。消せた数と消せなかった数を返す                 |
 | `GET`    | `/admin/api/blocked`                               | 二度と置かせないもののIDの一覧                                                                                                |
 | `DELETE` | `/admin/api/blocked/:sha256`                       | また置けるようにする。`204`                                                                                                   |
+| `GET`    | `/admin/api/reports`                               | 参加者からの通報。新しいものから。通報した人も含む                                                                            |
+| `PUT`    | `/admin/api/reports/:id`                           | 通報の状態を変える。本文は`{"status":"done"}`の形（`open`・`done`・`dismissed`）                                              |
 | `GET`    | `/admin/api/pause`                                 | 緊急停止で止めているもの                                                                                                      |
 | `PUT`    | `/admin/api/pause`                                 | 緊急停止で止めるものを決める。本文は`{"rooms":true,"uploads":false,"logins":false}`の形                                       |
 | `GET`    | `/admin/api/tighten`                               | 回数の上限をどれだけ締めているか                                                                                              |
