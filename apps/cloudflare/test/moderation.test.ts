@@ -16,6 +16,8 @@ import {
 import type { Activity } from '../src/core/moderation/activity';
 import type { Passkey } from '../src/core/admin/webauthn';
 import type { Ban } from '../src/core/moderation/bans';
+import { MAX_REPORTS, REPORT_MS } from '../src/core/moderation/reports';
+import type { Report } from '../src/core/moderation/reports';
 import { scheduled } from '../src/index';
 import { MODERATION_NAME } from '../src/moderation/store';
 import type { ModerationDurableObject } from '../src/moderation/store';
@@ -43,6 +45,18 @@ const banOf = (value: string, expiresAt: number | null): Ban => ({
 
 const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
 const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
+const reportOf = (id: string, at: number): Report => ({
+  id,
+  at,
+  roomKey: '0'.repeat(32),
+  target: 'room',
+  assetId: null,
+  reason: 'x',
+  reporter: { address: '192.0.2.1', discordId: null, userId: 'u', role: 'pl' },
+  status: 'open',
+  handledAt: null,
+  handledBy: null,
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -154,6 +168,28 @@ describe('ModerationDurableObject', () => {
     expect((await store.state()).pause).toEqual({ rooms: true, uploads: false, logins: true, since: 7 });
     await store.setPause({ rooms: false, uploads: false, logins: false, since: null });
     expect((await store.state()).pause).toEqual({ rooms: false, uploads: false, logins: false, since: null });
+  });
+
+  it('keeps reports newest first, lets the oldest go past MAX_REPORTS or REPORT_MS, and sets what came of one', async () => {
+    const store = freshStore();
+    const now = Date.now();
+    await runInDurableObject(store, (instance: ModerationDurableObject) => {
+      instance.putReport(reportOf('too-old', now - REPORT_MS - 1));
+      for (let i = 0; i <= MAX_REPORTS; i++)
+        instance.putReport(reportOf(`r${String(i).padStart(4, '0')}`, now - MAX_REPORTS + i));
+    });
+    const kept = await store.reports();
+
+    expect(kept).toHaveLength(MAX_REPORTS);
+    expect(kept[0].id).toBe(`r${String(MAX_REPORTS).padStart(4, '0')}`);
+    expect(kept.some((report) => report.id === 'too-old' || report.id === 'r0000')).toBe(false);
+    expect(await store.setReportStatus('missing', 'done', '1', 5)).toBeNull();
+    expect(await store.setReportStatus('r0001', 'dismissed', '1', 5)).toMatchObject({
+      status: 'dismissed',
+      handledBy: '1',
+      handledAt: 5,
+    });
+    expect((await store.reports()).find((report) => report.id === 'r0001')?.status).toBe('dismissed');
   });
 
   it('keeps how tight the limits are, and when that began, until they go back', async () => {

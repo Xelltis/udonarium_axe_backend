@@ -8,6 +8,7 @@ import { fail } from '../errors.js';
 import { accountBanOf, addressBanOf, note, pausedNow } from '../moderation.js';
 import { bearerOf } from '../request.js';
 import { completeUpload, getRoomAsset, listRoomAssets, putRoomAsset, requestUpload } from './assets.js';
+import { postReport } from './reports.js';
 
 /** A room's key: a 128-bit random number written in lowercase hex. */
 export const ROOM_KEY = /^[0-9a-f]{32}$/;
@@ -121,6 +122,11 @@ roomRoutes.post('/:roomKey/assets/:id/uploads', (c) =>
 );
 roomRoutes.post('/:roomKey/assets/:id/uploads/complete', (c) =>
   ROOM_KEY.test(c.req.param('roomKey')) ? completeUpload(c) : fail(c, 400, 'invalid-id')
+);
+
+/** A report to the operator, from a seat of the room. */
+roomRoutes.post('/:roomKey/reports', (c) =>
+  ROOM_KEY.test(c.req.param('roomKey')) ? postReport(c) : fail(c, 400, 'invalid-id')
 );
 
 roomRoutes.get('/:roomKey/ws', async (c) => {

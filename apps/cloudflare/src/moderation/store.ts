@@ -12,6 +12,8 @@ import type { Passkey, PasskeyAlgorithm } from '../core/admin/webauthn';
 import type { AlertKind } from '../core/moderation/alerts';
 import { NO_TIGHTEN } from '../core/moderation/bans';
 import type { Ban, BanKind, ModerationState, Pause, Tighten, TightenWeight } from '../core/moderation/bans';
+import { MAX_REPORTS, REPORT_MS } from '../core/moderation/reports';
+import type { Report, ReportStatus } from '../core/moderation/reports';
 import type { StorageUsage } from '../core/moderation/storage';
 
 /** The name of the Durable Object that keeps the bans and what happened. There is only one for each Worker. */
@@ -113,6 +115,12 @@ export class ModerationDurableObject extends DurableObject<Env> {
     sql.exec(`CREATE TABLE IF NOT EXISTS alerts (
       kind TEXT PRIMARY KEY,
       sent_at INTEGER NOT NULL
+    )`);
+    // Reports from the rooms' seats, each kept whole as JSON.
+    sql.exec(`CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY,
+      at INTEGER NOT NULL,
+      body TEXT NOT NULL
     )`);
     // What happened, and apart from it the operators' own steps, kept longer.
     for (const table of ['activity', 'operator_activity']) {
@@ -286,6 +294,31 @@ export class ModerationDurableObject extends DurableObject<Env> {
     }
     if (tighten.since === null) sql.exec("DELETE FROM admin_state WHERE name = 'tighten_since'");
     else sql.exec("INSERT OR REPLACE INTO admin_state (name, value) VALUES ('tighten_since', ?)", tighten.since);
+  }
+
+  /** Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. */
+  putReport(report: Report): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec('INSERT INTO reports (id, at, body) VALUES (?, ?, ?)', report.id, report.at, JSON.stringify(report));
+    sql.exec('DELETE FROM reports WHERE at < ?', Date.now() - REPORT_MS);
+    sql.exec('DELETE FROM reports WHERE id NOT IN (SELECT id FROM reports ORDER BY at DESC, id LIMIT ?)', MAX_REPORTS);
+  }
+
+  /** The reports kept, newest first. */
+  reports(): Report[] {
+    return this.ctx.storage.sql
+      .exec<{ body: string }>('SELECT body FROM reports WHERE at >= ? ORDER BY at DESC, id', Date.now() - REPORT_MS)
+      .toArray()
+      .map((row) => JSON.parse(row.body) as Report);
+  }
+
+  setReportStatus(id: string, status: ReportStatus, by: string, at: number): Report | null {
+    const sql = this.ctx.storage.sql;
+    const row = sql.exec<{ body: string }>('SELECT body FROM reports WHERE id = ?', id).toArray()[0];
+    if (!row) return null;
+    const report: Report = { ...(JSON.parse(row.body) as Report), status, handledAt: at, handledBy: by };
+    sql.exec('UPDATE reports SET body = ? WHERE id = ?', JSON.stringify(report), id);
+    return report;
   }
 
   /** The store's size as last counted. Kept in admin_state, as storage_bytes and the rest. */

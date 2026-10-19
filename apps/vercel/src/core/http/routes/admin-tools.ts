@@ -5,8 +5,10 @@ import { ASSET_ID } from '../../assets/keys.js';
 import type { AdminConfig } from '../../config/admin.js';
 import { TIGHTEN_WEIGHTS } from '../../moderation/bans.js';
 import type { Pause, Tighten } from '../../moderation/bans.js';
+import { REPORT_STATUSES } from '../../moderation/reports.js';
+import type { Report } from '../../moderation/reports.js';
 import type { StorageUsage } from '../../moderation/storage.js';
-import { recentPasskeyRequired } from '../admin-session.js';
+import { recentPasskeyRequired, sessionOf } from '../admin-session.js';
 import type { ServerEnv, StoredRoomAsset } from '../backend.js';
 import { fail } from '../errors.js';
 import { noteAdmin } from './admin-auth.js';
@@ -26,6 +28,11 @@ const MAX_ROOMS_PER_TAKEDOWN = 2000;
 const DISCORD_ID = /^\d{1,20}$/;
 
 const pauseSchema = object({ rooms: boolean(), uploads: boolean(), logins: boolean() });
+
+const reportStatusSchema = object({ status: picklist(REPORT_STATUSES) });
+
+/** A report's id (a UUID). */
+const REPORT_ID = /^[0-9a-f-]{36}$/;
 
 const weight = picklist(TIGHTEN_WEIGHTS);
 const tightenSchema = object({ upload: weight, read: weight, room: weight, auth: weight });
@@ -153,6 +160,25 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
     await c.var.backend.moderation.setTighten(tighten);
     noteAdmin(c, tight.length > 0 ? `tighten ${tight.map((kind) => `${kind}=${weights[kind]}`).join(',')}` : 'loosen');
     return c.json<{ tighten: Tighten }>({ tighten });
+  });
+
+  // ---- Reports from the rooms' seats ----
+
+  admin.get('/api/reports', async (c) =>
+    c.json<{ reports: Report[] }>({ reports: await c.var.backend.moderation.reports() })
+  );
+
+  /** Sets what the operator made of a report (done, dismissed, or open again), and who did. */
+  admin.put('/api/reports/:id', async (c) => {
+    const id = c.req.param('id');
+    if (!REPORT_ID.test(id)) return fail(c, 400, 'invalid-id');
+    const parsed = safeParse(reportStatusSchema, await c.req.json().catch(() => null));
+    if (!parsed.success) return fail(c, 400, 'invalid-request');
+    const { status } = parsed.output;
+    const report = await c.var.backend.moderation.setReportStatus(id, status, sessionOf(c).sub, Date.now());
+    if (!report) return fail(c, 404, 'not-found');
+    noteAdmin(c, `report ${status} ${id}`, { roomKey: report.roomKey });
+    return c.json<{ report: Report }>({ report });
   });
 
   // ---- Accounts ----

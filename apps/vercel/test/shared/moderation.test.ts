@@ -372,6 +372,9 @@ describe('moderationOf', () => {
     claimAlert: async () => true,
     storageUsage: async () => null,
     putStorageUsage: async () => undefined,
+    putReport: async () => undefined,
+    reports: async () => [],
+    setReportStatus: async () => null,
     ...noModeration.admin,
     ...overrides,
   });
@@ -433,6 +436,52 @@ describe('moderationOf', () => {
 
     expect(alert.mock.calls.map(([kind]) => kind)).toEqual(['limited', 'refused']);
     expect(error).toHaveBeenCalledWith('Could not send the alert:', expect.any(Error));
+  });
+
+  it('keeps a report, and tells of it after the response where alerts are sent, logging an alert that fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const kept = {
+      id: 'r',
+      at: 1,
+      roomKey: '0'.repeat(32),
+      target: 'room',
+      assetId: null,
+      reason: 'x',
+      reporter: { address: '192.0.2.1', discordId: null, userId: 'u', role: 'pl' },
+      status: 'open',
+      handledAt: null,
+      handledBy: null,
+    } as const;
+    const putReport = vi.fn(async () => undefined);
+    const store = storeOf({ putReport, reports: async () => [kept], setReportStatus: async () => kept });
+    const deferredWork: Promise<unknown>[] = [];
+    const alert = vi.fn(async () => {
+      throw new Error('down');
+    });
+    const withAlerts = moderationOf(
+      store,
+      banCache(async () => stateOf([])),
+      (work) => deferredWork.push(work),
+      alert
+    );
+    const without = moderationOf(
+      store,
+      banCache(async () => stateOf([])),
+      () => undefined
+    );
+
+    await withAlerts.report(kept);
+    await without.report(kept);
+    await Promise.all(deferredWork);
+
+    expect(putReport).toHaveBeenCalledTimes(2);
+    expect(alert).toHaveBeenCalledExactlyOnceWith('report', {});
+    expect(error).toHaveBeenCalledWith('Could not send the alert:', expect.any(Error));
+    expect(await withAlerts.reports()).toEqual([kept]);
+    expect(await withAlerts.setReportStatus('r', 'done', '1', 2)).toEqual(kept);
+    await noModeration.report(kept);
+    expect(await noModeration.reports()).toEqual([]);
+    expect(await noModeration.setReportStatus('r', 'done', '1', 2)).toBeNull();
   });
 
   it('keeps the store’s size, and tells of it only where alerts are sent', async () => {
@@ -517,7 +566,9 @@ describe('alerts', () => {
     expect(contents[1]).toContain('運営する人がログインしました');
     expect(contents[2]).toContain('BANした');
     expect(contents[3]).toContain('断られた');
-    expect(claim.mock.calls.map(([kind]) => kind)).toEqual(['refused', 'admin-denied']);
+    await send('report', {});
+    expect(JSON.parse((sent.mock.calls[4][1] as RequestInit).body as string).content).toContain('通報がありました');
+    expect(claim.mock.calls.map(([kind]) => kind)).toEqual(['refused', 'admin-denied', 'report']);
   });
 
   it('say how full the store is, past what amount, once a day at most', async () => {

@@ -439,6 +439,32 @@ export interface RoomAssetListResponse {
   assets: RoomAsset[];
 }
 
+/** What a report to the room server's operator is about: a picture or sound in the room, or the room. */
+export const REPORT_TARGETS = ['asset', 'room'] as const;
+export type ReportTarget = (typeof REPORT_TARGETS)[number];
+
+/** The longest reason a report may give, in characters. */
+export const MAX_REPORT_REASON_LENGTH = 500;
+
+/**
+ * The body of POST /v1/rooms/:roomKey/reports: a seat of the room (any role) tells the room server's
+ * operator of something in it, with the room's asset token. The server keeps who reported along
+ * with it, so that false reports can be told apart. 201 with ReportResponse; 400 invalid-request for
+ * a body in the wrong form.
+ */
+export interface ReportRequest {
+  target: ReportTarget;
+  /** The SHA-256 of the picture or sound (lowercase hex), for target asset. */
+  assetId?: string;
+  /** Why, in the reporter's words: 1 to MAX_REPORT_REASON_LENGTH characters. */
+  reason: string;
+}
+
+export interface ReportResponse {
+  /** The report's id, to quote when asking about it. */
+  id: string;
+}
+
 /**
  * The answer to PUT /v1/rooms/:roomKey/assets/:sha256 and POST …/uploads/complete. 201 when it was
  * stored, and 200 when it was already there.

@@ -215,8 +215,10 @@ table.settings td { overflow-wrap: anywhere; }
 #account-id { width: 24ch; max-width: 100%; }
 .key { display: inline-block; width: 16ch; overflow-wrap: anywhere; word-break: break-all; vertical-align: top; }
 .long { overflow-wrap: anywhere; word-break: break-all; }
-table.facts th { width: 12em; color: var(--muted); font-weight: 600; }
-#asset-facts, #room-meta { margin-bottom: 12px; }
+table.facts th { width: 12em; color: var(--muted); font-weight: 600; vertical-align: top; }
+#asset-facts, #room-meta, #report-facts { margin-bottom: 12px; }
+.reason { white-space: pre-wrap; overflow-wrap: anywhere; }
+td.reason { min-width: 12em; }
 td.wrap { min-width: 6em; overflow-wrap: anywhere; }
 th { vertical-align: bottom; }
 td.num.error { color: var(--danger); }
@@ -247,7 +249,10 @@ const SCRIPT = `
   var uploadsShown = 200;
   /** The object URL of the asset being looked at, let go when the preview closes. */
   var previewUrl = null;
-  var data = { rooms: [], bans: [], activity: [] };
+  var data = { rooms: [], bans: [], activity: [], reports: [] };
+  var REPORT_STATUS_LABELS = { open: '未対応', done: '対応済み', dismissed: '却下' };
+  var REPORT_TARGET_LABELS = { asset: '画像か音声', room: '部屋' };
+  var ROLE_NAMES = { gm: 'GM', pl: 'PL', guest: '見学' };
   var banIndex = { ranges: [], accounts: {} };
   var loading = false;
   var timer = null;
@@ -273,9 +278,9 @@ const SCRIPT = `
     warning: { icon: '!', label: '注意' },
     critical: { icon: '!', label: '要対応' }
   };
-  var TABS = ['overview', 'rooms', 'uploads', 'activity', 'bans', 'accounts', 'security', 'settings'];
+  var TABS = ['overview', 'rooms', 'uploads', 'reports', 'activity', 'bans', 'accounts', 'security', 'settings'];
   var TITLES = {
-    overview: '概要', rooms: '部屋', uploads: 'アップロード', activity: '記録', bans: 'BAN',
+    overview: '概要', rooms: '部屋', uploads: 'アップロード', reports: '通報', activity: '記録', bans: 'BAN',
     accounts: 'アカウント', security: '安全', settings: '設定'
   };
   /** How many pages of the store the uploads tab reads at most. */
@@ -795,6 +800,10 @@ const SCRIPT = `
     if (limited > 0) {
       items.push(['warning', '回数の上限を超えた送信元が' + count(limited) + '件あります。下の「目立つ送信元」で確かめてください。']);
     }
+    var reports = openReports().length;
+    if (reports > 0) {
+      items.push(['warning', '未対応の通報が' + count(reports) + '件あります。「通報」で確かめてください。']);
+    }
     if (storageOver()) {
       items.push(['critical', '画像と音声の置き場所が、知らせる量（' + gb(storageState.limitBytes) + '）を超えています。' + time(storageState.usage.at) +
         'に数えたときに' + gb(storageState.usage.bytes) + 'でした。「アップロード」の「場所を多く使っている部屋」で確かめてください。']);
@@ -1296,6 +1305,9 @@ const SCRIPT = `
     'block asset': '二度と置かせないようにした',
     'unblock asset': 'また置けるようにした',
     'delete account': 'アカウントを削除した',
+    'report done': '通報を対応済みにした',
+    'report dismissed': '通報を却下した',
+    'report open': '通報を未対応に戻した',
     pause: '緊急停止した',
     resume: '緊急停止をやめ、すべて再開した',
     loosen: '締めるのをやめ、元に戻した',
@@ -1345,6 +1357,7 @@ const SCRIPT = `
       if (/ asset$/.test(two)) { facts.targetKind = 'SHA-256'; facts.target = rest; }
       if (/ passkey$/.test(two)) { facts.targetKind = 'パスキー'; facts.target = rest; }
       if (two === 'delete account') { facts.targetKind = 'Discord ID'; facts.target = rest; }
+      if (words[0] === 'report') { facts.targetKind = '通報'; facts.target = rest; }
     } else if (words[0] === 'ban' || words[0] === 'unban') {
       facts.action = ADMIN_ACTIONS[words[0]];
       facts.targetKind = BAN_KINDS[words[1]] || words[1];
@@ -1547,6 +1560,8 @@ const SCRIPT = `
     var warnings = alertsOf(tally(period), period).length;
     $('menu-rooms').textContent = count(data.rooms.length);
     $('menu-bans').textContent = count(banIndex.ranges.length + Object.keys(banIndex.accounts).length);
+    var open = openReports().length;
+    $('menu-reports').textContent = open ? count(open) : '';
     $('menu-flag').hidden = warnings === 0;
     $('menu-flag').title = warnings + '件の注意があります';
   }
@@ -1558,6 +1573,7 @@ const SCRIPT = `
     renderRooms();
     renderActivity();
     renderBans();
+    renderReports();
   }
 
   function setMenu(open) {
@@ -1593,9 +1609,9 @@ const SCRIPT = `
     $('refresh').disabled = true;
     $('app').classList.add('loading');
     return Promise.all([api('GET', 'rooms'), api('GET', 'activity'), api('GET', 'bans'), api('GET', 'pause'), api('GET', 'storage'),
-      api('GET', 'tighten')])
+      api('GET', 'tighten'), api('GET', 'reports')])
       .then(function (results) {
-        data = { rooms: results[0].rooms, activity: results[1].activity, bans: results[2].bans };
+        data = { rooms: results[0].rooms, activity: results[1].activity, bans: results[2].bans, reports: results[6].reports };
         pauseState = results[3].pause;
         storageState = results[4];
         tightenState = results[5].tighten;
@@ -1622,7 +1638,7 @@ const SCRIPT = `
     $('auto').checked = on;
     if (timer !== null) clearInterval(timer);
     timer = on ? setInterval(function () {
-      if (!document.hidden && !$('app').hidden && !$('room-dialog').open && !$('asset-dialog').open) load();
+      if (!document.hidden && !$('app').hidden && !$('room-dialog').open && !$('asset-dialog').open && !$('report-dialog').open) load();
     }, REFRESH_MS) : null;
   }
 
@@ -1923,6 +1939,92 @@ const SCRIPT = `
       }));
   }
 
+  // ---- Reports from the rooms' seats ----
+
+  function openReports() { return data.reports.filter(function (report) { return report.status === 'open'; }); }
+
+  /** How many reports the same reporter made (by Discord account, or by address for a guest). */
+  function reportsBy(report) {
+    return data.reports.filter(function (other) {
+      return report.reporter.discordId ? other.reporter.discordId === report.reporter.discordId : other.reporter.address === report.reporter.address;
+    }).length;
+  }
+
+  function renderReports() {
+    var shown = $('reports-status').value === 'open' ? openReports() : data.reports;
+    $('reports-summary').textContent = count(shown.length) + '件（90日・1000件まで残しています）';
+    var body = $('reports-body');
+    if (shown.length === 0) { body.replaceChildren(h('tr', null, h('td', { colspan: 9, className: 'empty' }, '通報はありません。'))); return; }
+    body.replaceChildren.apply(body, shown.map(function (report) {
+      return h('tr', null,
+        h('td', null, time(report.at)),
+        h('td', { className: 'nowrap' }, h('span', { className: 'chip' + (report.status === 'open' ? ' critical' : '') }, REPORT_STATUS_LABELS[report.status])),
+        h('td', { className: 'nowrap' }, REPORT_TARGET_LABELS[report.target]),
+        h('td', { className: 'wrap' }, roomName(report.roomKey) || h('span', { className: 'muted' }, '（一覧にない部屋）')),
+        h('td', { className: 'wrap reason' }, report.reason),
+        h('td', null, mono(report.reporter.discordId)),
+        h('td', null, mono(report.reporter.address)),
+        h('td', { className: 'num' }, count(reportsBy(report))),
+        h('td', { className: 'actions' }, h('button', { type: 'button', onclick: function () { showReport(report); } }, '詳しく')));
+    }));
+  }
+
+  /** Everything a report says, who made it, and what can be done about it. */
+  function showReport(report) {
+    var room = data.rooms.filter(function (each) { return each.roomKey === report.roomKey; })[0];
+    $('report-facts').replaceChildren(h('table', { className: 'facts' }, h('tbody', null,
+      fact('通報した時刻', time(report.at)),
+      fact('状態', REPORT_STATUS_LABELS[report.status]),
+      fact('対象', REPORT_TARGET_LABELS[report.target]),
+      fact('部屋', room ? room.name : h('span', { className: 'muted' }, '（一覧にない部屋）')),
+      fact('部屋の鍵', h('span', { className: 'mono long' }, report.roomKey)),
+      fact('SHA-256', report.assetId ? h('span', { className: 'mono long' }, report.assetId) : dash()),
+      fact('理由', h('span', { className: 'reason' }, report.reason)),
+      fact('通報した人の役割', ROLE_NAMES[report.reporter.role] || report.reporter.role),
+      fact('通報した人のユーザーID', mono(report.reporter.userId)),
+      fact('通報した人のDiscord ID', mono(report.reporter.discordId)),
+      fact('通報した人のIPアドレス', mono(report.reporter.address)),
+      fact('この人の通報', count(reportsBy(report)) + '件'),
+      fact('対応した時刻', report.handledAt ? time(report.handledAt) : dash()),
+      fact('対応した人のDiscord ID', mono(report.handledBy)),
+      fact('通報のID', h('span', { className: 'mono long' }, report.id)))));
+    var actions = $('report-actions');
+    actions.replaceChildren();
+    var setTo = function (status, label, className) {
+      return report.status === status ? null : h('button', { type: 'button', className: className, onclick: function () { setReportStatus(report, status); } }, label);
+    };
+    append(actions, [
+      setTo('done', '対応済みにする', 'primary'),
+      setTo('dismissed', '却下する', ''),
+      setTo('open', '未対応に戻す', ''),
+      report.assetId ? h('button', { type: 'button', onclick: function () { showReportedAsset(report); } }, '画像か音声を詳しく見る') : null,
+      room ? h('button', { type: 'button', onclick: function () { showRoom(room); } }, '部屋の中を見る') : null,
+      banButtons(report.reporter.discordId, report.reporter.address, '通報（虚偽の通報）')
+    ]);
+    $('report-dialog').showModal();
+  }
+
+  function setReportStatus(report, status) {
+    api('PUT', 'reports/' + report.id, { status: status }).then(function (res) {
+      data.reports = data.reports.map(function (each) { return each.id === report.id ? res.report : each; });
+      renderReports();
+      renderMenu();
+      setStatus('通報を「' + REPORT_STATUS_LABELS[status] + '」にしました。', 'ok');
+    }).catch(function (err) { setStatus(messageOf(err), 'error'); });
+  }
+
+  /** Opens the reported picture or sound as the uploads tab does, when the room still keeps it. */
+  function showReportedAsset(report) {
+    api('GET', 'rooms/' + report.roomKey + '/assets').then(function (res) {
+      var asset = res.assets.filter(function (each) { return each.id === report.assetId; })[0];
+      if (!asset) {
+        setStatus('この画像か音声は、部屋の置き場所にありません（部屋が消えたか、消されたか、部屋の接続だけで配られたもの）。', 'error');
+        return;
+      }
+      showAsset({ roomKey: report.roomKey, id: asset.id, type: asset.type, size: asset.size, name: asset.name });
+    }).catch(function (err) { setStatus(messageOf(err), 'error'); });
+  }
+
   // ---- Accounts ----
 
   function showAccount(discordId) {
@@ -2141,6 +2243,13 @@ const SCRIPT = `
     $('asset-body').replaceChildren();
   });
   $('account-form').addEventListener('submit', lookUpAccount);
+  $('reports-status').addEventListener('change', renderReports);
+  $('report-close').addEventListener('click', function () { $('report-dialog').close(); });
+  // What is pressed below the report (setting its status, opening what it is about, getting a ban
+  // ready) goes on outside the dialog.
+  $('report-actions').addEventListener('click', function (event) {
+    if (event.target.closest('button')) $('report-dialog').close();
+  });
   $('sessions-end').addEventListener('click', endEverySession);
   $('refresh').addEventListener('click', function () {
     setStatus('');
@@ -2222,6 +2331,7 @@ const BODY = `
       <button type="button" role="tab" id="show-overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>概要<span class="flag" id="menu-flag" hidden>!</span></button>
       <button type="button" role="tab" id="show-rooms"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>部屋<span class="count" id="menu-rooms"></span></button>
       <button type="button" role="tab" id="show-uploads"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>アップロード</button>
+      <button type="button" role="tab" id="show-reports"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5"/></svg>通報<span class="count" id="menu-reports"></span></button>
       <button type="button" role="tab" id="show-activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>記録</button>
       <button type="button" role="tab" id="show-bans"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>BAN<span class="count" id="menu-bans"></span></button>
       <button type="button" role="tab" id="show-accounts"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>アカウント</button>
@@ -2388,6 +2498,23 @@ const BODY = `
           </table></div>
         </section>
       </div>
+      <div id="tab-reports" role="tabpanel" hidden>
+        <section class="card">
+          <div class="toolbar">
+            <select id="reports-status" aria-label="状態">
+              <option value="open">未対応だけ</option>
+              <option value="all">すべて</option>
+            </select>
+            <span class="muted" id="reports-summary"></span>
+          </div>
+          <div class="scroll"><table>
+            <thead><tr><th>時刻</th><th>状態</th><th>対象</th><th>部屋</th><th>理由</th><th>通報した人の<wbr>Discord ID</th><th>通報した人の<wbr>IPアドレス</th>
+              <th class="num">この人の<wbr>通報</th><th></th></tr></thead>
+            <tbody id="reports-body"></tbody>
+          </table></div>
+          <p class="hint">部屋にいる人が、Axeから画像や音声、部屋を運営する人に知らせたものです。通報した人も残すので、同じ人の通報が多いときや虚偽の通報には、その人をBANできます。中身を見るのは、通報に応えるために要るときだけにしてください。</p>
+        </section>
+      </div>
       <div id="tab-activity" role="tabpanel" hidden>
         <section class="card">
                 <div class="toolbar">
@@ -2536,6 +2663,11 @@ const BODY = `
   <section><h3>入っている人</h3><div id="room-seats"></div></section>
   <section><h3>画像と音声</h3><div id="room-assets"></div></section>
   <section><button type="button" class="danger" id="room-delete">この部屋を削除</button></section>
+</dialog>
+<dialog id="report-dialog">
+  <div class="head"><h2>通報</h2><button type="button" id="report-close">閉じる</button></div>
+  <div id="report-facts"></div>
+  <div class="toolbar" id="report-actions"></div>
 </dialog>
 <dialog id="asset-dialog">
   <div class="head"><h2 id="asset-title"></h2><button type="button" id="asset-close">閉じる</button></div>

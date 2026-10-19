@@ -9,6 +9,8 @@ import {
 import type { Activity } from '../../src/core/moderation/activity.js';
 import type { Passkey } from '../../src/core/admin/webauthn.js';
 import type { Ban } from '../../src/core/moderation/bans.js';
+import { MAX_REPORTS, REPORT_MS } from '../../src/core/moderation/reports.js';
+import type { Report } from '../../src/core/moderation/reports.js';
 import { redisModeration } from '../../src/server/moderation.js';
 import { freshKey, useRedis } from './redis-helpers.js';
 
@@ -29,7 +31,56 @@ const banOf = (value: string, createdAt: number, expiresAt: number | null = null
 const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
 const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
 
+const reportOf = (id: string, at: number): Report => ({
+  id,
+  at,
+  roomKey: '0'.repeat(32),
+  target: 'room',
+  assetId: null,
+  reason: 'x',
+  reporter: { address: '192.0.2.1', discordId: null, userId: 'u', role: 'pl' },
+  status: 'open',
+  handledAt: null,
+  handledBy: null,
+});
+
 describe('a Redis store for the operator', () => {
+  it('orders reports made at the same moment by their ids', async () => {
+    const store = redisModeration(connection.redis, freshKey());
+    const now = Date.now();
+    await store.putReport(reportOf('b', now));
+    await store.putReport(reportOf('a', now));
+
+    expect((await store.reports()).map((report) => report.id)).toEqual(['a', 'b']);
+  });
+
+  it('keeps reports newest first, lets the oldest go past MAX_REPORTS or REPORT_MS, and sets what came of one', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key);
+    const now = Date.now();
+    const many = Object.fromEntries(
+      Array.from({ length: MAX_REPORTS }, (_, i) => {
+        const report = reportOf(`r${String(i).padStart(4, '0')}`, now - MAX_REPORTS + i);
+        return [report.id, JSON.stringify(report)];
+      })
+    );
+    await connection.redis.hSet(key('mod', 'reports'), many);
+    await store.putReport(reportOf('too-old', now - REPORT_MS - 1));
+    await store.putReport(reportOf('newest', now + 1));
+
+    const kept = await store.reports();
+    expect(kept).toHaveLength(MAX_REPORTS);
+    expect(kept[0].id).toBe('newest');
+    expect(kept.some((report) => report.id === 'too-old' || report.id === 'r0000')).toBe(false);
+    expect(await connection.redis.hLen(key('mod', 'reports'))).toBe(MAX_REPORTS);
+    expect(await store.setReportStatus('missing', 'done', '1', 5)).toBeNull();
+    expect(await store.setReportStatus('r0001', 'dismissed', '1', 5)).toMatchObject({
+      status: 'dismissed',
+      handledBy: '1',
+    });
+    expect((await store.reports()).find((report) => report.id === 'r0001')?.status).toBe('dismissed');
+  });
+
   it('keeps how tight the limits are, and when that began, until they go back', async () => {
     const store = redisModeration(connection.redis, freshKey());
 

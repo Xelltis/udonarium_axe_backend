@@ -9,6 +9,8 @@ import type { Activity, ModerationStore } from '../core/moderation/activity.js';
 import type { Passkey } from '../core/admin/webauthn.js';
 import { NO_TIGHTEN } from '../core/moderation/bans.js';
 import type { Ban, BanKind, Pause, Tighten, TightenWeight } from '../core/moderation/bans.js';
+import { MAX_REPORTS, REPORT_MS } from '../core/moderation/reports.js';
+import type { Report } from '../core/moderation/reports.js';
 import type { StorageUsage } from '../core/moderation/storage.js';
 import type { KeyOf, Redis } from './redis.js';
 
@@ -29,6 +31,8 @@ import type { KeyOf, Redis } from './redis.js';
 //   mod:pause         HASH    What the operator has stopped for now: rooms, uploads, logins ("1"), and since.
 //   mod:storage       STRING  JSON of the store's size as last counted (once a day, by the sweep).
 //   mod:tighten       HASH    How tight each rate limit is: upload, read, room, auth (1, 2, 4 or 10), and since.
+//   mod:reports       HASH    report id → JSON of a report from a room's seat. Kept to the newest
+//                             MAX_REPORTS and to REPORT_MS.
 
 const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
@@ -41,6 +45,19 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
   const PAUSE = key('mod', 'pause');
   const STORAGE = key('mod', 'storage');
   const TIGHTEN = key('mod', 'tighten');
+  const REPORTS = key('mod', 'reports');
+
+  /** Every report kept, newest first, those too old or past MAX_REPORTS deleted on the way. */
+  const reports = async (): Promise<Report[]> => {
+    const all = Object.values(await redis.hGetAll(REPORTS))
+      .map((value) => JSON.parse(value) as Report)
+      .sort((a, b) => b.at - a.at || Number(a.id > b.id) - Number(a.id < b.id));
+    const oldest = Date.now() - REPORT_MS;
+    const kept = all.filter((report, at) => report.at >= oldest && at < MAX_REPORTS);
+    const gone = all.filter((report) => !kept.includes(report)).map((report) => report.id);
+    if (gone.length > 0) await redis.hDel(REPORTS, gone);
+    return kept;
+  };
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
   const bans = async (): Promise<Ban[]> => {
@@ -183,6 +200,21 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
 
     async raiseAdminEpoch() {
       return redis.incr(EPOCH);
+    },
+
+    async putReport(report) {
+      await redis.hSet(REPORTS, report.id, JSON.stringify(report));
+      await reports();
+    },
+
+    reports,
+
+    async setReportStatus(id, status, by, at) {
+      const value = await redis.hGet(REPORTS, id);
+      if (value === null) return null;
+      const report: Report = { ...(JSON.parse(value) as Report), status, handledAt: at, handledBy: by };
+      await redis.hSet(REPORTS, id, JSON.stringify(report));
+      return report;
     },
 
     async storageUsage() {

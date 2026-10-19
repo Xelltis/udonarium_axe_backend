@@ -25,8 +25,9 @@ export const ADMIN_DENIED = 'denied';
  * - admin-denied: someone was turned away from the dashboard
  * - admin-login: an operator got into the dashboard
  * - storage: the store of the rooms' pictures and sounds is past ADMIN_STORAGE_ALERT_GB
+ * - report: a seat of a room reported something to the operator
  */
-export const ALERT_KINDS = ['limited', 'refused', 'admin-denied', 'admin-login', 'storage'] as const;
+export const ALERT_KINDS = ['limited', 'refused', 'admin-denied', 'admin-login', 'storage', 'report'] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 /** What an alert says beyond its kind: who got into the dashboard, or how full the store is. */
@@ -53,6 +54,8 @@ const messageOf = (kind: AlertKind, facts: AlertFacts): string => {
       return '部屋のサーバーの管理画面に入ろうとして、断られた人がいます。心当たりが無ければ、管理画面の「記録」で確かめてください。（同じ知らせは10分に1回までです）';
     case 'admin-login':
       return `部屋のサーバーの管理画面に、${facts.name ?? '運営する人'}がログインしました。心当たりが無ければ、すぐに管理画面の「安全」から「すべての人をログアウトさせる」を押し、Discordのパスワードを替えてください。`;
+    case 'report':
+      return '部屋のサーバーに、参加者から通報がありました。管理画面の「通報」で確かめてください。（同じ知らせは10分に1回までです）';
     case 'storage': {
       const usage = facts.usage as StorageUsage;
       return `部屋のサーバーの画像と音声の置き場所が、知らせる量（${gbOf(facts.limitBytes as number)}）を超えました。いまは${gbOf(usage.bytes)}（${usage.assets}件）です。管理画面の「アップロード」の「場所を多く使っている部屋」で確かめてください。（この知らせは1日に1回までです）`;

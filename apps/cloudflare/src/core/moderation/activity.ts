@@ -1,6 +1,7 @@
 import type { AdminStore } from '../admin/store.js';
 import { ADMIN_DENIED, alertOf } from './alerts.js';
 import type { AlertFacts, AlertKind } from './alerts.js';
+import type { Report, ReportStatus } from './reports.js';
 import type { StorageUsage } from './storage.js';
 import { BanList } from './bans.js';
 import type { Ban, BanCache, BanKind, ModerationState, Pause, Tighten } from './bans.js';
@@ -91,6 +92,12 @@ export interface ModerationStore extends AdminStore {
   storageUsage(): Promise<StorageUsage | null>;
   /** Keeps the store's size as just counted. */
   putStorageUsage(usage: StorageUsage): Promise<void>;
+  /** Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. */
+  putReport(report: Report): Promise<void>;
+  /** The reports kept, newest first. */
+  reports(): Promise<Report[]>;
+  /** Sets what the operator made of a report. The report as it now stands, or null when there is none. */
+  setReportStatus(id: string, status: ReportStatus, by: string, at: number): Promise<Report | null>;
 }
 
 /** What the routes use to check bans and write down what happened. */
@@ -121,6 +128,10 @@ export interface Moderation {
   putStorageUsage(usage: StorageUsage): Promise<void>;
   /** Tells the operator the store is past limitBytes (once a day at most). Nothing without alerts. */
   alertStorage(usage: StorageUsage, limitBytes: number): Promise<void>;
+  /** Keeps a report, and tells the operator of it after the response (when alerts are sent). */
+  report(report: Report): Promise<void>;
+  reports(): Promise<Report[]>;
+  setReportStatus(id: string, status: ReportStatus, by: string, at: number): Promise<Report | null>;
   /** Where the dashboard keeps passkeys and the generation of its sessions. */
   admin: AdminStore;
 }
@@ -163,6 +174,12 @@ export const moderationOf = (
   alertStorage: async (usage, limitBytes) => {
     if (alert) await alert('storage', { usage, limitBytes });
   },
+  report: async (report) => {
+    await store.putReport(report);
+    if (alert) defer(alert('report', {}).catch((err: unknown) => console.error('Could not send the alert:', err)));
+  },
+  reports: () => store.reports(),
+  setReportStatus: (id, status, by, at) => store.setReportStatus(id, status, by, at),
   admin: store,
 });
 
@@ -180,6 +197,9 @@ export const noModeration: Moderation = {
   storageUsage: async () => null,
   putStorageUsage: async () => undefined,
   alertStorage: async () => undefined,
+  report: async () => undefined,
+  reports: async () => [],
+  setReportStatus: async () => null,
   // The dashboard answers 503 without login, so it asks nothing of these.
   admin: {
     passkeysOf: async () => [],
