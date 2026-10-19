@@ -6,28 +6,29 @@
 
 ## エンドポイントの一覧
 
-| メソッド  | パス                                                 | 内容                                                           |
-| --------- | ---------------------------------------------------- | -------------------------------------------------------------- |
-| `POST`    | `/v1/rooms`                                          | 部屋を作る                                                     |
-| `GET`     | `/v1/rooms`                                          | 部屋の一覧                                                     |
-| `GET`     | `/v1/rooms/:roomKey`                                 | 部屋を鍵で1つ引く                                              |
-| `DELETE`  | `/v1/rooms/:roomKey`                                 | 部屋を削除する（その部屋のGMだけ）                             |
-| `GET`     | `/v1/rooms/:roomKey/ws`                              | 部屋に入る（WebSocketにつなぎ替える）                          |
-| `HEAD`    | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットが置かれているか                                 |
-| `GET`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットの中身                                           |
-| `PUT`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットを置く（その部屋のGMとPLだけ）                   |
-| `GET`     | `/v1/rooms/:roomKey/assets`                          | 部屋に置いてあるアセットの一覧                                 |
-| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads`          | 置き場所へ直接上げる先を受け取る（Vercel版だけ）               |
-| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads/complete` | 直接上げ終えたことを知らせる（Vercel版だけ）                   |
-| `GET`     | `/v1/auth/config`                                    | ログインに使える提供元（`{"providers":["discord"]}`）          |
-| `GET`     | `/v1/login/discord`                                  | ログインを始める（ページとして開く）                           |
-| `GET`     | `/v1/login/discord/callback`                         | Discordから戻ってくる（Discordのアプリに登録するURL）          |
-| `POST`    | `/v1/auth/token`                                     | ログインのコードかリフレッシュトークンを、トークンの組に替える |
-| `POST`    | `/v1/auth/logout`                                    | ログアウト。そのリフレッシュトークンの系統を無効にする         |
-| `GET`     | `/v1/account`                                        | ログインしている人                                             |
-| `DELETE`  | `/v1/account`                                        | アカウントを消す                                               |
-| `OPTIONS` | 上のパス                                             | ブラウザのプリフライトに答える                                 |
-| `GET`     | `/admin`                                             | 運営する人の管理画面（→ [管理画面のAPI](#管理画面のapi)）      |
+| メソッド  | パス                                                 | 内容                                                                                |
+| --------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `POST`    | `/v1/rooms`                                          | 部屋を作る                                                                          |
+| `GET`     | `/v1/rooms`                                          | 部屋の一覧                                                                          |
+| `GET`     | `/v1/rooms/:roomKey`                                 | 部屋を鍵で1つ引く                                                                   |
+| `DELETE`  | `/v1/rooms/:roomKey`                                 | 部屋を削除する（その部屋のGMだけ）                                                  |
+| `GET`     | `/v1/rooms/:roomKey/ws`                              | 部屋に入る（WebSocketにつなぎ替える）                                               |
+| `HEAD`    | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットが置かれているか                                                      |
+| `GET`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットの中身                                                                |
+| `PUT`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットを置く（その部屋のGMとPLだけ）                                        |
+| `GET`     | `/v1/rooms/:roomKey/assets`                          | 部屋に置いてあるアセットの一覧                                                      |
+| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads`          | 置き場所へ直接上げる先を受け取る（Vercel版だけ）                                    |
+| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads/complete` | 直接上げ終えたことを知らせる（Vercel版だけ）                                        |
+| `GET`     | `/v1/auth/config`                                    | ログインに使える提供元（`{"providers":["discord"]}`）                               |
+| `GET`     | `/v1/login/discord`                                  | ログインを始める（ページとして開く）                                                |
+| `GET`     | `/v1/login/discord/callback`                         | Discordから戻ってくる（Discordのアプリに登録するURL）                               |
+| `POST`    | `/v1/auth/token`                                     | ログインのコードかリフレッシュトークンを、トークンの組に替える                      |
+| `POST`    | `/v1/auth/logout`                                    | ログアウト。そのリフレッシュトークンの系統を無効にする                              |
+| `GET`     | `/v1/account`                                        | ログインしている人                                                                  |
+| `DELETE`  | `/v1/account`                                        | アカウントを消す                                                                    |
+| `GET`     | `/v1/contact`                                        | 運営する人に断られたときの問い合わせ先（`{"contact":"https://…"}`、無ければ`null`） |
+| `OPTIONS` | 上のパス                                             | ブラウザのプリフライトに答える                                                      |
+| `GET`     | `/admin`                                             | 運営する人の管理画面（→ [管理画面のAPI](#管理画面のapi)）                           |
 
 ## 共通の決まり
 
@@ -36,6 +37,7 @@
 - `:roomKey`は部屋の鍵で、小文字の16進で書いた32文字です。`:sha256`は、中身のSHA-256を小文字の16進で書いた64文字です。どちらかの形が違えば`400 invalid-id`を返します。
 - 運営する人がBANした送信元には、どれにも`403 banned`を返します。ログインの2つのページは、Axeの戻り先に`login_error=banned`を付けて戻します（→ [管理画面とBAN](/operate/admin#banで止まるもの)）。
 - 運営する人が緊急停止しているあいだは、止めたもの（部屋を作る、部屋のアセットを置く）に`503 paused`を返します。新しいログインを止めているときは、Discordから戻ってくるページが、Axeの戻り先に`login_error=paused`を付けて戻します（→ [緊急停止](/operate/admin#緊急停止)）。
+- `ADMIN_CONTACT_URL`を入れていると、`403 banned`と`503 paused`の本文に問い合わせ先を足します（`{"error":"banned","contact":"https://…"}`）。ログインの戻り先にも、`login_error=banned`と`login_error=paused`のときは`login_contact=<問い合わせ先>`を足します。`GET /v1/contact`は、BANした送信元からも読めます。
 - エラーの本文は`{"error":"<コード>"}`の形です（→ [エラー](#エラー)）。
 - 設定が読めないときは、`/v1/`の下のすべてのリクエストに`500 config-invalid`を返します（→ [設定項目](/server/configuration)）。
 

@@ -233,6 +233,8 @@ BANしたときに部屋に入っている人のうち、BANに当たる人の�
 | IPアドレス | 部屋の一覧、部屋を作る・入る・削除する、部屋のアセット、ログイン、トークンの発行と更新、アカウント。どれも`403 banned`を返します（部屋に入るのは`banned`で切ることもあります）。ログインはAxeに`login_error=banned`で戻します       |
 | Discord ID | ログイン（Axeに`login_error=banned`で戻す）、トークンの更新（Axeはログアウトします）、部屋に入る（`banned`で切る）、部屋を作る、部屋のアセットの読み書き（`403 banned`）                                                            |
 
+`ADMIN_CONTACT_URL`を入れておくと、Axeは断ったことを出すときに、その問い合わせ先も出します（→ [`ADMIN_CONTACT_URL`](/server/configuration#admin-contact-url)）。緊急停止で断ったときも同じです。
+
 Discordのアカウントだけを止めた人は、ログインせずに見学として部屋に入ることはできます。
 見学者も止めたいときは、IPアドレスもBANしてください。
 

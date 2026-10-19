@@ -12,6 +12,7 @@
 | `DISCORD_CLIENT_SECRET`       | ※    | —      | 同じアプリのClient Secret                                                                             |
 | `SESSION_SECRET`              | ※    | —      | アクセストークン、招待、部屋のアセットのトークンに署名する鍵。32文字以上の乱数                        |
 | `ROOM_RETENTION_HOURS`        |      | `24`   | 最後の1人が抜けてから部屋を消すまでの時間（1以上の整数）                                              |
+| `ADMIN_CONTACT_URL`           |      | —      | BANや緊急停止で断った人に見せる問い合わせ先（`https://`のページか`mailto:`）                          |
 | `ROOM_STORAGE_LIMIT_MB`       |      | —      | 1つの部屋に置ける画像と音声の合計（MB）。入れなければ、合計の上限は無い                               |
 | `ADMIN_DISCORD_IDS`           |      | —      | 管理画面（`/admin`）に入れる運営する人のDiscordのユーザーID。カンマ区切り。入れなければ管理画面は無い |
 | `ADMIN_PASSKEY_RESET`         |      | —      | パスキーをすべて失くした運営する人のDiscordのユーザーID。入れたあいだだけ、新しいパスキーを登録できる |
@@ -64,6 +65,14 @@ DiscordのアプリのRedirectsに、`/admin/login/callback`も足してくだ�
 回数の上限を超えた送信元や、管理画面へのログインがあったときに、知らせを送るDiscordのWebhookのURLです（→ [Discordで知らせを受ける](/operate/admin#discordで知らせを受ける)）。
 `https://`で始まらないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
 
+### `ADMIN_CONTACT_URL`
+
+BANや緊急停止で断った人に見せる問い合わせ先です。`https://`で始まるページか、`mailto:`で始まるメールアドレスを書きます（例：`mailto:admin@example.com`）。
+入れておくと、Axeが断られたことを出すときに、この問い合わせ先も出します（→ [部屋のサーバーのAPI](/reference/server-api#共通の決まり)）。
+共有の回線を巻き込んだBANのように、運営する人が知らずに止めてしまった人が、申し出られるようにするためのものです。
+問い合わせ先は、断られた人のだれにでも見えるので、秘密の値ではありません。
+`https://`か`mailto:`で始まらないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
+
 ### `ROOM_STORAGE_LIMIT_MB`
 
 1つの部屋に置ける画像と音声の合計を、MB（100万バイト）の整数で書きます（例：`500`）。
@@ -94,10 +103,10 @@ Cloudflare版の既定値の`24`は、`wrangler.jsonc`の`vars`に書いてあ�
 
 Cloudflare版の設定は、2つの場所に分かれています。
 
-| 設定                                                                                                                                                                               | 置き場所                 | 変えかた                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
-| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                                                                              | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
-| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL`、`ADMIN_STORAGE_ALERT_GB`、`ROOM_STORAGE_LIMIT_MB` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
+| 設定                                                                                                                                                                                                    | 置き場所                 | 変えかた                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
+| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                                                                                                   | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
+| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL`、`ADMIN_STORAGE_ALERT_GB`、`ROOM_STORAGE_LIMIT_MB`、`ADMIN_CONTACT_URL` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
 
 `wrangler.jsonc`に書いた値は、デプロイのたびにWorkerの設定を上書きします。
 Deployボタンで置いたときは、複製したリポジトリに変更が入るたびにデプロイし直すので、`ACCESS_CONTROL_ALLOW_ORIGIN`は`wrangler.jsonc`の側で書き換えます（→ [Cloudflareに置く](/server/cloudflare#_8-originの設定を確かめる)）。
