@@ -240,6 +240,7 @@ export default defineConfig({
           { text: '運用', link: '/operate/' },
           { text: '費用と上限', link: '/operate/costs' },
           { text: '安全のしくみ', link: '/operate/security' },
+          { text: '管理画面とBAN', link: '/operate/admin' },
           { text: '運営の方針', link: '/operate/policies' },
           { text: 'プライバシーポリシーのひな形', link: '/operate/privacy-template' },
           { text: '利用規約のひな形', link: '/operate/terms-template' },

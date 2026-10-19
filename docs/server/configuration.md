@@ -5,13 +5,16 @@
 
 ## 共通の項目
 
-| 名前                          | 必須 | 既定値 | 内容                                                                                   |
-| ----------------------------- | :--: | ------ | -------------------------------------------------------------------------------------- |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` |  ○   | —      | 受けるAxeのOrigin。カンマ区切りで複数書ける                                            |
-| `DISCORD_CLIENT_ID`           |  ※   | —      | ログインに使うDiscordのアプリのClient ID（→ [Discordのアプリを作る](/server/discord)） |
-| `DISCORD_CLIENT_SECRET`       |  ※   | —      | 同じアプリのClient Secret                                                              |
-| `SESSION_SECRET`              |  ※   | —      | アクセストークン、招待、部屋のアセットのトークンに署名する鍵。32文字以上の乱数         |
-| `ROOM_RETENTION_HOURS`        |      | `24`   | 最後の1人が抜けてから部屋を消すまでの時間（1以上の整数）                               |
+| 名前                          | 必須 | 既定値 | 内容                                                                                                  |
+| ----------------------------- | :--: | ------ | ----------------------------------------------------------------------------------------------------- |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` |  ○   | —      | 受けるAxeのOrigin。カンマ区切りで複数書ける                                                           |
+| `DISCORD_CLIENT_ID`           |  ※   | —      | ログインに使うDiscordのアプリのClient ID（→ [Discordのアプリを作る](/server/discord)）                |
+| `DISCORD_CLIENT_SECRET`       |  ※   | —      | 同じアプリのClient Secret                                                                             |
+| `SESSION_SECRET`              |  ※   | —      | アクセストークン、招待、部屋のアセットのトークンに署名する鍵。32文字以上の乱数                        |
+| `ROOM_RETENTION_HOURS`        |      | `24`   | 最後の1人が抜けてから部屋を消すまでの時間（1以上の整数）                                              |
+| `ADMIN_DISCORD_IDS`           |      | —      | 管理画面（`/admin`）に入れる運営する人のDiscordのユーザーID。カンマ区切り。入れなければ管理画面は無い |
+| `ADMIN_PASSKEY_RESET`         |      | —      | パスキーをすべて失くした運営する人のDiscordのユーザーID。入れたあいだだけ、新しいパスキーを登録できる |
+| `ADMIN_WEBHOOK_URL`           |      | —      | 運営する人への知らせを送るDiscordのWebhookのURL。入れなければ知らせは送らない                         |
 
 ### `ACCESS_CONTROL_ALLOW_ORIGIN`
 
@@ -42,6 +45,23 @@ Discordでログインしたあとに戻る先も、ここに書いたOriginの�
 
 漏れたかもしれないときのほかは、替えなくて構いません。
 
+### `ADMIN_DISCORD_IDS`
+
+運営する人の管理画面に入れる人の、DiscordのユーザーIDです（→ [管理画面とBAN](/operate/admin)）。
+入る人は、このアカウントでDiscordにログインしたうえで、端末のパスキーで確かめます。
+DiscordのアプリのRedirectsに、`/admin/login/callback`も足してください（→ [使えるようにする](/operate/admin#使えるようにする)）。
+数字でないものが入っていると、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
+
+### `ADMIN_PASSKEY_RESET`
+
+すべての端末のパスキーを失くした運営する人の、DiscordのユーザーIDです（→ [端末を失くしたとき](/operate/admin#端末を失くしたとき)）。
+新しいパスキーを登録したら、外してください。
+
+### `ADMIN_WEBHOOK_URL`
+
+回数の上限を超えた送信元や、管理画面へのログインがあったときに、知らせを送るDiscordのWebhookのURLです（→ [Discordで知らせを受ける](/operate/admin#discordで知らせを受ける)）。
+`https://`で始まらないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
+
 ### `ROOM_RETENTION_HOURS`
 
 部屋から最後の1人が抜けて、この時間が過ぎると、部屋とその画像と音声を消します（→ [部屋が消えるとき](/server/#部屋が消えるとき)）。
@@ -53,10 +73,10 @@ Cloudflare版の既定値の`24`は、`wrangler.jsonc`の`vars`に書いてあ�
 
 Cloudflare版の設定は、2つの場所に分かれています。
 
-| 設定                                                           | 置き場所                 | 変えかた                                         |
-| -------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
-| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`          | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
-| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
+| 設定                                                                                                                            | 置き場所                 | 変えかた                                         |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
+| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                           | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
+| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
 
 `wrangler.jsonc`に書いた値は、デプロイのたびにWorkerの設定を上書きします。
 Deployボタンで置いたときは、複製したリポジトリに変更が入るたびにデプロイし直すので、`ACCESS_CONTROL_ALLOW_ORIGIN`は`wrangler.jsonc`の側で書き換えます（→ [Cloudflareに置く](/server/cloudflare#_8-originの設定を確かめる)）。
@@ -84,6 +104,7 @@ Workerが使うCloudflareの資源です。
 | `ROOMS`          | Durable Object   | 部屋ごとに1つ（`RoomDurableObject`）。名前は部屋の鍵                                                     |
 | `LOBBY`          | Durable Object   | 部屋の一覧（`LobbyDurableObject`）。Workerに1つ                                                          |
 | `ACCOUNTS`       | Durable Object   | ログインした人ごとに1つ（`AccountDurableObject`）。名前は`discord:<ID>`                                  |
+| `MODERATION`     | Durable Object   | 運営する人のBANと記録（`ModerationDurableObject`）。Workerに1つ（→ [管理画面とBAN](/operate/admin)）     |
 | `UPLOAD_LIMITER` | レート制限       | 新しく置くPUTを、送信元ごとに1分100件まで                                                                |
 | `READ_LIMITER`   | レート制限       | R2を読むGETとHEAD、部屋の一覧、鍵で1つ引く部屋、部屋のアセットの一覧を、送信元ごとに合わせて1分600件まで |
 | `ROOM_LIMITER`   | レート制限       | 部屋を作る・削除する・部屋に入るのを、送信元ごとに合わせて1分30回まで                                    |
@@ -121,6 +142,7 @@ cp .dev.vars.example .dev.vars   # ログインの3つを書く
 npm run dev                      # http://localhost:8787
 ```
 
+管理画面も試すときは、`.dev.vars`に`ADMIN_DISCORD_IDS`（自分のDiscordのユーザーID）も書き、DiscordのアプリのRedirectsに`http://localhost:8787/admin/login/callback`を足してから、`http://localhost:8787/admin`を開きます（→ [管理画面とBAN](/operate/admin)）。
 `.dev.vars`は、Gitに入らないようにしてあります。
 
 ## Vercel版
@@ -174,9 +196,12 @@ ACCESS_CONTROL_ALLOW_ORIGIN=http://localhost:4200
 DISCORD_CLIENT_ID=...
 DISCORD_CLIENT_SECRET=...
 SESSION_SECRET=...
+ADMIN_DISCORD_IDS=...
 REDIS_URL=redis://localhost:6379
 BLOB_LOCAL_DIR=.blob
 ```
+
+`ADMIN_DISCORD_IDS`を書き、DiscordのアプリのRedirectsに`http://localhost:3000/admin/login/callback`を足せば、`http://localhost:3000/admin`で管理画面を開けます。
 
 `BLOB_LOCAL_DIR`に置くときは、1回の`PUT`で種類ごとの上限まで置けます（Blobへ直接上げる流れは使いません）。
 `.env`と`.env.local`は、Gitに入らないようにしてあります。
