@@ -6,15 +6,16 @@
 ## 共通の項目
 
 | 名前                          | 必須 | 既定値 | 内容                                                                                                  |
-| ----------------------------- | :--: | ------ | ----------------------------------------------------------------------------------------------------- |
-| `ACCESS_CONTROL_ALLOW_ORIGIN` |  ○   | —      | 受けるAxeのOrigin。カンマ区切りで複数書ける                                                           |
-| `DISCORD_CLIENT_ID`           |  ※   | —      | ログインに使うDiscordのアプリのClient ID（→ [Discordのアプリを作る](/server/discord)）                |
-| `DISCORD_CLIENT_SECRET`       |  ※   | —      | 同じアプリのClient Secret                                                                             |
-| `SESSION_SECRET`              |  ※   | —      | アクセストークン、招待、部屋のアセットのトークンに署名する鍵。32文字以上の乱数                        |
+| ----------------------------- | ---- | ------ | ----------------------------------------------------------------------------------------------------- |
+| `ACCESS_CONTROL_ALLOW_ORIGIN` | ○    | —      | 受けるAxeのOrigin。カンマ区切りで複数書ける                                                           |
+| `DISCORD_CLIENT_ID`           | ※    | —      | ログインに使うDiscordのアプリのClient ID（→ [Discordのアプリを作る](/server/discord)）                |
+| `DISCORD_CLIENT_SECRET`       | ※    | —      | 同じアプリのClient Secret                                                                             |
+| `SESSION_SECRET`              | ※    | —      | アクセストークン、招待、部屋のアセットのトークンに署名する鍵。32文字以上の乱数                        |
 | `ROOM_RETENTION_HOURS`        |      | `24`   | 最後の1人が抜けてから部屋を消すまでの時間（1以上の整数）                                              |
 | `ADMIN_DISCORD_IDS`           |      | —      | 管理画面（`/admin`）に入れる運営する人のDiscordのユーザーID。カンマ区切り。入れなければ管理画面は無い |
 | `ADMIN_PASSKEY_RESET`         |      | —      | パスキーをすべて失くした運営する人のDiscordのユーザーID。入れたあいだだけ、新しいパスキーを登録できる |
 | `ADMIN_WEBHOOK_URL`           |      | —      | 運営する人への知らせを送るDiscordのWebhookのURL。入れなければ知らせは送らない                         |
+| `ADMIN_STORAGE_ALERT_GB`      |      | —      | 画像と音声の置き場所がこの量（GB）を超えたら知らせる。入れなければ置き場所を数えない                  |
 
 ### `ACCESS_CONTROL_ALLOW_ORIGIN`
 
@@ -62,6 +63,14 @@ DiscordのアプリのRedirectsに、`/admin/login/callback`も足してくだ�
 回数の上限を超えた送信元や、管理画面へのログインがあったときに、知らせを送るDiscordのWebhookのURLです（→ [Discordで知らせを受ける](/operate/admin#discordで知らせを受ける)）。
 `https://`で始まらないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
 
+### `ADMIN_STORAGE_ALERT_GB`
+
+部屋に置かれた画像と音声の合計が、この量を超えたら知らせます（→ [Discordで知らせを受ける](/operate/admin#discordで知らせを受ける)）。
+GB（10億バイト）で書き、`0.5`のように小数も書けます。
+置き場所の無料枠に合わせるなら、Cloudflare版のR2は`10`です。
+入れたときだけ、1日1回、日本時間の3時ごろに置き場所を数えます。
+0より大きい数でないと、設定の誤りとして、部屋のサーバーのすべてのリクエストに`500 config-invalid`を返します。
+
 ### `ROOM_RETENTION_HOURS`
 
 部屋から最後の1人が抜けて、この時間が過ぎると、部屋とその画像と音声を消します（→ [部屋が消えるとき](/server/#部屋が消えるとき)）。
@@ -73,10 +82,10 @@ Cloudflare版の既定値の`24`は、`wrangler.jsonc`の`vars`に書いてあ�
 
 Cloudflare版の設定は、2つの場所に分かれています。
 
-| 設定                                                                                                                            | 置き場所                 | 変えかた                                         |
-| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
-| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                           | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
-| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
+| 設定                                                                                                                                                      | 置き場所                 | 変えかた                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------ |
+| `ACCESS_CONTROL_ALLOW_ORIGIN`、`ROOM_RETENTION_HOURS`                                                                                                     | `wrangler.jsonc`の`vars` | 複製したリポジトリの`wrangler.jsonc`を書き換える |
+| `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET`、`SESSION_SECRET`、`ADMIN_DISCORD_IDS`、`ADMIN_PASSKEY_RESET`、`ADMIN_WEBHOOK_URL`、`ADMIN_STORAGE_ALERT_GB` | Workerのシークレット     | Cloudflareのダッシュボードで書き換える           |
 
 `wrangler.jsonc`に書いた値は、デプロイのたびにWorkerの設定を上書きします。
 Deployボタンで置いたときは、複製したリポジトリに変更が入るたびにデプロイし直すので、`ACCESS_CONTROL_ALLOW_ORIGIN`は`wrangler.jsonc`の側で書き換えます（→ [Cloudflareに置く](/server/cloudflare#_8-originの設定を確かめる)）。

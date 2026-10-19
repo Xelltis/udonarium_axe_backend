@@ -437,6 +437,7 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 | `GET`    | `/admin/api/accounts/:discordId`                   | そのDiscordのユーザーIDのアカウント。無ければ`404 not-found`                                                                  |
 | `DELETE` | `/admin/api/accounts/:discordId`                   | そのアカウントを削除する。`204`、無ければ`404 not-found`                                                                      |
 | `GET`    | `/admin/api/settings`                              | いまの設定。秘密の値は、入っているかどうかだけ                                                                                |
+| `GET`    | `/admin/api/storage`                               | 置き場所の使用量（最後に数えたときの大きさ・件数・時刻）と、知らせる量（`ADMIN_STORAGE_ALERT_GB`）                            |
 
 ログインとパスキーのためのものです。
 

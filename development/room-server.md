@@ -381,6 +381,8 @@ Vercel版で、部屋を受け持つのがほかのインスタンスのとき�
 知らせは答えを返したあとに送り、失敗してもログに出すだけです。
 知らせには何があったかだけを書き、IPアドレスや参加者のアカウントは送りません（管理画面へのログインには、運営する人の表示名を書きます）。`allowed_mentions`を空にして、だれにもメンションしません。
 
+置き場所の使用量は、`ADMIN_STORAGE_ALERT_GB`があるときだけ、1日1回数えます（`src/core/moderation/storage.ts`の`checkStorage`）。Cloudflare版は`wrangler.jsonc`の`triggers.crons`から`scheduled`が、Vercel版は`/internal/sweep`が掃除のあとに呼びます。`AssetBackend.inventory`を最後のページまで（`MAX_STORAGE_PAGES`まで）読んで足し、結果を置き場所に残します（Cloudflare版は`admin_state`の`storage_*`、Vercel版は`mod:storage`）。超えていれば知らせ、同じ知らせは20時間（`STORAGE_ALERT_MS`）に1回にします。
+
 ### 管理画面の画面
 
 概要の数とグラフは、管理画面のAPI（部屋、記録、BAN）から、ブラウザの中で数えます。サーバーに集計のAPIはありません。
