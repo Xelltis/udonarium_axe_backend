@@ -269,13 +269,13 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * Closes the seats the operator's ban covers, as when a token is no longer good (unauthorized): a
+   * Closes the seats the operator's ban covers, with banned, which Axe does not reconnect on: a
    * banned person cannot get a new token, and a banned sender cannot connect again. Returns how many
    * it closed.
    */
   expel(barred: (seat: Seat) => boolean): number {
     const seats = this.seats().filter(({ seat }) => barred(seat));
-    for (const { conn } of seats) this.refuse(conn, 'unauthorized');
+    for (const { conn } of seats) this.refuse(conn, 'banned');
     return seats.length;
   }
 
@@ -433,20 +433,19 @@ export class RoomEngine<C extends object> {
           const seat = this.host.seatOf(conn);
           // A seat closed meanwhile (refused, replaced, the room deleted) is marked refused.
           if (!seat || this.refused.has(conn) || this.gone.has(conn)) return;
-          if (barredBy(bans)(seat)) this.refuse(conn, 'unauthorized');
+          if (barredBy(bans)(seat)) this.refuse(conn, 'banned');
         })
     );
   }
 
   /**
    * Lets a hello in, or refuses it, against the bans as they stand. The operator's bans are refused
-   * as unauthorized, as when a token is no longer good: a banned account gets no new token, and Axe
-   * stops there.
+   * as banned, so that Axe says why and does not try again.
    */
   private admit(conn: C, hello: InferOutput<typeof helloSchema>, bans: BanList): void {
     // A banned sender is turned away before anything about the room is checked (such as its password).
     const address = this.addresses.get(conn);
-    if (address !== undefined && bans.addressBan(address)) return this.refuse(conn, 'unauthorized');
+    if (address !== undefined && bans.addressBan(address)) return this.refuse(conn, 'banned');
 
     const room = this.host.room();
     if (!room) return this.refuse(conn, 'room-not-found');
@@ -489,7 +488,7 @@ export class RoomEngine<C extends object> {
       const secret = this.host.sessionSecret();
       const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
       if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(conn, 'unauthorized');
-      if (bans.accountBan(claims.sub)) return this.refuse(conn, 'unauthorized');
+      if (bans.accountBan(claims.sub)) return this.refuse(conn, 'banned');
       const { role, known } = this.roleOf(hello.userId, hello.invite ?? null, room.roomKey, secret);
       seat.role = role;
       seat.account = true;

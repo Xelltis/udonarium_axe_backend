@@ -45,8 +45,8 @@ describe('a hello against the bans at hand', () => {
     const other = host.connect('198.51.100.2');
     guestHello(host, other, 'other', { password: 'secret' });
 
-    expect(errorsOf(sender)).toEqual(['unauthorized']);
-    expect(sender.closed?.reason).toBe('unauthorized');
+    expect(errorsOf(sender)).toEqual(['banned']);
+    expect(sender.closed?.reason).toBe('banned');
     expect(other.of('welcome')).toHaveLength(1);
   });
 
@@ -57,7 +57,7 @@ describe('a hello against the bans at hand', () => {
     const mal = host.join('mal');
     const alice = host.join('alice');
 
-    expect(errorsOf(mal)).toEqual(['unauthorized']);
+    expect(errorsOf(mal)).toEqual(['banned']);
     expect(mal.seat).toBeNull();
     expect(alice.of('welcome')).toHaveLength(1);
   });
@@ -90,7 +90,7 @@ describe('a hello that waits for the bans', () => {
     reads[0]?.(new BanList([banOf('ip', '192.0.2.5/32')]));
     await settle();
 
-    expect(errorsOf(conn)).toEqual(['unauthorized']);
+    expect(errorsOf(conn)).toEqual(['banned']);
     expect(conn.of('time')).toEqual([]);
     expect(reads).toHaveLength(1);
   });
@@ -146,7 +146,7 @@ describe('a seat let in on bans that waited', () => {
     reads[3]?.(new BanList([banOf('discord', 'mal')]));
     await settle();
 
-    expect(errorsOf(mal)).toEqual(['unauthorized']);
+    expect(errorsOf(mal)).toEqual(['banned']);
     expect(bob.of('leave')).toEqual([{ type: 'leave', peerId: 'mal' }]);
     expect(bob.closed).toBeNull();
   });
@@ -167,6 +167,6 @@ describe('a seat let in on bans that waited', () => {
     await settle();
 
     expect(errorsOf(gone)).toEqual([]);
-    expect(errorsOf(closed)).toEqual(['unauthorized']);
+    expect(errorsOf(closed)).toEqual(['banned']);
   });
 });

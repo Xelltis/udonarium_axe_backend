@@ -303,8 +303,8 @@ describe('a banned sender', () => {
 
     const ban = await banOf('ip', ip);
 
-    expect(await guest.next('error')).toMatchObject({ code: 'unauthorized' });
-    expect(await guest.closed).toEqual({ code: 4000, reason: 'unauthorized' });
+    expect(await guest.next('error')).toMatchObject({ code: 'banned' });
+    expect(await guest.closed).toEqual({ code: 4000, reason: 'banned' });
     expect(await alice.next('leave')).toEqual({ type: 'leave', peerId: 'stranger' });
     await alice.expectQuiet();
     await unban(ban);
@@ -380,7 +380,7 @@ describe('a banned account', () => {
 
     const ban = await banOf('discord', id);
 
-    expect(await mal.next('error')).toMatchObject({ code: 'unauthorized' });
+    expect(await mal.next('error')).toMatchObject({ code: 'banned' });
     expect(await alice.next('leave')).toEqual({ type: 'leave', peerId: 'mal' });
     await unban(ban);
   });
@@ -420,7 +420,7 @@ describe('a ban made on another instance', () => {
     // The upgrade only reads, so it goes through on the bans read before. The hello does not.
     expect(await helloFrom(roomKey, ip, 'stranger', { accessToken: null })).toMatchObject({
       type: 'error',
-      code: 'unauthorized',
+      code: 'banned',
     });
     const made = await postRoom({ name: 'mine' }, { 'CF-Connecting-IP': ip });
     expect(made.status).toBe(403);
@@ -441,7 +441,7 @@ describe('a ban made on another instance', () => {
 
     expect(await helloFrom(roomKey, freshIp(), 'mal', { userId: id, accessToken: accessTokenFor(id) })).toMatchObject({
       type: 'error',
-      code: 'unauthorized',
+      code: 'banned',
     });
     const refreshed = await callApi('/v1/auth/token', {
       method: 'POST',

@@ -657,7 +657,7 @@ describe('a room whose sockets reach different instances', () => {
       expiresAt: null,
     });
     const refused = (ws: FakeWs) =>
-      ws.messages().some((message) => message.type === 'error' && message.code === 'unauthorized');
+      ws.messages().some((message) => message.type === 'error' && message.code === 'banned');
 
     await b.runtime.expel('room', banOf('ip', '192.0.2.0/24'));
 
