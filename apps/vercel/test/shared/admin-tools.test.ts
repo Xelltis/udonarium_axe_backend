@@ -140,7 +140,7 @@ describe('accounts', () => {
 });
 
 describe('what was uploaded', () => {
-  it('lists every room’s assets, shows one, and deletes one from a room after a recent confirmation', async () => {
+  it('lists every room’s assets, shows one (writing down that it was looked at), and deletes one from a room after a recent confirmation', async () => {
     await prepareAssetRooms();
     const { file, id } = await freshFile();
     expect((await putIn(ROOM_KEY, id, file)).status).toBe(201);
@@ -161,6 +161,9 @@ describe('what was uploaded', () => {
     expect(shown.headers.get('Content-Type')).toBe('image/png');
     expect(shown.headers.get('Content-Security-Policy')).toContain('sandbox');
     expect(new Uint8Array(await shown.arrayBuffer())).toEqual(file);
+    expect(await noted((entry) => entry.detail === `view asset ${id}`)).toEqual([
+      expect.objectContaining({ kind: 'admin', roomKey: ROOM_KEY, discordId: ADMIN_ID }),
+    ]);
     expect((await callAdmin(`rooms/${ROOM_KEY}/assets/${'0'.repeat(64)}/content`)).status).toBe(404);
     expect((await callAdmin(`rooms/${ROOM_KEY}/assets/nope/content`)).status).toBe(400);
 

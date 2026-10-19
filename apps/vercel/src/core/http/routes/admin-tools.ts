@@ -133,13 +133,17 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
     c.json<AdminInventoryResponse>(await c.var.backend.assets.inventory(c.req.query('cursor') || null))
   );
 
-  /** An asset's contents, for the operator to look at. */
+  /**
+   * An asset's contents, for the operator to look at. What is put in a room is for those at that
+   * table, so each look is written down, with who looked, for the other operators to see.
+   */
   admin.get('/api/rooms/:roomKey/assets/:id/content', async (c) => {
     const roomKey = roomKeyOf(c);
     const id = assetIdOf(c);
     if (!roomKey || !id) return fail(c, 400, 'invalid-id');
     const content = await c.var.backend.assets.content(roomKey, id);
     if (!content) return fail(c, 404, 'not-found');
+    noteAdmin(c, `view asset ${id}`, { roomKey });
     return new Response(content.body, { headers: { ...VIEW_HEADERS, 'Content-Type': content.type } });
   });
 

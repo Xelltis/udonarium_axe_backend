@@ -1243,6 +1243,7 @@ const SCRIPT = `
     ['delete passkey', 'パスキーを消した'],
     ['end every session', 'すべての人をログアウトさせた'],
     ['delete room', '部屋を削除した'],
+    ['view asset', '画像か音声を見た'],
     ['delete asset', '画像か音声を消した'],
     ['unblock asset', 'また置けるようにした'],
     ['block asset', '二度と置かせないようにした'],
