@@ -1,6 +1,6 @@
 import { safeParse, summarize } from 'valibot';
 
-import { adminOf, adminWebhookOf } from '../core/config/admin';
+import { adminOf, adminStorageAlertOf, adminWebhookOf } from '../core/config/admin';
 import type { AdminConfig } from '../core/config/admin';
 import { ConfigError, loginOf } from '../core/config/login';
 import type { LoginConfig } from '../core/config/login';
@@ -21,6 +21,8 @@ export interface AppConfig {
   admin: AdminConfig | null;
   /** The Discord webhook the operator's alerts go to. Null when there are no alerts. */
   adminWebhook: string | null;
+  /** The store's size in bytes past which the operator is told. Null when it is not counted. */
+  storageAlertBytes: number | null;
 }
 
 export const parseConfig = (env: unknown): AppConfig => {
@@ -39,5 +41,6 @@ export const parseConfig = (env: unknown): AppConfig => {
     login: loginOf(parsed),
     admin: adminOf(parsed),
     adminWebhook: adminWebhookOf(parsed),
+    storageAlertBytes: adminStorageAlertOf(parsed),
   };
 };

@@ -5,6 +5,7 @@ import type { Activity, ActivityKind } from '../core/moderation/activity';
 import type { Passkey, PasskeyAlgorithm } from '../core/admin/webauthn';
 import type { AlertKind } from '../core/moderation/alerts';
 import type { Ban, BanKind, ModerationState, Pause } from '../core/moderation/bans';
+import type { StorageUsage } from '../core/moderation/storage';
 
 /** The name of the Durable Object that keeps the bans and what happened. There is only one for each Worker. */
 export const MODERATION_NAME = 'moderation';
@@ -246,6 +247,33 @@ export class ModerationDurableObject extends DurableObject<Env> {
       sql.exec('INSERT OR IGNORE INTO challenges (challenge, expires_at) VALUES (?, ?)', challenge, now + ms)
         .rowsWritten > 0
     );
+  }
+
+  /** The store's size as last counted. Kept in admin_state, as storage_bytes and the rest. */
+  storageUsage(): StorageUsage | null {
+    const rows = this.ctx.storage.sql
+      .exec<{ name: string; value: number }>("SELECT name, value FROM admin_state WHERE name LIKE 'storage_%'")
+      .toArray();
+    const value = (name: string) => rows.find((row) => row.name === name)?.value;
+    const at = value('storage_at');
+    if (at === undefined) return null;
+    // putStorageUsage writes the four together.
+    return {
+      bytes: value('storage_bytes') as number,
+      assets: value('storage_assets') as number,
+      at,
+      complete: value('storage_complete') === 1,
+    };
+  }
+
+  putStorageUsage(usage: StorageUsage): void {
+    const sql = this.ctx.storage.sql;
+    const put = (name: string, value: number) =>
+      sql.exec('INSERT OR REPLACE INTO admin_state (name, value) VALUES (?, ?)', name, value);
+    put('storage_bytes', usage.bytes);
+    put('storage_assets', usage.assets);
+    put('storage_at', usage.at);
+    put('storage_complete', usage.complete ? 1 : 0);
   }
 
   /** Whether the instance asking is the one to send that kind of alert now. True at most once in ms. */

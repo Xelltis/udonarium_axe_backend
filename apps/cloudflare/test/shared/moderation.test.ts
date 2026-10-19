@@ -3,7 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { formatRange, inRange, parseAddress, parseRange } from '../../src/core/moderation/address.js';
 import type { AddressRange } from '../../src/core/moderation/address.js';
 import { NOTE_ONCE_MS, moderationOf, noModeration, noteOnce } from '../../src/core/moderation/activity.js';
-import { ADMIN_DENIED, ADMIN_LOGIN, ALERT_MS, alertOf, webhookAlerts } from '../../src/core/moderation/alerts.js';
+import {
+  ADMIN_DENIED,
+  ADMIN_LOGIN,
+  ALERT_MS,
+  STORAGE_ALERT_MS,
+  alertOf,
+  gbOf,
+  webhookAlerts,
+} from '../../src/core/moderation/alerts.js';
 import type { AlertKind } from '../../src/core/moderation/alerts.js';
 import type { Activity, ModerationStore } from '../../src/core/moderation/activity.js';
 import { BanList, NO_PAUSE, banCache, banValueOf, discordIdOf, seatBarredBy } from '../../src/core/moderation/bans.js';
@@ -333,6 +341,8 @@ describe('moderationOf', () => {
     note: async () => undefined,
     activity: async () => [entry],
     claimAlert: async () => true,
+    storageUsage: async () => null,
+    putStorageUsage: async () => undefined,
     ...noModeration.admin,
     ...overrides,
   });
@@ -394,6 +404,35 @@ describe('moderationOf', () => {
     expect(alert.mock.calls.map(([kind]) => kind)).toEqual(['limited', 'refused']);
     expect(error).toHaveBeenCalledWith('Could not send the alert:', expect.any(Error));
   });
+
+  it('keeps the store’s size, and tells of it only where alerts are sent', async () => {
+    const usage = { bytes: 5, assets: 1, at: 2, complete: true };
+    const putStorageUsage = vi.fn(async () => undefined);
+    const store = storeOf({ storageUsage: async () => usage, putStorageUsage });
+    const alert = vi.fn(async () => undefined);
+    const withAlerts = moderationOf(
+      store,
+      banCache(async () => stateOf([])),
+      () => undefined,
+      alert
+    );
+    const without = moderationOf(
+      store,
+      banCache(async () => stateOf([])),
+      () => undefined
+    );
+
+    expect(await withAlerts.storageUsage()).toEqual(usage);
+    await withAlerts.putStorageUsage(usage);
+    await withAlerts.alertStorage(usage, 4);
+    await without.alertStorage(usage, 4);
+
+    expect(putStorageUsage).toHaveBeenCalledWith(usage);
+    expect(alert.mock.calls).toEqual([['storage', { usage, limitBytes: 4 }]]);
+    expect(await noModeration.storageUsage()).toBeNull();
+    await noModeration.putStorageUsage(usage);
+    await noModeration.alertStorage(usage, 4);
+  });
 });
 
 describe('alerts', () => {
@@ -417,8 +456,8 @@ describe('alerts', () => {
       .mockResolvedValueOnce(false);
     const send = webhookAlerts('https://discord.example/api/webhooks/1/token', claim);
 
-    await send('limited', { ...at, kind: 'limited' });
-    await send('limited', { ...at, kind: 'limited' });
+    await send('limited', {});
+    await send('limited', {});
 
     expect(claim).toHaveBeenCalledWith('limited', ALERT_MS);
     expect(sent).toHaveBeenCalledOnce();
@@ -435,10 +474,10 @@ describe('alerts', () => {
     const claim = vi.fn<(kind: AlertKind, ms: number) => Promise<boolean>>(async () => true);
     const send = webhookAlerts('https://discord.example/x', claim);
 
-    await send('admin-login', { ...at, kind: 'admin', name: 'Op', detail: ADMIN_LOGIN });
-    await send('admin-login', { ...at, kind: 'admin', detail: ADMIN_LOGIN });
-    await send('refused', { ...at, kind: 'refused' });
-    await send('admin-denied', { ...at, kind: 'admin', detail: `${ADMIN_DENIED} mfa-required` });
+    await send('admin-login', { name: 'Op' });
+    await send('admin-login', {});
+    await send('refused', {});
+    await send('admin-denied', {});
 
     const contents = sent.mock.calls.map(
       ([, init]) => (JSON.parse((init as RequestInit).body as string) as { content: string }).content
@@ -450,12 +489,26 @@ describe('alerts', () => {
     expect(claim.mock.calls.map(([kind]) => kind)).toEqual(['refused', 'admin-denied']);
   });
 
+  it('say how full the store is, past what amount, once a day at most', async () => {
+    const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const claim = vi.fn<(kind: AlertKind, ms: number) => Promise<boolean>>(async () => true);
+    const usage = { bytes: 12_340_000_000, assets: 321, at: 1, complete: true };
+
+    await webhookAlerts('https://discord.example/x', claim)('storage', { usage, limitBytes: 10_000_000_000 });
+
+    expect(claim).toHaveBeenCalledWith('storage', STORAGE_ALERT_MS);
+    const { content } = JSON.parse((sent.mock.calls[0][1] as RequestInit).body as string) as { content: string };
+    expect(content).toContain('知らせる量（10.00 GB）');
+    expect(content).toContain('いまは12.34 GB（321件）');
+    expect(gbOf(500_000_000)).toBe('0.50 GB');
+  });
+
   it('throw when the webhook does not take them', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
-    await expect(
-      webhookAlerts('https://discord.example/x', async () => true)('refused', { ...at, kind: 'refused' })
-    ).rejects.toThrow('The webhook answered 404');
+    await expect(webhookAlerts('https://discord.example/x', async () => true)('refused', {})).rejects.toThrow(
+      'The webhook answered 404'
+    );
   });
 });
 

@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ServerBackend, ServerEnv, StoredRoomAsset } from '../../src/core/http/backend.js';
 import { adminRoutes } from '../../src/core/http/routes/admin.js';
-import type { AdminAccountResponse, AdminSettingsResponse } from '../../src/core/http/routes/admin-tools.js';
+import type {
+  AdminAccountResponse,
+  AdminSettingsResponse,
+  AdminStorageResponse,
+} from '../../src/core/http/routes/admin-tools.js';
 import type { Activity } from '../../src/core/moderation/activity.js';
 import { noModeration } from '../../src/core/moderation/activity.js';
 import type { Pause } from '../../src/core/moderation/bans.js';
@@ -78,7 +82,15 @@ describe('the settings', () => {
       admins: [ADMIN_ID],
       passkeyReset: [],
       webhook: false,
+      storageAlertBytes: null,
     });
+  });
+
+  it('show the store’s size as last counted, and that it is not counted without an amount', async () => {
+    const storage = await jsonOf<AdminStorageResponse>(await callAdmin('storage'));
+
+    expect(storage.limitBytes).toBeNull();
+    expect(storage).toHaveProperty('usage');
   });
 });
 
@@ -223,6 +235,7 @@ describe('what was uploaded', () => {
         login: { discordClientId: 'id', discordClientSecret: 'secret', sessionSecret: SESSION_SECRET },
         admin: { discordIds: [ADMIN_ID], passkeyReset: [] },
         adminWebhook: null,
+        storageAlertBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

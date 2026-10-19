@@ -24,6 +24,14 @@ const banOf = (value: string, createdAt: number, expiresAt: number | null = null
 const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.1', detail });
 
 describe('a Redis store for the operator', () => {
+  it('keeps the store’s size as last counted', async () => {
+    const store = redisModeration(connection.redis, freshKey());
+
+    expect(await store.storageUsage()).toBeNull();
+    await store.putStorageUsage({ bytes: 12_345_678_901, assets: 7, at: 3, complete: false });
+    expect(await store.storageUsage()).toEqual({ bytes: 12_345_678_901, assets: 7, at: 3, complete: false });
+  });
+
   it('keeps what the operator stopped, and when, until it is started again', async () => {
     const store = redisModeration(connection.redis, freshKey());
 

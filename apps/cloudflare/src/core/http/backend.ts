@@ -15,6 +15,8 @@ export interface ServerConfig {
   admin: AdminConfig | null;
   /** The Discord webhook the operator's alerts go to. Null when there are none. */
   adminWebhook: string | null;
+  /** The store's size in bytes past which the operator is told (ADMIN_STORAGE_ALERT_GB). Null when it is not counted. */
+  storageAlertBytes: number | null;
   /** The seconds from the last person leaving a room until the room is deleted. */
   roomRetentionSeconds: number;
 }

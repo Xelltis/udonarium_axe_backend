@@ -97,6 +97,7 @@ describe('putting up an asset', () => {
         },
         admin: null,
         adminWebhook: null,
+        storageAlertBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

@@ -233,6 +233,8 @@ const SCRIPT = `
   var me = null;
   /** What is stopped now, as the server last said. */
   var pauseState = null;
+  /** The store's size as the daily count last found it, and the amount past which the operator is told. */
+  var storageState = { usage: null, limitBytes: null };
   /** Every asset in the store as last read (on the uploads tab), and the barred ones. */
   var uploads = null;
   var uploadsLoading = false;
@@ -497,6 +499,12 @@ const SCRIPT = `
 
   var NUMBER = new Intl.NumberFormat('ja-JP');
   function count(n) { return NUMBER.format(n); }
+  /** A size in GB, as ADMIN_STORAGE_ALERT_GB is written. */
+  function gb(bytes) { return (bytes / 1e9).toFixed(2) + ' GB'; }
+  /** Whether the store, as last counted, is past the amount set. */
+  function storageOver() {
+    return storageState.limitBytes !== null && storageState.usage !== null && storageState.usage.bytes > storageState.limitBytes;
+  }
   function sum(values) { return values.reduce(function (total, value) { return total + value; }, 0); }
   function distinct(values) {
     var seen = {};
@@ -777,6 +785,10 @@ const SCRIPT = `
     if (limited > 0) {
       items.push(['warning', '回数の上限を超えた送信元が' + count(limited) + '件あります。下の「目立つ送信元」で確かめてください。']);
     }
+    if (storageOver()) {
+      items.push(['critical', '画像と音声の置き場所が、知らせる量（' + gb(storageState.limitBytes) + '）を超えています。' + time(storageState.usage.at) +
+        'に数えたときに' + gb(storageState.usage.bytes) + 'でした。「アップロード」の「場所を多く使っている部屋」で確かめてください。']);
+    }
     var oldest = data.activity.length ? data.activity[data.activity.length - 1].at : null;
     if (data.activity.length >= MAX_ACTIVITY && oldest > period.start) {
       items.push(['warning', '記録が上限の' + count(MAX_ACTIVITY) + '件に達しているので、' + time(oldest) + 'より前の出来事は数えていません。']);
@@ -810,7 +822,9 @@ const SCRIPT = `
     var refused = ofKind(entries, 'refused');
     var bans = banIndex.ranges.length + Object.keys(banIndex.accounts).length;
     var rooms = count(data.rooms.length) + (data.rooms.length >= MAX_ROOMS ? '+' : '');
-    $('tiles').replaceChildren(
+    var tiles = $('tiles');
+    tiles.replaceChildren();
+    append(tiles, [
       tile('いま入っている人', count(people), '人がいる部屋 ' + count(occupied) + '件'),
       tile('部屋', rooms, 'この期間に作られた部屋 ' + count(ofKind(entries, 'room').length) + '件'),
       tile('置いた画像と音声', count(uploads.length), size(sum(tallied.bytes))),
@@ -818,8 +832,19 @@ const SCRIPT = `
       tile('回数の制限', count(limited.length),
         '送信元 ' + count(distinct(limited.map(function (entry) { return entry.address; }))) + '件',
         limited.length > 0 ? 'warning' : null),
-      tile('BAN', count(bans), 'この期間に断った ' + count(refused.length) + '回')
-    );
+      tile('BAN', count(bans), 'この期間に断った ' + count(refused.length) + '回'),
+      storageTile()
+    ]);
+  }
+
+  /** The store's size as last counted, against the amount set. None when the store is not counted. */
+  function storageTile() {
+    var limit = storageState.limitBytes;
+    var usage = storageState.usage;
+    if (limit === null) return null;
+    if (usage === null) return tile('置き場所', 'まだ', '1日1回、日本時間の3時ごろに数えます');
+    var status = usage.bytes > limit ? 'critical' : usage.bytes > limit * 0.8 ? 'warning' : null;
+    return tile('置き場所', gb(usage.bytes), '知らせる量 ' + gb(limit) + '・' + time(usage.at) + 'に数えた' + (usage.complete ? '' : '（途中まで）'), status);
   }
 
   /** A step for the value axis, of 1, 2 or 5 times a power of ten. */
@@ -1547,10 +1572,11 @@ const SCRIPT = `
     loading = true;
     $('refresh').disabled = true;
     $('app').classList.add('loading');
-    return Promise.all([api('GET', 'rooms'), api('GET', 'activity'), api('GET', 'bans'), api('GET', 'pause')])
+    return Promise.all([api('GET', 'rooms'), api('GET', 'activity'), api('GET', 'bans'), api('GET', 'pause'), api('GET', 'storage')])
       .then(function (results) {
         data = { rooms: results[0].rooms, activity: results[1].activity, bans: results[2].bans };
         pauseState = results[3].pause;
+        storageState = results[4];
         render();
         renderPause();
         renderUploads();
@@ -1902,7 +1928,8 @@ const SCRIPT = `
             row('ログイン（Discord）', ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'SESSION_SECRET'], settings.login ? '設定してあります' : '設定していません'),
             row('管理画面に入れる人（Discord ID）', ['ADMIN_DISCORD_IDS'], list(settings.admins)),
             row('パスキーを登録し直せる人（Discord ID）', ['ADMIN_PASSKEY_RESET'], list(settings.passkeyReset)),
-            row('Discordへの知らせ', ['ADMIN_WEBHOOK_URL'], settings.webhook ? '送ります' : '送りません'))))
+            row('Discordへの知らせ', ['ADMIN_WEBHOOK_URL'], settings.webhook ? '送ります' : '送りません'),
+            row('置き場所の使用量を知らせる量', ['ADMIN_STORAGE_ALERT_GB'], settings.storageAlertBytes === null ? h('span', { className: 'muted' }, 'なし（数えません）') : gb(settings.storageAlertBytes)))))
       ]);
     }).catch(function (err) { body.replaceChildren(h('p', { className: 'error' }, messageOf(err))); });
   }

@@ -6,6 +6,8 @@ import { notingLimits } from '../core/http/moderation.js';
 import { moderationOf } from '../core/moderation/activity.js';
 import { webhookAlerts } from '../core/moderation/alerts.js';
 import { banCache } from '../core/moderation/bans.js';
+import { checkStorage } from '../core/moderation/storage.js';
+import type { StorageUsage } from '../core/moderation/storage.js';
 import { vercelAssets } from './assets/backend.js';
 import { bucketFor } from './assets/blob-bucket.js';
 import type { AssetBucket } from './assets/bucket.js';
@@ -39,10 +41,11 @@ export const ORPHAN_SWEEP_EVERY = 20;
  */
 export const UNKEYED_SWEEP_EVERY_MS = 12 * 60 * 60 * 1000;
 
-/** What a sweep deleted. */
+/** What a sweep deleted, and the store's size when ADMIN_STORAGE_ALERT_GB has it counted. */
 export interface Swept {
   rooms: number;
   assets: number;
+  storage: StorageUsage | null;
 }
 
 /** What can be swapped in from outside when the room server is put together (for tests and local trials). */
@@ -164,7 +167,7 @@ export const backendProvider = (options: DepsOptions) => {
      * less than UNKEYED_SWEEP_EVERY_MS ago.
      */
     async sweep(config: VercelServerConfig, keyed: boolean): Promise<Swept | null> {
-      if (!config.redisUrl) return { rooms: 0, assets: 0 };
+      if (!config.redisUrl) return { rooms: 0, assets: 0, storage: null };
       const deps = await depsOf(config);
       if (!keyed) {
         const taken = await deps.redis.set(deps.key('sweep', 'unkeyed'), '1', {
@@ -173,7 +176,14 @@ export const backendProvider = (options: DepsOptions) => {
         });
         if (!taken) return null;
       }
-      return { rooms: await deps.sweeper.now(), assets: await deps.orphans() };
+      const rooms = await deps.sweeper.now();
+      const assets = await deps.orphans();
+      // Counted after the sweep, so that what it deleted is not counted. A failure goes to the log.
+      const storage = await checkStorage(config, vercelBackend(deps)).catch((err: unknown) => {
+        console.error('Could not count the store:', err);
+        return null;
+      });
+      return { rooms, assets, storage };
     },
     /** What was made (so the tests can reach inside). */
     depsFor: (config: VercelServerConfig) => made.get(`${config.redisUrl}|${config.redisKeyPrefix}`),

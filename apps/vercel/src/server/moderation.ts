@@ -2,6 +2,7 @@ import { ACTIVITY_MS, MAX_ACTIVITY } from '../core/moderation/activity.js';
 import type { Activity, ModerationStore } from '../core/moderation/activity.js';
 import type { Passkey } from '../core/admin/webauthn.js';
 import type { Ban, BanKind, Pause } from '../core/moderation/bans.js';
+import type { StorageUsage } from '../core/moderation/storage.js';
 import type { KeyOf, Redis } from './redis.js';
 
 // Keeps the operator's bans and what happened in Redis. Does the same as the Cloudflare version's
@@ -17,6 +18,7 @@ import type { KeyOf, Redis } from './redis.js';
 //   mod:admin-epoch   STRING  The generation of the operators' sessions (raised to end them all).
 //   mod:challenge:<c> STRING  There once a passkey challenge has been answered, until it runs out.
 //   mod:pause         HASH    What the operator has stopped for now: rooms, uploads, logins ("1"), and since.
+//   mod:storage       STRING  JSON of the store's size as last counted (once a day, by the sweep).
 
 const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
@@ -26,6 +28,7 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
   const PASSKEYS = key('mod', 'passkeys');
   const EPOCH = key('mod', 'admin-epoch');
   const PAUSE = key('mod', 'pause');
+  const STORAGE = key('mod', 'storage');
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
   const bans = async (): Promise<Ban[]> => {
@@ -135,6 +138,15 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
 
     async raiseAdminEpoch() {
       return redis.incr(EPOCH);
+    },
+
+    async storageUsage() {
+      const value = await redis.get(STORAGE);
+      return value === null ? null : (JSON.parse(value) as StorageUsage);
+    },
+
+    async putStorageUsage(usage) {
+      await redis.set(STORAGE, JSON.stringify(usage));
     },
 
     /** Takes a passkey challenge once: only the first SET NX gets it. */

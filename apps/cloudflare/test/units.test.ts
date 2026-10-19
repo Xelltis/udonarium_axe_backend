@@ -128,7 +128,15 @@ describe('parseConfig', () => {
       login: null,
       admin: null,
       adminWebhook: null,
+      storageAlertBytes: null,
     });
+  });
+
+  it('reads the store’s size to tell the operator past, in GB', () => {
+    expect(parseConfig({ ...valid, ADMIN_STORAGE_ALERT_GB: '10' }).storageAlertBytes).toBe(10_000_000_000);
+    expect(parseConfig({ ...valid, ADMIN_STORAGE_ALERT_GB: '0.5' }).storageAlertBytes).toBe(500_000_000);
+    expect(parseConfig({ ...valid, ADMIN_STORAGE_ALERT_GB: '' }).storageAlertBytes).toBeNull();
+    expect(parseConfig(valid).storageAlertBytes).toBeNull();
   });
 
   it('reads the webhook for alerts', () => {
@@ -174,6 +182,9 @@ describe('parseConfig', () => {
     ['a reset for one that is not a Discord user id', { ADMIN_DISCORD_IDS: '1', ADMIN_PASSKEY_RESET: 'x' }],
     ['a webhook that is not https', { ADMIN_WEBHOOK_URL: 'http://discord.com/api/webhooks/1/token' }],
     ['a webhook that is not a URL', { ADMIN_WEBHOOK_URL: 'discord' }],
+    ['a store size of nothing', { ADMIN_STORAGE_ALERT_GB: '0' }],
+    ['a store size that is not a number of GB', { ADMIN_STORAGE_ALERT_GB: '10GB' }],
+    ['a store size below nothing', { ADMIN_STORAGE_ALERT_GB: '-1' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
   });

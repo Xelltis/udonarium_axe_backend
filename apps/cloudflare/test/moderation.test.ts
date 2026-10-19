@@ -1,10 +1,18 @@
-import { env, runInDurableObject } from 'cloudflare:test';
+import {
+  createExecutionContext,
+  createScheduledController,
+  env,
+  runInDurableObject,
+  waitOnExecutionContext,
+} from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ACTIVITY_MS, MAX_ACTIVITY } from '../src/core/moderation/activity';
 import type { Activity } from '../src/core/moderation/activity';
 import type { Passkey } from '../src/core/admin/webauthn';
 import type { Ban } from '../src/core/moderation/bans';
+import { scheduled } from '../src/index';
+import { MODERATION_NAME } from '../src/moderation/store';
 import type { ModerationDurableObject } from '../src/moderation/store';
 import type { LobbyDurableObject } from '../src/rooms/lobby';
 import type { RoomDurableObject } from '../src/rooms/room';
@@ -67,6 +75,37 @@ describe('the alerts', () => {
   });
 });
 
+describe('the daily count of the store', () => {
+  const url = 'https://discord.example/api/webhooks/1/token';
+  const theStore = () => env.MODERATION.getByName(MODERATION_NAME);
+  const run = async (overrides: Record<string, string>) => {
+    const ctx = createExecutionContext();
+    await scheduled(createScheduledController(), { ...env, ...overrides } as Env, ctx);
+    await waitOnExecutionContext(ctx);
+  };
+
+  it('counts the store and tells the operator when it is past the amount set', async () => {
+    await env.ASSETS.put(`rooms/${'a'.repeat(32)}/${'b'.repeat(64)}`, new Uint8Array(10));
+    const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+
+    await run({ ADMIN_STORAGE_ALERT_GB: '0.000000001', ADMIN_WEBHOOK_URL: url });
+
+    expect(await theStore().storageUsage()).toMatchObject({ bytes: expect.any(Number), complete: true });
+    expect(sent).toHaveBeenCalledWith(url, expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('counts nothing without an amount, and logs settings it cannot read', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const before = await theStore().storageUsage();
+    await run({});
+    expect(await theStore().storageUsage()).toEqual(before);
+    await run({ ADMIN_STORAGE_ALERT_GB: 'many' });
+
+    expect(error).toHaveBeenCalledWith('Could not count the store:', expect.any(Error));
+  });
+});
+
 describe('ModerationDurableObject', () => {
   it('keeps the operators’ passkeys oldest first, the generation of their sessions, and challenges taken', async () => {
     const store = freshStore();
@@ -116,6 +155,16 @@ describe('ModerationDurableObject', () => {
 
     expect(await store.takeChallenge('y', 0)).toBe(true);
     expect(await store.takeChallenge('y', 0)).toBe(true);
+  });
+
+  it('keeps the store’s size as last counted', async () => {
+    const store = freshStore();
+
+    expect(await store.storageUsage()).toBeNull();
+    await store.putStorageUsage({ bytes: 12_345_678_901, assets: 7, at: 3, complete: false });
+    expect(await store.storageUsage()).toEqual({ bytes: 12_345_678_901, assets: 7, at: 3, complete: false });
+    await store.putStorageUsage({ bytes: 1, assets: 1, at: 4, complete: true });
+    expect(await store.storageUsage()).toEqual({ bytes: 1, assets: 1, at: 4, complete: true });
   });
 
   it('lets one instance send each kind of alert once in a while', async () => {

@@ -98,6 +98,7 @@ const setUp = (options: { direct?: boolean } = {}) => {
       },
       admin: null,
       adminWebhook: null,
+      storageAlertBytes: null,
       roomRetentionSeconds: 3600,
     });
     c.set('backend', backend as unknown as ServerBackend);

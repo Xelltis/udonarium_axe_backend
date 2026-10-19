@@ -18,7 +18,7 @@ export interface SessionOptions {
   /** When Discord let them in, and when a passkey last confirmed it (Unix seconds). */
   start?: number;
   verified?: number;
-  /** The generation of sessions; the store's by default. */
+  /** The generation of sessions; the store’s by default. */
   epoch?: number;
   /** How long the cookie's token lasts (seconds). */
   seconds?: number;

@@ -4,6 +4,7 @@ import type { MiddlewareHandler } from 'hono';
 import { cloudflareBackend } from './backend';
 import { parseConfig } from './config';
 import { onError } from './core/http/errors';
+import { checkStorage } from './core/moderation/storage';
 import { adminRoutes } from './core/http/routes/admin';
 import { serverRoutes } from './core/http/routes/index';
 import type { AppEnv } from './http/context';
@@ -40,4 +41,18 @@ app.use('/admin', configLoader);
 app.use('/admin/*', configLoader);
 app.route('/admin', adminRoutes());
 
-export default app;
+/**
+ * Once a day (the cron trigger in wrangler.jsonc): counts the store of the rooms' pictures and
+ * sounds when ADMIN_STORAGE_ALERT_GB is set, and tells the operator when it is past that. A failure
+ * goes to the log.
+ */
+export const scheduled = async (_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> => {
+  try {
+    const config = parseConfig(env);
+    await checkStorage(config, cloudflareBackend(env, ctx.waitUntil.bind(ctx)));
+  } catch (err) {
+    console.error('Could not count the store:', err);
+  }
+};
+
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

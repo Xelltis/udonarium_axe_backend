@@ -1,6 +1,6 @@
 import { integer, minValue, number, object, pipe, string, transform } from 'valibot';
 
-import { adminEntries, adminIdsValid, adminWebhookValid } from '../core/config/admin';
+import { adminEntries, adminIdsValid, adminStorageAlertValid, adminWebhookValid } from '../core/config/admin';
 import { loginComplete, loginEntries, sessionSecretLongEnough } from '../core/config/login';
 
 export const envSchema = pipe(
@@ -13,5 +13,6 @@ export const envSchema = pipe(
   loginComplete(),
   sessionSecretLongEnough(),
   adminIdsValid(),
-  adminWebhookValid()
+  adminWebhookValid(),
+  adminStorageAlertValid()
 );

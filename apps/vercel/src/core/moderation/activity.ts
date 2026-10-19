@@ -1,6 +1,7 @@
 import type { AdminStore } from '../admin/store.js';
 import { alertOf } from './alerts.js';
-import type { AlertKind } from './alerts.js';
+import type { AlertFacts, AlertKind } from './alerts.js';
+import type { StorageUsage } from './storage.js';
 import { BanList } from './bans.js';
 import type { Ban, BanCache, BanKind, ModerationState, Pause } from './bans.js';
 
@@ -66,6 +67,10 @@ export interface ModerationStore extends AdminStore {
    * every instance.
    */
   claimAlert(kind: AlertKind, ms: number): Promise<boolean>;
+  /** The store's size as last counted, or null before the first count. */
+  storageUsage(): Promise<StorageUsage | null>;
+  /** Keeps the store's size as just counted. */
+  putStorageUsage(usage: StorageUsage): Promise<void>;
 }
 
 /** What the routes use to check bans and write down what happened. */
@@ -86,6 +91,11 @@ export interface Moderation {
    */
   note(entry: Activity): void;
   activity(): Promise<Activity[]>;
+  /** The store's size as last counted, or null before the first count. */
+  storageUsage(): Promise<StorageUsage | null>;
+  putStorageUsage(usage: StorageUsage): Promise<void>;
+  /** Tells the operator the store is past limitBytes (once a day at most). Nothing without alerts. */
+  alertStorage(usage: StorageUsage, limitBytes: number): Promise<void>;
   /** Where the dashboard keeps passkeys and the generation of its sessions. */
   admin: AdminStore;
 }
@@ -95,7 +105,7 @@ export const moderationOf = (
   store: ModerationStore,
   cache: BanCache,
   defer: (work: Promise<unknown>) => void,
-  alert?: (kind: AlertKind, entry: Activity) => Promise<void>
+  alert?: (kind: AlertKind, facts: AlertFacts) => Promise<void>
 ): Moderation => ({
   current: () => cache.current(),
   fresh: () => cache.fresh(),
@@ -119,6 +129,11 @@ export const moderationOf = (
     if (kind) defer(alert(kind, entry).catch((err: unknown) => console.error('Could not send the alert:', err)));
   },
   activity: () => store.activity(),
+  storageUsage: () => store.storageUsage(),
+  putStorageUsage: (usage) => store.putStorageUsage(usage),
+  alertStorage: async (usage, limitBytes) => {
+    if (alert) await alert('storage', { usage, limitBytes });
+  },
   admin: store,
 });
 
@@ -132,6 +147,9 @@ export const noModeration: Moderation = {
   setPause: async () => undefined,
   note: () => undefined,
   activity: async () => [],
+  storageUsage: async () => null,
+  putStorageUsage: async () => undefined,
+  alertStorage: async () => undefined,
   // The dashboard answers 503 without login, so it asks nothing of these.
   admin: {
     passkeysOf: async () => [],

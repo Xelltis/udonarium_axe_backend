@@ -645,6 +645,7 @@ describe('reading the bans as they stand', () => {
         login: { discordClientId: 'id', discordClientSecret: 'secret', sessionSecret: SESSION_SECRET },
         admin: null,
         adminWebhook: null,
+        storageAlertBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);
@@ -714,6 +715,7 @@ describe('closing banned seats', () => {
         login: { discordClientId: 'id', discordClientSecret: 'secret', sessionSecret: SESSION_SECRET },
         admin: { discordIds: [ADMIN_ID], passkeyReset: [] },
         adminWebhook: null,
+        storageAlertBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

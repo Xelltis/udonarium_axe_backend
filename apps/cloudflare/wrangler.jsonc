@@ -6,6 +6,9 @@
   // Rooms gzip their frames with node:zlib.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Once a day at 03:00 in Japan (18:00 UTC): counts the store of the rooms' pictures and sounds when
+  // ADMIN_STORAGE_ALERT_GB is set, and tells the operator when it is past that.
+  "triggers": { "crons": ["0 18 * * *"] },
   // Keeps each room's pictures and sounds under their SHA-256 names, and deletes them with the room.
   // No bucket name is written, so that the first deploy creates `<Worker name>-assets`. However many
   // are put on one account, each Worker gets a bucket of its own.
@@ -68,7 +71,8 @@
     // DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET are set as secrets (see
     // https://xelltis.github.io/udonarium_axe_backend/server/configuration), and so are ADMIN_DISCORD_IDS,
     // the Discord users let into the operator's dashboard, and ADMIN_WEBHOOK_URL, the Discord webhook its
-    // alerts go to (see https://xelltis.github.io/udonarium_axe_backend/operate/admin).
+    // alerts go to, with ADMIN_STORAGE_ALERT_GB, the store's size past which it tells
+    // (see https://xelltis.github.io/udonarium_axe_backend/operate/admin).
     // Locally, they go in .dev.vars.
   },
 }

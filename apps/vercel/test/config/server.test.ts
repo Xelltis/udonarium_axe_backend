@@ -26,6 +26,7 @@ describe('parseServerConfig', () => {
       cronSecret: null,
       admin: null,
       adminWebhook: null,
+      storageAlertBytes: null,
     });
   });
 
@@ -86,12 +87,22 @@ describe('parseServerConfig', () => {
     expect(() => parseServerConfig({ ...base, REDIS_URL: 'redis://r' })).toThrow(/BLOB/);
   });
 
+  it('reads the store’s size to tell the operator past, or none when it is left empty', () => {
+    expect(
+      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: '2.5' }).storageAlertBytes
+    ).toBe(2_500_000_000);
+    expect(
+      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: '' }).storageAlertBytes
+    ).toBeNull();
+  });
+
   it.each([
     ['no origins', {}],
     ['a socket that rotates too soon', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_SOCKET_SECONDS: '30' }],
     ['only part of the login', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', DISCORD_CLIENT_ID: 'id' }],
     ['a webhook that is not https', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'http://discord.com/x' }],
     ['a webhook that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'discord' }],
+    ['a store size that is not a number of GB', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: 'ten' }],
     ['an operator that is not a Discord user id', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_DISCORD_IDS: 'someone' }],
   ])('turns away %s', (_name, env) => {
     expect(() => parseServerConfig(env)).toThrow(ConfigError);

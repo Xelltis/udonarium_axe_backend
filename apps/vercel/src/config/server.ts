@@ -1,6 +1,14 @@
 import { integer, minValue, number, object, optional, pipe, safeParse, string, summarize, transform } from 'valibot';
 
-import { adminEntries, adminIdsValid, adminOf, adminWebhookOf, adminWebhookValid } from '../core/config/admin.js';
+import {
+  adminEntries,
+  adminIdsValid,
+  adminOf,
+  adminStorageAlertOf,
+  adminStorageAlertValid,
+  adminWebhookOf,
+  adminWebhookValid,
+} from '../core/config/admin.js';
 import { ConfigError, loginComplete, loginEntries, loginOf, sessionSecretLongEnough } from '../core/config/login.js';
 import type { LoginConfig } from '../core/config/login.js';
 import type { ServerConfig } from '../core/http/backend.js';
@@ -43,7 +51,8 @@ const serverSchema = pipe(
   loginComplete(),
   sessionSecretLongEnough(),
   adminIdsValid(),
-  adminWebhookValid()
+  adminWebhookValid(),
+  adminStorageAlertValid()
 );
 
 /** The store for the rooms' assets. */
@@ -107,6 +116,7 @@ export const parseServerConfig = (env: unknown): VercelServerConfig => {
     login,
     admin: adminOf(parsed),
     adminWebhook: adminWebhookOf(parsed),
+    storageAlertBytes: adminStorageAlertOf(parsed),
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     roomSocketSeconds: parsed.ROOM_SOCKET_SECONDS,
     redisUrl,

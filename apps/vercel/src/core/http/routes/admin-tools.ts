@@ -4,6 +4,7 @@ import { array, boolean, maxLength, object, pipe, regex, safeParse, string } fro
 import { ASSET_ID } from '../../assets/keys.js';
 import type { AdminConfig } from '../../config/admin.js';
 import type { Pause } from '../../moderation/bans.js';
+import type { StorageUsage } from '../../moderation/storage.js';
 import { recentPasskeyRequired } from '../admin-session.js';
 import type { ServerEnv, StoredRoomAsset } from '../backend.js';
 import { fail } from '../errors.js';
@@ -37,6 +38,14 @@ export interface AdminSettingsResponse {
   admins: string[];
   passkeyReset: string[];
   webhook: boolean;
+  /** ADMIN_STORAGE_ALERT_GB in bytes, or null when the store is not counted. */
+  storageAlertBytes: number | null;
+}
+
+/** The store's size as last counted, and the size past which the operator is told. */
+export interface AdminStorageResponse {
+  usage: StorageUsage | null;
+  limitBytes: number | null;
 }
 
 export interface AdminAccountResponse {
@@ -79,8 +88,17 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
       admins: discordIds,
       passkeyReset,
       webhook: config.adminWebhook !== null,
+      storageAlertBytes: config.storageAlertBytes,
     });
   });
+
+  /** The store's size as the daily count last found it (counted only when ADMIN_STORAGE_ALERT_GB is set). */
+  admin.get('/api/storage', async (c) =>
+    c.json<AdminStorageResponse>({
+      usage: await c.var.backend.moderation.storageUsage(),
+      limitBytes: c.var.config.storageAlertBytes,
+    })
+  );
 
   // ---- Stopping everyone for a while ----
 
