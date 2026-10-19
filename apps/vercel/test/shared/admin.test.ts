@@ -237,6 +237,57 @@ describe('bans', () => {
   });
 });
 
+describe('where someone turned away can ask (ADMIN_CONTACT_URL)', () => {
+  const CONTACT = 'https://axe.example/contact';
+  const withContact = (path: string, ip: string, init: RequestInit = {}) =>
+    harness.fetchWith(
+      new Request(`${BACKEND}${path}`, {
+        redirect: 'manual',
+        ...init,
+        headers: { Origin: ORIGIN, 'CF-Connecting-IP': ip, ...init.headers },
+      }),
+      { ADMIN_CONTACT_URL: CONTACT }
+    );
+
+  it('goes with a ban, with a login the ban turns away, and on a page of its own that no ban holds back', async () => {
+    const ip = freshIp();
+    const ban = await banOf('ip', ip);
+    try {
+      expect(await (await withContact('/v1/rooms', ip)).json()).toEqual({ error: 'banned', contact: CONTACT });
+      const login = await withContact(
+        `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${'c'.repeat(43)}`,
+        ip
+      );
+      expect(login.headers.get('Location')).toBe(
+        `${APP}#login_error=banned&login_contact=${encodeURIComponent(CONTACT)}`
+      );
+      const page = await withContact('/v1/contact', ip);
+      expect(await page.json()).toEqual({ contact: CONTACT });
+      expect(page.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+    } finally {
+      await unban(ban);
+    }
+    expect(await (await callApi('/v1/contact')).json()).toEqual({ contact: null });
+  });
+
+  it('goes with what the operator stopped, and with nothing else that is turned away', async () => {
+    const stopAll = { rooms: true, uploads: false, logins: false };
+    const make = () =>
+      withContact('/v1/rooms', freshIp(), {
+        method: 'POST',
+        body: JSON.stringify({ name: 'stopped' }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessTokenFor('contact')}` },
+      });
+    try {
+      expect((await admin('pause', { method: 'PUT', body: stopAll })).status).toBe(200);
+      expect(await (await make()).json()).toEqual({ error: 'paused', contact: CONTACT });
+    } finally {
+      await admin('pause', { method: 'PUT', body: { ...stopAll, rooms: false } });
+    }
+    expect(await (await withContact('/v1/rooms/nope', freshIp())).json()).toEqual({ error: 'invalid-id' });
+  });
+});
+
 describe('a banned sender', () => {
   it('is turned away from rooms, login and tokens, and can still reach the dashboard', async () => {
     const ip = freshIp();
@@ -647,6 +698,7 @@ describe('reading the bans as they stand', () => {
         adminWebhook: null,
         storageAlertBytes: null,
         roomStorageLimitBytes: null,
+        contactUrl: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);
@@ -718,6 +770,7 @@ describe('closing banned seats', () => {
         adminWebhook: null,
         storageAlertBytes: null,
         roomStorageLimitBytes: null,
+        contactUrl: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

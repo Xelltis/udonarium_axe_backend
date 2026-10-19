@@ -19,6 +19,8 @@ export interface ServerConfig {
   storageAlertBytes: number | null;
   /** The most one room may keep in bytes (ROOM_STORAGE_LIMIT_MB). Null when there is no such limit. */
   roomStorageLimitBytes: number | null;
+  /** Where someone the operator turned away can ask about it (ADMIN_CONTACT_URL). Null when none is given. */
+  contactUrl: string | null;
   /** The seconds from the last person leaving a room until the room is deleted. */
   roomRetentionSeconds: number;
 }

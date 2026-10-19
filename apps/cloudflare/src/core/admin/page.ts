@@ -1994,7 +1994,8 @@ const SCRIPT = `
             row('パスキーを登録し直せる人（Discord ID）', ['ADMIN_PASSKEY_RESET'], list(settings.passkeyReset)),
             row('Discordへの知らせ', ['ADMIN_WEBHOOK_URL'], settings.webhook ? '送ります' : '送りません'),
             row('置き場所の使用量を知らせる量', ['ADMIN_STORAGE_ALERT_GB'], settings.storageAlertBytes === null ? h('span', { className: 'muted' }, 'なし（数えません）') : gb(settings.storageAlertBytes)),
-            row('1部屋に置ける画像と音声の合計', ['ROOM_STORAGE_LIMIT_MB'], settings.roomStorageLimitBytes === null ? h('span', { className: 'muted' }, 'なし') : count(settings.roomStorageLimitBytes / 1e6) + ' MB'))))
+            row('1部屋に置ける画像と音声の合計', ['ROOM_STORAGE_LIMIT_MB'], settings.roomStorageLimitBytes === null ? h('span', { className: 'muted' }, 'なし') : count(settings.roomStorageLimitBytes / 1e6) + ' MB'),
+            row('断った人への問い合わせ先', ['ADMIN_CONTACT_URL'], settings.contactUrl === null ? h('span', { className: 'muted' }, 'なし') : h('span', { className: 'mono' }, settings.contactUrl)))))
       ]);
     }).catch(function (err) { body.replaceChildren(h('p', { className: 'error' }, messageOf(err))); });
   }

@@ -100,6 +100,7 @@ const setUp = (options: { direct?: boolean } = {}) => {
       adminWebhook: null,
       storageAlertBytes: null,
       roomStorageLimitBytes: null,
+      contactUrl: null,
       roomRetentionSeconds: 3600,
     });
     c.set('backend', backend as unknown as ServerBackend);

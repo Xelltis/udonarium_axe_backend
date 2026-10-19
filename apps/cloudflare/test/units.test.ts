@@ -130,7 +130,16 @@ describe('parseConfig', () => {
       adminWebhook: null,
       storageAlertBytes: null,
       roomStorageLimitBytes: null,
+      contactUrl: null,
     });
+  });
+
+  it('reads where someone turned away can ask: a page or a mail address', () => {
+    expect(parseConfig({ ...valid, ADMIN_CONTACT_URL: 'https://a.example/ask' }).contactUrl).toBe(
+      'https://a.example/ask'
+    );
+    expect(parseConfig({ ...valid, ADMIN_CONTACT_URL: 'mailto:op@a.example' }).contactUrl).toBe('mailto:op@a.example');
+    expect(parseConfig({ ...valid, ADMIN_CONTACT_URL: '' }).contactUrl).toBeNull();
   });
 
   it('reads how much one room may keep, in MB', () => {
@@ -192,6 +201,8 @@ describe('parseConfig', () => {
     ['a store size that is not a number of GB', { ADMIN_STORAGE_ALERT_GB: '10GB' }],
     ['a store size below nothing', { ADMIN_STORAGE_ALERT_GB: '-1' }],
     ['a room limit of nothing', { ROOM_STORAGE_LIMIT_MB: '0' }],
+    ['a contact that is not https', { ADMIN_CONTACT_URL: 'http://a.example/ask' }],
+    ['a contact that is not a URL', { ADMIN_CONTACT_URL: 'ask the GM' }],
     ['a room limit that is not a whole number of MB', { ROOM_STORAGE_LIMIT_MB: '1.5' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);

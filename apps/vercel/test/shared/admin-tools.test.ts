@@ -84,6 +84,7 @@ describe('the settings', () => {
       webhook: false,
       storageAlertBytes: null,
       roomStorageLimitBytes: null,
+      contactUrl: null,
     });
   });
 
@@ -276,6 +277,7 @@ describe('what was uploaded', () => {
         adminWebhook: null,
         storageAlertBytes: null,
         roomStorageLimitBytes: null,
+        contactUrl: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

@@ -6,6 +6,11 @@ import { banGuard } from '../moderation.js';
 import { accountRoutes, authRoutes, loginRoutes } from './auth.js';
 import { roomRoutes } from './rooms.js';
 
+/** GET /v1/contact: where someone the operator turned away can ask about it, or null. */
+export interface ContactResponse {
+  contact: string | null;
+}
+
 /**
  * The room server's routes (under /v1). Every room server checks things in the same order and
  * answers in the same form.
@@ -24,5 +29,9 @@ export const serverRoutes = (): Hono<ServerEnv> => {
   // What a browser opens as a page (the trip to Discord and back). It carries no Origin, so that is
   // not checked.
   routes.route('/login', loginRoutes);
+  // Where someone the operator turned away can ask about it. Not behind the bans, so that Axe can show
+  // it to whoever was banned.
+  routes.use('/contact', apiCors());
+  routes.get('/contact', (c) => c.json<ContactResponse>({ contact: c.var.config.contactUrl }));
   return routes;
 };

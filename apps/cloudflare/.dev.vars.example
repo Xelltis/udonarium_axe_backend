@@ -13,3 +13,5 @@ ADMIN_WEBHOOK_URL=
 ADMIN_STORAGE_ALERT_GB=
 # 1つの部屋に置ける画像と音声の合計（MB）。入れなければ合計の上限は無い
 ROOM_STORAGE_LIMIT_MB=
+# BANや緊急停止で断った人に見せる問い合わせ先（https:// のページか mailto:）。入れなければ出さない
+ADMIN_CONTACT_URL=

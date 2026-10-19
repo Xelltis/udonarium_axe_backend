@@ -13,12 +13,15 @@ export const GB = 1_000_000_000;
  * - ADMIN_WEBHOOK_URL: the Discord webhook the alerts go to. Without it there are no alerts.
  * - ADMIN_STORAGE_ALERT_GB: the store's size, in GB, past which the operator is told (counted once
  *   a day). Without it the store is not counted.
+ * - ADMIN_CONTACT_URL: where someone the operator turned away can ask about it (an https:// page or
+ *   a mailto: address). Without it none is given.
  */
 export const adminEntries = {
   ADMIN_DISCORD_IDS: optional(string()),
   ADMIN_PASSKEY_RESET: optional(string()),
   ADMIN_WEBHOOK_URL: optional(string()),
   ADMIN_STORAGE_ALERT_GB: optional(string()),
+  ADMIN_CONTACT_URL: optional(string()),
 };
 
 interface AdminEnv {
@@ -26,6 +29,7 @@ interface AdminEnv {
   ADMIN_PASSKEY_RESET?: string;
   ADMIN_WEBHOOK_URL?: string;
   ADMIN_STORAGE_ALERT_GB?: string;
+  ADMIN_CONTACT_URL?: string;
 }
 
 /** The ids in a list separated by commas. */
@@ -45,13 +49,16 @@ export const adminIdsValid = <T extends AdminEnv>() =>
     'ADMIN_DISCORD_IDS and ADMIN_PASSKEY_RESET must be Discord user ids separated by commas'
   );
 
-const isHttps = (text: string): boolean => {
+/** The scheme of a URL, or null when it is not one. */
+const schemeOf = (text: string): string | null => {
   try {
-    return new URL(text).protocol === 'https:';
+    return new URL(text).protocol;
   } catch {
-    return false;
+    return null;
   }
 };
+
+const isHttps = (text: string): boolean => schemeOf(text) === 'https:';
 
 /** The webhook the alerts go to is an https:// URL (a Discord webhook). */
 export const adminWebhookValid = <T extends AdminEnv>() =>
@@ -59,6 +66,16 @@ export const adminWebhookValid = <T extends AdminEnv>() =>
     (env) => !env.ADMIN_WEBHOOK_URL || isHttps(env.ADMIN_WEBHOOK_URL),
     'ADMIN_WEBHOOK_URL must be an https:// URL'
   );
+
+/** Where to ask is an https:// page or a mailto: address. */
+export const adminContactValid = <T extends AdminEnv>() =>
+  check<T, string>(
+    (env) => !env.ADMIN_CONTACT_URL || ['https:', 'mailto:'].includes(schemeOf(env.ADMIN_CONTACT_URL) ?? ''),
+    'ADMIN_CONTACT_URL must be an https:// or mailto: URL'
+  );
+
+/** Where someone turned away can ask, from what has passed adminContactValid. Null when unset. */
+export const adminContactOf = (env: AdminEnv): string | null => env.ADMIN_CONTACT_URL || null;
 
 /** A size in GB above nothing, as written (a decimal point is allowed: 0.5). */
 const GB_AMOUNT = /^\d+(\.\d+)?$/;

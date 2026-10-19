@@ -1,6 +1,12 @@
 import { integer, minValue, number, object, pipe, string, transform } from 'valibot';
 
-import { adminEntries, adminIdsValid, adminStorageAlertValid, adminWebhookValid } from '../core/config/admin';
+import {
+  adminContactValid,
+  adminEntries,
+  adminIdsValid,
+  adminStorageAlertValid,
+  adminWebhookValid,
+} from '../core/config/admin';
 import { loginComplete, loginEntries, sessionSecretLongEnough } from '../core/config/login';
 import { roomStorageEntries, roomStorageValid } from '../core/config/rooms';
 
@@ -17,5 +23,6 @@ export const envSchema = pipe(
   adminIdsValid(),
   adminWebhookValid(),
   adminStorageAlertValid(),
-  roomStorageValid()
+  roomStorageValid(),
+  adminContactValid()
 );

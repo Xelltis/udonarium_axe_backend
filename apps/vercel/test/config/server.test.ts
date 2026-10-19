@@ -28,6 +28,7 @@ describe('parseServerConfig', () => {
       adminWebhook: null,
       storageAlertBytes: null,
       roomStorageLimitBytes: null,
+      contactUrl: null,
     });
   });
 
@@ -88,6 +89,12 @@ describe('parseServerConfig', () => {
     expect(() => parseServerConfig({ ...base, REDIS_URL: 'redis://r' })).toThrow(/BLOB/);
   });
 
+  it('reads where someone turned away can ask', () => {
+    expect(
+      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_CONTACT_URL: 'mailto:op@a.example' }).contactUrl
+    ).toBe('mailto:op@a.example');
+  });
+
   it('reads the store’s size to tell the operator past, or none when it is left empty', () => {
     expect(
       parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: '2.5' }).storageAlertBytes
@@ -104,6 +111,7 @@ describe('parseServerConfig', () => {
     ['a webhook that is not https', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'http://discord.com/x' }],
     ['a webhook that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'discord' }],
     ['a store size that is not a number of GB', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: 'ten' }],
+    ['a contact that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_CONTACT_URL: 'ask the GM' }],
     [
       'a room limit that is not a whole number of MB',
       { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_STORAGE_LIMIT_MB: 'lots' },

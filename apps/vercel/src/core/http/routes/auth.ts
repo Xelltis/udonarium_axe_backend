@@ -33,9 +33,15 @@ const logoutSchema = object({ refresh_token: string() });
 const callbackUrl = (c: Context<ServerEnv>): string => `${new URL(c.req.url).origin}/v1/login/discord/callback`;
 
 /** Sends the browser back to Axe's return address, with the code or the reason it failed in the fragment. */
+/**
+ * Sends the browser back to Axe with the fragment. A login the operator turned away (banned, or
+ * logins stopped) carries where to ask about it, when one is given (login_contact).
+ */
 const backTo = (c: Context<ServerEnv>, redirect: string, fragment: Record<string, string>) => {
   const url = new URL(redirect);
-  url.hash = new URLSearchParams(fragment).toString();
+  const contact = c.var.config.contactUrl;
+  const operators = fragment.login_error === 'banned' || fragment.login_error === 'paused';
+  url.hash = new URLSearchParams(operators && contact ? { ...fragment, login_contact: contact } : fragment).toString();
   return c.redirect(url.toString(), 302);
 };
 

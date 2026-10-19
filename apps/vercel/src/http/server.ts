@@ -19,6 +19,7 @@ export const SERVER_PATHS = [
   '/v1/account',
   '/v1/account/*',
   '/v1/login/*',
+  '/v1/contact',
   '/internal/sweep',
   '/admin',
   '/admin/*',

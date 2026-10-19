@@ -46,6 +46,8 @@ export interface AdminSettingsResponse {
   storageAlertBytes: number | null;
   /** ROOM_STORAGE_LIMIT_MB in bytes, or null when a room may keep as much as is put. */
   roomStorageLimitBytes: number | null;
+  /** ADMIN_CONTACT_URL, or null. It is shown to those turned away, so it is no secret. */
+  contactUrl: string | null;
 }
 
 /** The store's size as last counted, and the size past which the operator is told. */
@@ -98,6 +100,7 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
       webhook: config.adminWebhook !== null,
       storageAlertBytes: config.storageAlertBytes,
       roomStorageLimitBytes: config.roomStorageLimitBytes,
+      contactUrl: config.contactUrl,
     });
   });
 

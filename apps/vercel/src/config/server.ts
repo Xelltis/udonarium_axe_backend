@@ -1,6 +1,8 @@
 import { integer, minValue, number, object, optional, pipe, safeParse, string, summarize, transform } from 'valibot';
 
 import {
+  adminContactOf,
+  adminContactValid,
   adminEntries,
   adminIdsValid,
   adminOf,
@@ -55,7 +57,8 @@ const serverSchema = pipe(
   adminIdsValid(),
   adminWebhookValid(),
   adminStorageAlertValid(),
-  roomStorageValid()
+  roomStorageValid(),
+  adminContactValid()
 );
 
 /** The store for the rooms' assets. */
@@ -121,6 +124,7 @@ export const parseServerConfig = (env: unknown): VercelServerConfig => {
     adminWebhook: adminWebhookOf(parsed),
     storageAlertBytes: adminStorageAlertOf(parsed),
     roomStorageLimitBytes: roomStorageLimitOf(parsed),
+    contactUrl: adminContactOf(parsed),
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     roomSocketSeconds: parsed.ROOM_SOCKET_SECONDS,
     redisUrl,
