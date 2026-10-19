@@ -11,3 +11,5 @@ ADMIN_DISCORD_IDS=
 ADMIN_WEBHOOK_URL=
 # 画像と音声の置き場所がこの量（GB）を超えたら知らせる。入れなければ数えない（手元では定期実行が動かない）
 ADMIN_STORAGE_ALERT_GB=
+# 1つの部屋に置ける画像と音声の合計（MB）。入れなければ合計の上限は無い
+ROOM_STORAGE_LIMIT_MB=

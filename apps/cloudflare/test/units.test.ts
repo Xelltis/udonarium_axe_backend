@@ -129,7 +129,13 @@ describe('parseConfig', () => {
       admin: null,
       adminWebhook: null,
       storageAlertBytes: null,
+      roomStorageLimitBytes: null,
     });
+  });
+
+  it('reads how much one room may keep, in MB', () => {
+    expect(parseConfig({ ...valid, ROOM_STORAGE_LIMIT_MB: '500' }).roomStorageLimitBytes).toBe(500_000_000);
+    expect(parseConfig({ ...valid, ROOM_STORAGE_LIMIT_MB: '' }).roomStorageLimitBytes).toBeNull();
   });
 
   it('reads the store’s size to tell the operator past, in GB', () => {
@@ -185,6 +191,8 @@ describe('parseConfig', () => {
     ['a store size of nothing', { ADMIN_STORAGE_ALERT_GB: '0' }],
     ['a store size that is not a number of GB', { ADMIN_STORAGE_ALERT_GB: '10GB' }],
     ['a store size below nothing', { ADMIN_STORAGE_ALERT_GB: '-1' }],
+    ['a room limit of nothing', { ROOM_STORAGE_LIMIT_MB: '0' }],
+    ['a room limit that is not a whole number of MB', { ROOM_STORAGE_LIMIT_MB: '1.5' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
   });

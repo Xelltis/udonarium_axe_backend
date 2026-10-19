@@ -27,6 +27,7 @@ describe('parseServerConfig', () => {
       admin: null,
       adminWebhook: null,
       storageAlertBytes: null,
+      roomStorageLimitBytes: null,
     });
   });
 
@@ -103,6 +104,10 @@ describe('parseServerConfig', () => {
     ['a webhook that is not https', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'http://discord.com/x' }],
     ['a webhook that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'discord' }],
     ['a store size that is not a number of GB', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: 'ten' }],
+    [
+      'a room limit that is not a whole number of MB',
+      { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_STORAGE_LIMIT_MB: 'lots' },
+    ],
     ['an operator that is not a Discord user id', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_DISCORD_IDS: 'someone' }],
   ])('turns away %s', (_name, env) => {
     expect(() => parseServerConfig(env)).toThrow(ConfigError);

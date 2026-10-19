@@ -646,6 +646,7 @@ describe('reading the bans as they stand', () => {
         admin: null,
         adminWebhook: null,
         storageAlertBytes: null,
+        roomStorageLimitBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);
@@ -716,6 +717,7 @@ describe('closing banned seats', () => {
         admin: { discordIds: [ADMIN_ID], passkeyReset: [] },
         adminWebhook: null,
         storageAlertBytes: null,
+        roomStorageLimitBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

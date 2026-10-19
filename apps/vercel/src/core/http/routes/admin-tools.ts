@@ -44,12 +44,16 @@ export interface AdminSettingsResponse {
   webhook: boolean;
   /** ADMIN_STORAGE_ALERT_GB in bytes, or null when the store is not counted. */
   storageAlertBytes: number | null;
+  /** ROOM_STORAGE_LIMIT_MB in bytes, or null when a room may keep as much as is put. */
+  roomStorageLimitBytes: number | null;
 }
 
 /** The store's size as last counted, and the size past which the operator is told. */
 export interface AdminStorageResponse {
   usage: StorageUsage | null;
   limitBytes: number | null;
+  /** The most one room may keep (ROOM_STORAGE_LIMIT_MB), or null. */
+  roomLimitBytes: number | null;
 }
 
 export interface AdminAccountResponse {
@@ -93,6 +97,7 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
       passkeyReset,
       webhook: config.adminWebhook !== null,
       storageAlertBytes: config.storageAlertBytes,
+      roomStorageLimitBytes: config.roomStorageLimitBytes,
     });
   });
 
@@ -101,6 +106,7 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
     c.json<AdminStorageResponse>({
       usage: await c.var.backend.moderation.storageUsage(),
       limitBytes: c.var.config.storageAlertBytes,
+      roomLimitBytes: c.var.config.roomStorageLimitBytes,
     })
   );
 

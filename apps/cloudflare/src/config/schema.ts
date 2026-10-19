@@ -2,6 +2,7 @@ import { integer, minValue, number, object, pipe, string, transform } from 'vali
 
 import { adminEntries, adminIdsValid, adminStorageAlertValid, adminWebhookValid } from '../core/config/admin';
 import { loginComplete, loginEntries, sessionSecretLongEnough } from '../core/config/login';
+import { roomStorageEntries, roomStorageValid } from '../core/config/rooms';
 
 export const envSchema = pipe(
   object({
@@ -9,10 +10,12 @@ export const envSchema = pipe(
     ROOM_RETENTION_HOURS: pipe(string(), transform(Number), number(), integer(), minValue(1)),
     ...loginEntries,
     ...adminEntries,
+    ...roomStorageEntries,
   }),
   loginComplete(),
   sessionSecretLongEnough(),
   adminIdsValid(),
   adminWebhookValid(),
-  adminStorageAlertValid()
+  adminStorageAlertValid(),
+  roomStorageValid()
 );

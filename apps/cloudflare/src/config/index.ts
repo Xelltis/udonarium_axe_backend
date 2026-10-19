@@ -3,6 +3,7 @@ import { safeParse, summarize } from 'valibot';
 import { adminOf, adminStorageAlertOf, adminWebhookOf } from '../core/config/admin';
 import type { AdminConfig } from '../core/config/admin';
 import { ConfigError, loginOf } from '../core/config/login';
+import { roomStorageLimitOf } from '../core/config/rooms';
 import type { LoginConfig } from '../core/config/login';
 import { envSchema } from './schema';
 
@@ -23,6 +24,8 @@ export interface AppConfig {
   adminWebhook: string | null;
   /** The store's size in bytes past which the operator is told. Null when it is not counted. */
   storageAlertBytes: number | null;
+  /** The most one room may keep in bytes. Null when there is no such limit. */
+  roomStorageLimitBytes: number | null;
 }
 
 export const parseConfig = (env: unknown): AppConfig => {
@@ -42,5 +45,6 @@ export const parseConfig = (env: unknown): AppConfig => {
     admin: adminOf(parsed),
     adminWebhook: adminWebhookOf(parsed),
     storageAlertBytes: adminStorageAlertOf(parsed),
+    roomStorageLimitBytes: roomStorageLimitOf(parsed),
   };
 };

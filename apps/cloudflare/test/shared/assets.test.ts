@@ -686,3 +686,42 @@ describe('configuration', () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining('ACCESS_CONTROL_ALLOW_ORIGIN'));
   });
 });
+
+describe('the most one room may keep (ROOM_STORAGE_LIMIT_MB)', () => {
+  const putWith = (id: string, file: Uint8Array, env: Record<string, string>) =>
+    harness.fetchWith(
+      new Request(urlIn(ROOM_KEY, id), {
+        method: 'PUT',
+        body: file as Uint8Array<ArrayBuffer>,
+        headers: {
+          Origin: ORIGIN,
+          'CF-Connecting-IP': freshIp(),
+          'Content-Length': String(file.byteLength),
+          Authorization: `Bearer ${assetTokenFor('pl')}`,
+        },
+      }),
+      env
+    );
+
+  it('turns away what would take the room past it, and stores what fits', async () => {
+    const listed = await jsonOf<{ assets: { size: number }[] }>(
+      await harness.fetch(
+        new Request(BASE, {
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: `Bearer ${assetTokenFor('pl')}` },
+        })
+      )
+    );
+    const kept = listed.assets.reduce((sum, asset) => sum + asset.size, 0);
+    const small = await freshFile(PNG_HEAD, 1024);
+    const big = await freshFile(PNG_HEAD, 1_500_000);
+    // Room for the small one, and less than a whole MB more.
+    const env = { ROOM_STORAGE_LIMIT_MB: String(Math.ceil((kept + 1024) / 1_000_000)) };
+
+    expect((await putWith(small.id, small.file, env)).status).toBe(201);
+    const refused = await putWith(big.id, big.file, env);
+
+    expect(refused.status).toBe(413);
+    expect(await refused.json()).toEqual({ error: 'room-storage-full' });
+    expect(await harness.assetStored(ROOM_KEY, big.id)).toBeNull();
+  });
+});

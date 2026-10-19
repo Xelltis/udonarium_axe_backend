@@ -24,6 +24,7 @@ export type ErrorCode =
   | 'last-passkey'
   | 'too-many-passkeys'
   | 'blocked'
+  | 'room-storage-full'
   | 'hash-mismatch'
   | 'origin-not-allowed'
   | 'not-found'

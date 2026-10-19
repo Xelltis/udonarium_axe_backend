@@ -9,6 +9,7 @@ import {
   adminWebhookOf,
   adminWebhookValid,
 } from '../core/config/admin.js';
+import { roomStorageEntries, roomStorageLimitOf, roomStorageValid } from '../core/config/rooms.js';
 import { ConfigError, loginComplete, loginEntries, loginOf, sessionSecretLongEnough } from '../core/config/login.js';
 import type { LoginConfig } from '../core/config/login.js';
 import type { ServerConfig } from '../core/http/backend.js';
@@ -47,12 +48,14 @@ const serverSchema = pipe(
     VERCEL: optional(string()),
     ...loginEntries,
     ...adminEntries,
+    ...roomStorageEntries,
   }),
   loginComplete(),
   sessionSecretLongEnough(),
   adminIdsValid(),
   adminWebhookValid(),
-  adminStorageAlertValid()
+  adminStorageAlertValid(),
+  roomStorageValid()
 );
 
 /** The store for the rooms' assets. */
@@ -117,6 +120,7 @@ export const parseServerConfig = (env: unknown): VercelServerConfig => {
     admin: adminOf(parsed),
     adminWebhook: adminWebhookOf(parsed),
     storageAlertBytes: adminStorageAlertOf(parsed),
+    roomStorageLimitBytes: roomStorageLimitOf(parsed),
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     roomSocketSeconds: parsed.ROOM_SOCKET_SECONDS,
     redisUrl,

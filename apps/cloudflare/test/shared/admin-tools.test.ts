@@ -83,6 +83,7 @@ describe('the settings', () => {
       passkeyReset: [],
       webhook: false,
       storageAlertBytes: null,
+      roomStorageLimitBytes: null,
     });
   });
 
@@ -90,6 +91,7 @@ describe('the settings', () => {
     const storage = await jsonOf<AdminStorageResponse>(await callAdmin('storage'));
 
     expect(storage.limitBytes).toBeNull();
+    expect(storage.roomLimitBytes).toBeNull();
     expect(storage).toHaveProperty('usage');
   });
 });
@@ -273,6 +275,7 @@ describe('what was uploaded', () => {
         admin: { discordIds: [ADMIN_ID], passkeyReset: [] },
         adminWebhook: null,
         storageAlertBytes: null,
+        roomStorageLimitBytes: null,
         roomRetentionSeconds: 3600,
       });
       c.set('backend', backend);

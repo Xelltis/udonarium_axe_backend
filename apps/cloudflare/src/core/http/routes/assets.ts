@@ -53,15 +53,17 @@ const noteStored = (
 /**
  * Checks whether it may be stored, in the same order for a PUT and for an upload straight to the
  * store. Returns a refusal when it cannot be stored, and the exists response when it is already
- * stored. With count, it also checks the limit counted each time something is stored.
+ * stored. With count, it also checks the limit counted each time something is stored, and whether
+ * size more bytes would take the room past ROOM_STORAGE_LIMIT_MB.
  */
 const admit = async (
   c: AssetContext,
   roomKey: string,
   id: string,
-  count: boolean
+  count: boolean,
+  size: number
 ): Promise<Response | Claims<'asset'>> => {
-  const { backend } = c.var;
+  const { backend, config } = c.var;
   const claims = await claimsOf(c, roomKey);
   if (claims instanceof Response) return claims;
   if (claims.role === 'guest') return fail(c, 403, 'not-a-player');
@@ -85,6 +87,12 @@ const admit = async (
   if (count && !(await backend.limit(c.req.raw, 'upload'))) return fail(c, 429, 'rate-limited');
   // The operator may have stopped storing for now. Read as it stands, once past the limit.
   if (await pausedNow(c, 'uploads')) return fail(c, 503, 'paused');
+  // What the room keeps is counted only where a limit is set, and only once past the rest.
+  const limit = config.roomStorageLimitBytes;
+  if (count && limit !== null) {
+    const kept = (await backend.assets.list(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
+    if (kept + size > limit) return fail(c, 413, 'room-storage-full');
+  }
   return claims;
 };
 
@@ -125,7 +133,7 @@ export const putRoomAsset = async (c: AssetContext) => {
     return fail(c, 413, 'too-large');
   }
 
-  const claims = await admit(c, roomKey, id, true);
+  const claims = await admit(c, roomKey, id, true, length);
   if (claims instanceof Response) return claims;
 
   // The type is decided by reading only the start, and the rest flows on to the store as it comes,
@@ -168,7 +176,7 @@ export const requestUpload = async (c: AssetContext) => {
   const { size } = parsed.output;
   if (size > MAX_ANY_BYTES) return fail(c, 413, 'too-large');
 
-  const claims = await admit(c, roomKey, id, true);
+  const claims = await admit(c, roomKey, id, true, size);
   if (claims instanceof Response) return claims;
 
   const path = uploadKeyOf(roomKey, id, crypto.randomUUID());
@@ -233,7 +241,7 @@ const keepUpload = async (
 ): Promise<Response> => {
   const { backend } = c.var;
   const { id } = ticket;
-  const admitted = await admit(c, roomKey, id, false);
+  const admitted = await admit(c, roomKey, id, false, ticket.size);
   if (admitted instanceof Response) return admitted;
 
   const body = await direct.open(ticket.path);

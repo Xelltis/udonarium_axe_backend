@@ -17,6 +17,8 @@ export interface ServerConfig {
   adminWebhook: string | null;
   /** The store's size in bytes past which the operator is told (ADMIN_STORAGE_ALERT_GB). Null when it is not counted. */
   storageAlertBytes: number | null;
+  /** The most one room may keep in bytes (ROOM_STORAGE_LIMIT_MB). Null when there is no such limit. */
+  roomStorageLimitBytes: number | null;
   /** The seconds from the last person leaving a room until the room is deleted. */
   roomRetentionSeconds: number;
 }

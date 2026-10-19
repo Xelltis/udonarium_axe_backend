@@ -240,7 +240,7 @@ const SCRIPT = `
   /** How tight the rate limits are now, as the server last said. */
   var tightenState = null;
   /** The store's size as the daily count last found it, and the amount past which the operator is told. */
-  var storageState = { usage: null, limitBytes: null };
+  var storageState = { usage: null, limitBytes: null, roomLimitBytes: null };
   /** Every asset in the store as last read (on the uploads tab), and the barred ones. */
   var uploads = null;
   var uploadsLoading = false;
@@ -1796,7 +1796,10 @@ const SCRIPT = `
     var top = Object.keys(byRoom).map(function (key) { return byRoom[key]; })
       .sort(function (a, b) { return b.bytes - a.bytes; }).slice(0, TOP_ROWS);
     var body = $('usage-body');
-    if (top.length === 0) { body.replaceChildren(h('tr', null, h('td', { colspan: 5, className: 'empty' }, 'ありません。'))); return; }
+    var roomLimit = storageState.roomLimitBytes;
+    $('usage-share').hidden = roomLimit === null;
+    $('usage-share').textContent = roomLimit === null ? '' : '上限（' + count(roomLimit / 1e6) + ' MB）に対して';
+    if (top.length === 0) { body.replaceChildren(h('tr', null, h('td', { colspan: roomLimit === null ? 5 : 6, className: 'empty' }, 'ありません。'))); return; }
     body.replaceChildren.apply(body, top.map(function (usage) {
       var room = data.rooms.filter(function (each) { return each.roomKey === usage.roomKey; })[0];
       return h('tr', null,
@@ -1804,6 +1807,7 @@ const SCRIPT = `
         h('td', null, keyText(usage.roomKey)),
         h('td', { className: 'num' }, count(usage.count)),
         h('td', { className: 'num' }, size(usage.bytes)),
+        roomLimit === null ? null : h('td', { className: 'num' + (usage.bytes >= roomLimit ? ' error' : '') }, Math.round((usage.bytes / roomLimit) * 100) + '%'),
         h('td', { className: 'actions' }, room ? h('button', { type: 'button', onclick: function () { showRoom(room); } }, '中を見る') : null));
     }));
   }
@@ -1989,7 +1993,8 @@ const SCRIPT = `
             row('管理画面に入れる人（Discord ID）', ['ADMIN_DISCORD_IDS'], list(settings.admins)),
             row('パスキーを登録し直せる人（Discord ID）', ['ADMIN_PASSKEY_RESET'], list(settings.passkeyReset)),
             row('Discordへの知らせ', ['ADMIN_WEBHOOK_URL'], settings.webhook ? '送ります' : '送りません'),
-            row('置き場所の使用量を知らせる量', ['ADMIN_STORAGE_ALERT_GB'], settings.storageAlertBytes === null ? h('span', { className: 'muted' }, 'なし（数えません）') : gb(settings.storageAlertBytes)))))
+            row('置き場所の使用量を知らせる量', ['ADMIN_STORAGE_ALERT_GB'], settings.storageAlertBytes === null ? h('span', { className: 'muted' }, 'なし（数えません）') : gb(settings.storageAlertBytes)),
+            row('1部屋に置ける画像と音声の合計', ['ROOM_STORAGE_LIMIT_MB'], settings.roomStorageLimitBytes === null ? h('span', { className: 'muted' }, 'なし') : count(settings.roomStorageLimitBytes / 1e6) + ' MB'))))
       ]);
     }).catch(function (err) { body.replaceChildren(h('p', { className: 'error' }, messageOf(err))); });
   }
@@ -2369,7 +2374,7 @@ const BODY = `
         <section class="card">
           <h2>場所を多く使っている部屋</h2>
           <div class="scroll"><table>
-            <thead><tr><th>部屋</th><th>部屋の鍵</th><th class="num">件数</th><th class="num">大きさ</th><th></th></tr></thead>
+            <thead><tr><th>部屋</th><th>部屋の鍵</th><th class="num">件数</th><th class="num">大きさ</th><th class="num" id="usage-share" hidden></th><th></th></tr></thead>
             <tbody id="usage-body"></tbody>
           </table></div>
         </section>
