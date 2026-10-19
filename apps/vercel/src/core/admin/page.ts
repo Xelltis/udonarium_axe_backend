@@ -101,9 +101,12 @@ button:disabled { opacity: .5; cursor: default; }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-td.actions { white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; word-break: keep-all; }
+.nowrap { white-space: nowrap; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.num { white-space: nowrap; }
+td.actions { white-space: normal; min-width: 13em; }
+td.actions:empty { min-width: 0; padding: 0; }
 td.actions button, td.actions .chip { margin: 0 2px 2px 0; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 .muted { color: var(--muted); }
@@ -197,27 +200,22 @@ form.ban .check { flex-direction: row; align-items: center; font-weight: 400; gr
 .card .more { margin-top: 8px; }
 .card .hint + .scroll, .card h2 + .scroll { margin-top: 8px; }
 .account-actions { margin: 12px 0 0; }
-#asset-body { display: grid; gap: 8px; justify-items: center; }
-#asset-body p { margin: 0; text-align: center; word-break: break-all; }
+#asset-body { display: grid; gap: 8px; justify-items: start; margin-bottom: 4px; }
+#asset-body p { margin: 0; }
 #asset-body audio { width: 100%; }
 img.preview { display: block; max-width: 100%; max-height: 70vh; border: 1px solid var(--line); border-radius: 4px;
   background: repeating-conic-gradient(var(--chip) 0 25%, var(--panel) 0 50%) 0 0 / 16px 16px; }
-table.settings th { width: 18em; white-space: normal; color: var(--text); }
-table.settings th .mono { font-weight: 400; margin-top: 2px; }
 table.settings td div + div { margin-top: 2px; }
 table.settings td { overflow-wrap: anywhere; }
 #settings-body, #account-result { margin-top: 8px; }
 #account-id { width: 24ch; max-width: 100%; }
-table.uploads td:nth-child(2), table.uploads td:nth-child(5), table.uploads td:nth-child(6) { min-width: 9em; }
-table.uploads td:nth-child(2) > div:first-child { overflow-wrap: anywhere; }
-td.actions.stacked { width: 1%; }
-td.actions.stacked button { display: block; width: 100%; margin: 0 0 4px; }
-.bans { margin-top: 4px; }
-.bans button, .bans .chip { margin: 0 4px 4px 0; }
-@media (max-width: 600px) {
-  table.settings th, table.settings td { display: block; width: auto; }
-  table.settings th { border-bottom: 0; padding-bottom: 0; }
-}
+.key { display: inline-block; width: 16ch; overflow-wrap: anywhere; word-break: break-all; vertical-align: top; }
+.long { overflow-wrap: anywhere; word-break: break-all; }
+table.facts th { width: 12em; color: var(--muted); font-weight: 600; }
+#asset-facts, #room-meta { margin-bottom: 12px; }
+td.wrap { min-width: 6em; overflow-wrap: anywhere; }
+th { vertical-align: bottom; }
+td.num.error { color: var(--danger); }
 `;
 
 const SCRIPT = `
@@ -252,14 +250,14 @@ const SCRIPT = `
   var KIND_LABELS = {
     login: 'ログイン',
     room: '部屋を作った',
-    upload: 'アセットを置いた',
+    upload: '画像と音声を置いた',
     limited: '回数の制限',
     refused: 'BANで断った',
     admin: '管理'
   };
   /** The kinds drawn on the overview, each in the series color it keeps on every chart and chip. */
   var SERIES = { login: 1, room: 2, upload: 3, limited: 4, refused: 5 };
-  var LIMIT_LABELS = { upload: 'アセットを置く', read: '読み出し', room: '部屋を作る・入る', auth: 'ログイン' };
+  var LIMIT_LABELS = { upload: '画像と音声を置く', read: '読み出し', room: '部屋を作る・入る', auth: 'ログイン' };
   var ROLE_LABELS = { gm: 'GM', pl: 'PL', guest: '見学' };
   var RANGE_LABELS = { day: '24時間', week: '7日' };
   var STATUS = {
@@ -522,11 +520,18 @@ const SCRIPT = `
     return (d.getMonth() + 1) + '/' + d.getDate() + '（' + '日月火水木金土'.charAt(d.getDay()) + '）';
   }
   function hourOf(ms) { return new Date(ms).getHours() + ':00'; }
-  function shortKey(key) { return key ? h('span', { className: 'mono', title: key }, key.slice(0, 8) + '…') : ''; }
+  /** A room key or a SHA-256, whole, folded inside its column so that it can be read and copied. */
+  function keyText(key) { return key ? h('span', { className: 'mono key' }, key) : h('span', { className: 'muted' }, '—'); }
   function mono(text) { return text ? h('span', { className: 'mono' }, text) : h('span', { className: 'muted' }, '—'); }
   function roomName(roomKey) {
     for (var i = 0; i < data.rooms.length; i++) if (data.rooms[i].roomKey === roomKey) return data.rooms[i].name;
     return null;
+  }
+  /** The names the record knows each Discord account by, for entries written without one. */
+  function namesById() {
+    var names = {};
+    data.activity.forEach(function (entry) { if (entry.discordId && entry.name && !names[entry.discordId]) names[entry.discordId] = entry.name; });
+    return names;
   }
   function uploadBytes(entry) {
     var n = Number(String(entry.detail || '').split(' ')[1]);
@@ -808,7 +813,7 @@ const SCRIPT = `
     $('tiles').replaceChildren(
       tile('いま入っている人', count(people), '人がいる部屋 ' + count(occupied) + '件'),
       tile('部屋', rooms, 'この期間に作られた部屋 ' + count(ofKind(entries, 'room').length) + '件'),
-      tile('置いたアセット', count(uploads.length), size(sum(tallied.bytes))),
+      tile('置いた画像と音声', count(uploads.length), size(sum(tallied.bytes))),
       tile('ログイン', count(logins.length), 'アカウント ' + count(distinct(logins.map(function (entry) { return entry.discordId; }))) + '人'),
       tile('回数の制限', count(limited.length),
         '送信元 ' + count(distinct(limited.map(function (entry) { return entry.address; }))) + '件',
@@ -983,8 +988,8 @@ const SCRIPT = `
     return Object.keys(rows).map(function (key) { return rows[key]; }).sort(byOrder);
   }
   function num(value) { return h('td', { className: 'num' }, value ? count(value) : h('span', { className: 'muted' }, '0')); }
-  function assets(row) {
-    return h('td', { className: 'num' }, row.upload ? count(row.upload) + '件・' + size(row.bytes) : h('span', { className: 'muted' }, '0'));
+  function bytesCell(row) {
+    return h('td', { className: 'num' }, row.upload ? size(row.bytes) : h('span', { className: 'muted' }, '0'));
   }
   function recordButton(value) {
     return h('button', { type: 'button', onclick: function () { showActivityFor(value); } }, '記録');
@@ -1008,16 +1013,18 @@ const SCRIPT = `
     var reason = '目立つ送信元（' + RANGE_LABELS[period.range] + '）';
     fill('senders', rowsBy(tallied.entries, function (entry) { return entry.address; }), function (row) {
       return h('tr', null,
-        h('td', null, mono(row.key),
-          row.wrongKey ? h('div', null, h('span', { className: 'chip critical' }, '管理画面で断った ' + count(row.wrongKey) + '回')) : null),
-        num(row.room), assets(row), num(row.login), num(row.limited), num(row.refused),
+        h('td', null, mono(row.key)),
+        num(row.room), num(row.upload), bytesCell(row), num(row.login), num(row.limited), num(row.refused),
+        h('td', { className: 'num' + (row.wrongKey ? ' error' : '') }, row.wrongKey ? count(row.wrongKey) : h('span', { className: 'muted' }, '0')),
         h('td', null, time(row.last)),
         h('td', { className: 'actions' }, banButtons(null, row.key, reason), recordButton(row.key), row.room ? roomsButton(row.key) : null));
     });
     fill('accounts', rowsBy(tallied.entries, function (entry) { return entry.discordId; }), function (row) {
       return h('tr', null,
-        h('td', null, row.name ? h('div', null, row.name) : null, mono(row.key)),
-        num(row.room), assets(row), num(row.login), num(row.refused),
+        h('td', null, row.name || h('span', { className: 'muted' }, '—')),
+        h('td', null, mono(row.key)),
+        num(row.room), num(row.upload), bytesCell(row), num(row.login), num(row.refused),
+        h('td', { className: 'num' + (row.wrongKey ? ' error' : '') }, row.wrongKey ? count(row.wrongKey) : h('span', { className: 'muted' }, '0')),
         h('td', null, time(row.last)),
         h('td', { className: 'actions' }, banButtons(row.key, null, '目立つアカウント（' + RANGE_LABELS[period.range] + '）'), recordButton(row.key), row.room ? roomsButton(row.key) : null,
           h('button', { type: 'button', onclick: function () { showAccount(row.key); } }, 'アカウント')));
@@ -1033,7 +1040,7 @@ const SCRIPT = `
       return h('tr', null,
         h('td', null, room.name),
         h('td', { className: 'num' }, count(room.members)),
-        h('td', null, room.hasPassword ? 'あり' : ''),
+        h('td', { className: 'nowrap' }, room.hasPassword ? 'あり' : ''),
         h('td', null, time(room.createdAt)),
         h('td', { className: 'actions' }, h('button', { type: 'button', onclick: function () { showRoom(room); } }, '中を見る')));
     }));
@@ -1105,13 +1112,13 @@ const SCRIPT = `
           return h('span', { className: 'muted' }, kind + ' ' + count(sorts[kind].count) + '件・' + size(sorts[kind].bytes));
         })),
       h('div', { className: 'scroll' }, h('table', null,
-        h('thead', null, h('tr', null, h('th', null, '名前'), h('th', null, '種類'), h('th', { className: 'num' }, '大きさ'), h('th', null, 'ID'))),
+        h('thead', null, h('tr', null, h('th', null, 'ファイル名'), h('th', null, '形式'), h('th', { className: 'num' }, '大きさ'), h('th', null, 'SHA-256'))),
         h('tbody', null, shown.map(function (asset) {
           return h('tr', null,
             h('td', null, asset.name || h('span', { className: 'muted' }, '（名前なし）')),
             h('td', null, mono(asset.type)),
             h('td', { className: 'num' }, size(asset.size)),
-            h('td', null, shortKey(asset.id)));
+            h('td', null, keyText(asset.id)));
         })))),
       ordered.length > 50 ? h('button', { type: 'button', className: 'link more', onclick: function () {
         showAll.assets = !showAll.assets;
@@ -1127,7 +1134,13 @@ const SCRIPT = `
     var assets = $('room-assets');
     showAll.assets = false;
     $('room-title').textContent = '部屋「' + room.name + '」';
-    $('room-meta').textContent = 'ID ' + room.roomId + '・人数 ' + room.members + '・' + time(room.createdAt) + 'に作った部屋';
+    var creator = room.creator || {};
+    $('room-meta').replaceChildren(h('div', { className: 'scroll' }, h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'ID'), h('th', null, '鍵'), h('th', { className: 'num' }, '人数'), h('th', null, 'パスワード'),
+        h('th', null, '作った時刻'), h('th', null, '作った人のDiscord ID'), h('th', null, '作った人のIPアドレス'))),
+      h('tbody', null, h('tr', null, h('td', null, mono(room.roomId)), h('td', null, h('span', { className: 'mono long' }, room.roomKey)),
+        h('td', { className: 'num' }, count(room.members)), h('td', null, room.hasPassword ? 'あり' : 'なし'), h('td', null, time(room.createdAt)),
+        h('td', null, mono(creator.discordId)), h('td', null, mono(creator.address)))))));
     seats.replaceChildren(h('p', { className: 'muted' }, '読み込んでいます…'));
     assets.replaceChildren(h('p', { className: 'muted' }, '読み込んでいます…'));
     $('room-delete').onclick = function () { $('room-dialog').close(); deleteRoom(room); };
@@ -1190,7 +1203,7 @@ const SCRIPT = `
     $('rooms-summary').textContent = rows.length + '件を表示（部屋 ' + data.rooms.length + '件、人がいる部屋 ' + occupied + '件）';
     renderPicked(rows);
     var tbody = $('rooms-body');
-    if (rows.length === 0) { tbody.replaceChildren(h('tr', null, h('td', { colspan: 9, className: 'empty' }, '部屋はありません。'))); return; }
+    if (rows.length === 0) { tbody.replaceChildren(h('tr', null, h('td', { colspan: 10, className: 'empty' }, '部屋はありません。'))); return; }
     tbody.replaceChildren.apply(tbody, rows.map(function (room) {
       var creator = room.creator || {};
       var discordId = creator.discordId || null;
@@ -1202,10 +1215,11 @@ const SCRIPT = `
       });
       return h('tr', null,
         h('td', { className: 'pick' }, box),
-        h('td', null, room.name),
-        h('td', null, mono(room.roomId), ' ', shortKey(room.roomKey)),
+        h('td', { className: 'wrap' }, room.name),
+        h('td', null, mono(room.roomId)),
+        h('td', null, keyText(room.roomKey)),
         h('td', { className: 'num' }, room.members),
-        h('td', null, room.hasPassword ? 'あり' : ''),
+        h('td', { className: 'nowrap' }, room.hasPassword ? 'あり' : ''),
         h('td', null, time(room.createdAt)),
         h('td', null, mono(discordId)),
         h('td', null, mono(creator.address)),
@@ -1234,49 +1248,118 @@ const SCRIPT = `
   // ---- What happened ----
 
   /** What an operator did, or why someone was turned away from the dashboard, in words. */
-  var ADMIN_WORDS = [
-    ['login', 'ログインした'],
-    ['denied not-allowed', '断った（入れる人にない）'],
-    ['denied mfa-required', '断った（Discordの2段階認証が無効）'],
-    ['denied passkey', '断った（パスキーで確かめられない）'],
-    ['register passkey', 'パスキーを登録した'],
-    ['delete passkey', 'パスキーを消した'],
-    ['end every session', 'すべての人をログアウトさせた'],
-    ['delete room', '部屋を削除した'],
-    ['view asset', '画像か音声を見た'],
-    ['delete asset', '画像か音声を消した'],
-    ['unblock asset', 'また置けるようにした'],
-    ['block asset', '二度と置かせないようにした'],
-    ['delete account', 'アカウントを削除した'],
-    ['resume', '緊急停止をやめ、すべて再開した'],
-    ['unban', 'BANを解いた'],
-    ['ban', 'BANした']
-  ];
-  function adminWords(detail) {
-    if (detail.indexOf('pause ') === 0) {
-      return '緊急停止した（' + detail.slice(6).split(',').map(function (kind) { return PAUSE_LABELS[kind] || kind; }).join('・') + '）';
+  var ADMIN_ACTIONS = {
+    login: 'ログインした',
+    'register passkey': 'パスキーを登録した',
+    'delete passkey': 'パスキーを消した',
+    'end every session': 'すべての人をログアウトさせた',
+    'delete room': '部屋を削除した',
+    'view asset': '画像か音声を見た',
+    'delete asset': '画像か音声を消した',
+    'block asset': '二度と置かせないようにした',
+    'unblock asset': 'また置けるようにした',
+    'delete account': 'アカウントを削除した',
+    pause: '緊急停止した',
+    resume: '緊急停止をやめ、すべて再開した',
+    ban: 'BANした',
+    unban: 'BANを解いた'
+  };
+  var DENIED_ACTIONS = {
+    'not-allowed': '断った（入れる人にない）',
+    'mfa-required': '断った（Discordの2段階認証が無効）',
+    passkey: '断った（パスキーで確かめられない）'
+  };
+  var BAN_KINDS = { ip: 'IPアドレス', discord: 'Discord ID' };
+
+  /**
+   * What an entry of the record says, taken apart into one fact for each column: what happened,
+   * the room, and for each kind what it is about.
+   */
+  function factsOf(entry) {
+    var detail = String(entry.detail || '');
+    var words = detail.split(' ');
+    var facts = {
+      action: KIND_LABELS[entry.kind] || entry.kind,
+      roomName: entry.roomKey ? roomName(entry.roomKey) : null,
+      targetKind: '', target: '', format: '', bytes: null, sha: '', limit: '', banKind: '', banValue: ''
+    };
+    if (entry.kind === 'room' && !facts.roomName) facts.roomName = detail || null;
+    if (entry.kind === 'upload') {
+      facts.format = words[0] || '';
+      facts.bytes = Number(words[1]) || 0;
+      facts.sha = words[2] || '';
     }
-    for (var i = 0; i < ADMIN_WORDS.length; i++) {
-      var head = ADMIN_WORDS[i][0];
-      if (detail === head) return ADMIN_WORDS[i][1];
-      if (detail.indexOf(head + ' ') === 0) return ADMIN_WORDS[i][1] + ' ' + detail.slice(head.length + 1);
+    if (entry.kind === 'limited') facts.limit = LIMIT_LABELS[detail] || detail;
+    if (entry.kind === 'refused') {
+      facts.banKind = BAN_KINDS[words[0]] || words[0];
+      facts.banValue = words.slice(1).join(' ');
     }
-    return detail;
+    if (entry.kind === 'admin') adminFacts(words, facts);
+    return facts;
+  }
+  function adminFacts(words, facts) {
+    var two = words.slice(0, 2).join(' ');
+    var rest = words.slice(2).join(' ');
+    if (words[0] === 'denied') {
+      facts.action = DENIED_ACTIONS[words[1]] || '断った（' + words.slice(1).join(' ') + '）';
+    } else if (ADMIN_ACTIONS[two]) {
+      facts.action = ADMIN_ACTIONS[two];
+      if (/ asset$/.test(two)) { facts.targetKind = 'SHA-256'; facts.target = rest; }
+      if (/ passkey$/.test(two)) { facts.targetKind = 'パスキー'; facts.target = rest; }
+      if (two === 'delete account') { facts.targetKind = 'Discord ID'; facts.target = rest; }
+    } else if (words[0] === 'ban' || words[0] === 'unban') {
+      facts.action = ADMIN_ACTIONS[words[0]];
+      facts.targetKind = BAN_KINDS[words[1]] || words[1];
+      facts.target = rest;
+    } else if (words[0] === 'pause') {
+      facts.action = ADMIN_ACTIONS.pause;
+      facts.targetKind = '止めたもの';
+      facts.target = String(words[1] || '').split(',').map(function (kind) { return PAUSE_LABELS[kind] || kind; }).join('・');
+    } else {
+      facts.action = ADMIN_ACTIONS[words.join(' ')] || words.join(' ');
+    }
   }
 
-  function detailOf(entry) {
-    if (entry.kind === 'admin') return adminWords(entry.detail || '');
-    // A room made is named in the room column while the room is still there.
-    if (entry.kind === 'room' && roomName(entry.roomKey) !== null) return '';
-    if (entry.kind === 'upload' && entry.detail) {
-      var parts = entry.detail.split(' ');
-      return parts[0] + ' ' + size(parts[1]);
-    }
-    if (entry.kind === 'limited') return LIMIT_LABELS[entry.detail] || entry.detail;
-    return entry.detail || '';
-  }
-  function kindChip(kind) {
-    return h('span', { className: 'chip ' + kind }, SERIES[kind] ? h('i', { className: 'swatch s' + SERIES[kind] }) : null, KIND_LABELS[kind] || kind);
+  function dash() { return h('span', { className: 'muted' }, '—'); }
+  /**
+   * The record's columns. Each holds one kind of fact; which are shown depends on the kind of entry
+   * the record is narrowed to.
+   */
+  var ACTIVITY_COLUMNS = {
+    time: { head: '時刻', cell: function (entry) { return time(entry.at); } },
+    kind: { head: '出来事', cell: function (entry, facts) { return kindChip(entry.kind, facts.action); } },
+    action: { head: '操作', wrap: true, cell: function (entry, facts) { return facts.action; } },
+    name: { head: '名前', wrap: true, cell: function (entry, facts, names) { return entry.name || names[entry.discordId] || dash(); } },
+    discord: { head: 'Discord ID', cell: function (entry) { return mono(entry.discordId); } },
+    address: { head: 'IPアドレス', cell: function (entry) { return mono(entry.address); } },
+    room: { head: '部屋', wrap: true, cell: function (entry, facts) {
+      return facts.roomName || (entry.roomKey ? h('span', { className: 'muted' }, '（一覧にない部屋）') : dash());
+    } },
+    roomKey: { head: '部屋の鍵', cell: function (entry) { return keyText(entry.roomKey); } },
+    format: { head: '形式', cell: function (entry, facts) { return mono(facts.format); } },
+    bytes: { head: '大きさ', num: true, cell: function (entry, facts) { return facts.bytes === null ? dash() : size(facts.bytes); } },
+    sha: { head: 'SHA-256', cell: function (entry, facts) { return keyText(facts.sha); } },
+    limit: { head: '上限', cell: function (entry, facts) { return facts.limit; } },
+    banKind: { head: 'BANの種類', cell: function (entry, facts) { return facts.banKind; } },
+    banValue: { head: 'BANの対象', cell: function (entry, facts) { return mono(facts.banValue); } },
+    targetKind: { head: '対象の種類', wrap: true, cell: function (entry, facts) { return facts.targetKind || dash(); } },
+    target: { head: '対象', wrap: true, cell: function (entry, facts) {
+      if (!facts.target) return dash();
+      return facts.targetKind === 'SHA-256' ? keyText(facts.target) : h('span', { className: facts.targetKind === 'パスキー' || facts.targetKind === '止めたもの' ? '' : 'mono' }, facts.target);
+    } }
+  };
+  var ACTIVITY_VIEWS = {
+    '': ['time', 'kind', 'name', 'discord', 'address', 'room'],
+    login: ['time', 'name', 'discord', 'address'],
+    room: ['time', 'name', 'discord', 'address', 'room', 'roomKey'],
+    upload: ['time', 'name', 'discord', 'address', 'room', 'roomKey', 'format', 'bytes', 'sha'],
+    limited: ['time', 'address', 'limit'],
+    refused: ['time', 'name', 'discord', 'address', 'banKind', 'banValue'],
+    admin: ['time', 'action', 'name', 'discord', 'address', 'room', 'roomKey', 'targetKind', 'target']
+  };
+
+  function kindChip(kind, label) {
+    return h('span', { className: 'chip ' + kind }, SERIES[kind] ? h('i', { className: 'swatch s' + SERIES[kind] }) : null, label || KIND_LABELS[kind] || kind);
   }
 
   function showActivityFor(value) {
@@ -1300,18 +1383,22 @@ const SCRIPT = `
 
   function renderActivity() {
     var rows = shownActivity();
+    var columns = ACTIVITY_VIEWS[$('activity-kind').value] || ACTIVITY_VIEWS[''];
+    var names = namesById();
     $('activity-summary').textContent = rows.length + '件（7日以内、新しいものから最大2000件を残しています）';
+    var head = $('activity-head');
+    head.replaceChildren.apply(head, columns.map(function (column) {
+      return h('th', { className: ACTIVITY_COLUMNS[column].num ? 'num' : '' }, ACTIVITY_COLUMNS[column].head);
+    }).concat([h('th', null, '')]));
     var tbody = $('activity-body');
-    if (rows.length === 0) { tbody.replaceChildren(h('tr', null, h('td', { colspan: 7, className: 'empty' }, '記録はありません。'))); return; }
+    if (rows.length === 0) { tbody.replaceChildren(h('tr', null, h('td', { colspan: columns.length + 1, className: 'empty' }, '記録はありません。'))); return; }
     tbody.replaceChildren.apply(tbody, rows.map(function (entry) {
-      var name = entry.roomKey ? roomName(entry.roomKey) : null;
+      var facts = factsOf(entry);
       return h('tr', null,
-        h('td', null, time(entry.at)),
-        h('td', null, kindChip(entry.kind)),
-        h('td', null, entry.name ? h('div', null, entry.name) : null, mono(entry.discordId)),
-        h('td', null, mono(entry.address)),
-        h('td', null, entry.roomKey ? [name ? h('div', null, name) : null, shortKey(entry.roomKey)] : ''),
-        h('td', null, detailOf(entry)),
+        columns.map(function (column) {
+          var spec = ACTIVITY_COLUMNS[column];
+          return h('td', { className: spec.num ? 'num' : spec.wrap ? 'wrap' : '' }, spec.cell(entry, facts, names));
+        }),
         h('td', { className: 'actions' }, entry.kind === 'admin' && !isDenied(entry) ? null : banButtons(entry.discordId, entry.address, (KIND_LABELS[entry.kind] || entry.kind) + ' ' + time(entry.at))));
     }));
   }
@@ -1392,10 +1479,13 @@ const SCRIPT = `
       }));
   }
   function saveActivity() {
-    saveCsv('activity', ['時刻', '出来事', '名前', 'Discord ID', 'IPアドレス', '部屋の鍵', '部屋の名前', '中身'],
+    var names = namesById();
+    saveCsv('activity', ['時刻', '種類', '出来事', '名前', 'Discord ID', 'IPアドレス', '部屋の名前', '部屋の鍵', '形式', '大きさ（バイト）', 'SHA-256',
+      '上限', 'BANの種類', 'BANの対象', '対象の種類', '対象'],
       shownActivity().map(function (entry) {
-        return [iso(entry.at), KIND_LABELS[entry.kind] || entry.kind, entry.name, entry.discordId, entry.address,
-          entry.roomKey, entry.roomKey ? roomName(entry.roomKey) : '', entry.detail];
+        var facts = factsOf(entry);
+        return [iso(entry.at), KIND_LABELS[entry.kind] || entry.kind, facts.action, entry.name || names[entry.discordId], entry.discordId, entry.address,
+          facts.roomName, entry.roomKey, facts.format, facts.bytes, facts.sha, facts.limit, facts.banKind, facts.banValue, facts.targetKind, facts.target];
       }));
   }
   function saveBans() {
@@ -1556,7 +1646,7 @@ const SCRIPT = `
     return by;
   }
 
-  function assetLabel(asset) { return asset.name || asset.id.slice(0, 12) + '…'; }
+  function assetLabel(asset) { return asset.name || asset.id; }
 
   function shownUploads() {
     var words = $('uploads-search').value.trim().toLowerCase();
@@ -1582,28 +1672,26 @@ const SCRIPT = `
     $('uploads-summary').textContent = count(rows.length) + '件を表示（全部で ' + count(uploads.assets.length) + '件・' + size(total) +
       (uploads.more ? '。多すぎるので、先頭の' + count(uploads.assets.length) + '件だけを読みました' : '') + '）';
     renderRoomUsage();
+    var names = namesById();
     var body = $('uploads-body');
     if (rows.length === 0) {
-      body.replaceChildren(h('tr', null, h('td', { colspan: 7, className: 'empty' }, '置いてある画像と音声はありません。')));
+      body.replaceChildren(h('tr', null, h('td', { colspan: 10, className: 'empty' }, '置いてある画像と音声はありません。')));
     } else {
       body.replaceChildren.apply(body, rows.slice(0, uploadsShown).map(function (asset) {
-        var by = who[asset.roomKey + '|' + asset.id];
-        var copies = rooms[asset.id].length;
+        var by = who[asset.roomKey + '|' + asset.id] || {};
+        var others = rooms[asset.id].length - 1;
+        var none = function () { return h('span', { className: 'muted' }, '—'); };
         return h('tr', null,
           h('td', null, time(asset.uploadedAt)),
-          h('td', null, h('div', null, asset.name || h('span', { className: 'muted' }, '（名前なし）')), shortKey(asset.id),
-            copies > 1 ? h('div', null, h('span', { className: 'chip' }, 'ほかの部屋にも ' + (copies - 1) + '件')) : null),
-          h('td', null, sortOf(asset.type), h('div', { className: 'muted' }, asset.type)),
+          h('td', { className: 'wrap' }, asset.name || h('span', { className: 'muted' }, '（名前なし）')),
+          h('td', { className: 'nowrap' }, sortOf(asset.type)),
           h('td', { className: 'num' }, size(asset.size)),
-          h('td', null, roomName(asset.roomKey) || h('span', { className: 'muted' }, '（一覧にない部屋）'), h('div', null, shortKey(asset.roomKey))),
-          h('td', null, by
-            ? [by.name ? h('div', null, by.name) : null, mono(by.discordId), h('div', null, mono(by.address)),
-              h('div', { className: 'bans' }, banButtons(by.discordId, by.address, 'アップロード「' + assetLabel(asset) + '」'))]
-            : h('span', { className: 'muted' }, '記録なし')),
-          h('td', { className: 'actions stacked' },
-            h('button', { type: 'button', onclick: function () { viewAsset(asset); } }, '見る'),
-            h('button', { type: 'button', className: 'danger', onclick: function () { removeAsset(asset); } }, 'この部屋から消す'),
-            h('button', { type: 'button', className: 'danger', onclick: function () { takeDown(asset, rooms[asset.id]); } }, '消して二度と置かせない')));
+          h('td', { className: 'wrap' }, roomName(asset.roomKey) || h('span', { className: 'muted' }, '（一覧にない部屋）')),
+          h('td', { className: 'num' }, others > 0 ? count(others) : h('span', { className: 'muted' }, '0')),
+          h('td', { className: 'wrap' }, (by.discordId && names[by.discordId]) || none()),
+          h('td', null, by.discordId ? mono(by.discordId) : none()),
+          h('td', null, by.address ? mono(by.address) : none()),
+          h('td', { className: 'actions' }, h('button', { type: 'button', onclick: function () { showAsset(asset); } }, '詳しく')));
       }));
     }
     $('uploads-more').hidden = rows.length <= uploadsShown;
@@ -1622,11 +1710,12 @@ const SCRIPT = `
     var top = Object.keys(byRoom).map(function (key) { return byRoom[key]; })
       .sort(function (a, b) { return b.bytes - a.bytes; }).slice(0, TOP_ROWS);
     var body = $('usage-body');
-    if (top.length === 0) { body.replaceChildren(h('tr', null, h('td', { colspan: 4, className: 'empty' }, 'ありません。'))); return; }
+    if (top.length === 0) { body.replaceChildren(h('tr', null, h('td', { colspan: 5, className: 'empty' }, 'ありません。'))); return; }
     body.replaceChildren.apply(body, top.map(function (usage) {
       var room = data.rooms.filter(function (each) { return each.roomKey === usage.roomKey; })[0];
       return h('tr', null,
-        h('td', null, room ? room.name : h('span', { className: 'muted' }, '（一覧にない部屋）'), h('div', null, shortKey(usage.roomKey))),
+        h('td', { className: 'wrap' }, room ? room.name : h('span', { className: 'muted' }, '（一覧にない部屋）')),
+        h('td', null, keyText(usage.roomKey)),
         h('td', { className: 'num' }, count(usage.count)),
         h('td', { className: 'num' }, size(usage.bytes)),
         h('td', { className: 'actions' }, room ? h('button', { type: 'button', onclick: function () { showRoom(room); } }, '中を見る') : null));
@@ -1642,11 +1731,52 @@ const SCRIPT = `
     }));
   }
 
+  /** The rooms the uploads tab found the asset in. */
+  function roomsOf(asset) {
+    var found = uploads ? uploads.assets.filter(function (each) { return each.id === asset.id; }).map(function (each) { return each.roomKey; }) : [];
+    return found.length ? found : [asset.roomKey];
+  }
+
+  /** One row of a table of facts: what it is, and its value. */
+  function fact(name, value) { return h('tr', null, h('th', { scope: 'row' }, name), h('td', null, value)); }
+
+  /**
+   * Everything known of an uploaded asset, and what can be done to it and to who stored it. Its
+   * contents are read only when asked for, since each look is written down.
+   */
+  function showAsset(asset) {
+    var by = uploadersOf()[asset.roomKey + '|' + asset.id] || {};
+    var names = namesById();
+    $('asset-title').textContent = asset.name || '（名前なし）';
+    $('asset-facts').replaceChildren(h('table', { className: 'facts' }, h('tbody', null,
+      fact('ファイル名', asset.name || dash()),
+      fact('種類', sortOf(asset.type)),
+      fact('形式', mono(asset.type)),
+      fact('大きさ', size(asset.size)),
+      fact('SHA-256', h('span', { className: 'mono long' }, asset.id)),
+      fact('置いた時刻', time(asset.uploadedAt)),
+      fact('部屋', roomName(asset.roomKey) || h('span', { className: 'muted' }, '（一覧にない部屋）')),
+      fact('部屋の鍵', h('span', { className: 'mono long' }, asset.roomKey)),
+      fact('ほかの部屋', count(roomsOf(asset).length - 1) + '件'),
+      fact('置いた人', (by.discordId && names[by.discordId]) || dash()),
+      fact('置いた人のDiscord ID', by.discordId ? mono(by.discordId) : dash()),
+      fact('置いた人のIPアドレス', by.address ? mono(by.address) : dash()))));
+    $('asset-body').replaceChildren(
+      h('button', { type: 'button', onclick: function () { viewAsset(asset); } }, '中身を見る'),
+      h('p', { className: 'hint' }, '中身を見ると、見たことが記録に残ります。見るのは、申し立てや不正な使われかたに応えるときだけにしてください。'));
+    $('asset-actions').replaceChildren();
+    append($('asset-actions'), [
+      h('button', { type: 'button', className: 'danger', onclick: function () { removeAsset(asset); } }, 'この部屋から消す'),
+      h('button', { type: 'button', className: 'danger', onclick: function () { takeDown(asset, roomsOf(asset)); } }, '消して二度と置かせない'),
+      banButtons(by.discordId, by.address, 'アップロード「' + assetLabel(asset) + '」')
+    ]);
+    $('asset-dialog').showModal();
+  }
+
+  /** Reads the asset's contents and shows them in the dialog. The server writes the look down. */
   function viewAsset(asset) {
     var body = $('asset-body');
-    $('asset-title').textContent = assetLabel(asset);
     body.replaceChildren(h('p', { className: 'muted' }, '読み込んでいます…'));
-    $('asset-dialog').showModal();
     fetch(base + 'api/rooms/' + asset.roomKey + '/assets/' + asset.id + '/content', {
       headers: { 'X-Admin-Request': '1' },
       credentials: 'same-origin',
@@ -1657,12 +1787,9 @@ const SCRIPT = `
     }).then(function (blob) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       previewUrl = URL.createObjectURL(blob);
-      body.replaceChildren(
-        asset.type.indexOf('audio/') === 0
-          ? h('audio', { controls: true, src: previewUrl })
-          : h('img', { className: 'preview', src: previewUrl, alt: assetLabel(asset) }),
-        h('p', { className: 'muted' }, asset.type + '・' + size(asset.size) + '・' + time(asset.uploadedAt)),
-        h('p', { className: 'mono' }, asset.id));
+      body.replaceChildren(asset.type.indexOf('audio/') === 0
+        ? h('audio', { controls: true, src: previewUrl })
+        : h('img', { className: 'preview', src: previewUrl, alt: assetLabel(asset) }));
     }).catch(function (err) { body.replaceChildren(h('p', { className: 'error' }, messageOf(err))); });
   }
 
@@ -1687,7 +1814,7 @@ const SCRIPT = `
   }
 
   function unblockAsset(id) {
-    if (!confirm('「' + id.slice(0, 12) + '…」を、また置けるようにしますか。')) return;
+    if (!confirm('SHA-256が ' + id + ' のものを、また置けるようにしますか。')) return;
     api('DELETE', 'blocked/' + id)
       .then(function () {
         setStatus('また置けるようにしました。', 'ok');
@@ -1755,18 +1882,28 @@ const SCRIPT = `
   function renderSettings() {
     var body = $('settings-body');
     api('GET', 'settings').then(function (settings) {
-      var row = function (name, key, value) {
-        return h('tr', null, h('th', null, name, h('div', { className: 'mono muted' }, key)), h('td', null, value));
+      var row = function (name, keys, value) {
+        return h('tr', null, h('td', null, name), h('td', null, keys.map(function (key) { return h('div', { className: 'mono' }, key); })), h('td', null, value));
       };
-      body.replaceChildren(h('table', { className: 'settings' }, h('tbody', null,
-        row('受けるAxeのOrigin', 'ACCESS_CONTROL_ALLOW_ORIGIN', settings.allowedOrigins.map(function (origin) { return h('div', { className: 'mono' }, origin); })),
-        row('部屋を消すまでの時間', 'ROOM_RETENTION_HOURS', '最後の1人が抜けてから ' + settings.roomRetentionHours + '時間'),
-        row('ログイン（Discord）', 'DISCORD_CLIENT_ID ほか', settings.login ? '設定してあります' : '設定していません'),
-        row('管理画面に入れる人', 'ADMIN_DISCORD_IDS', settings.admins.map(function (id) { return h('div', { className: 'mono' }, id); })),
-        row('パスキーを登録し直せる人', 'ADMIN_PASSKEY_RESET', settings.passkeyReset.length
-          ? [settings.passkeyReset.map(function (id) { return h('div', { className: 'mono' }, id); }), h('div', { className: 'error' }, '登録し直したら、外してください。')]
-          : 'なし'),
-        row('Discordへの知らせ', 'ADMIN_WEBHOOK_URL', settings.webhook ? '送ります' : '送りません（入れると、ログインやコストアタックの気配を知らせます）'))));
+      var list = function (values) {
+        return values.length ? values.map(function (value) { return h('div', { className: 'mono' }, value); }) : h('span', { className: 'muted' }, 'なし');
+      };
+      body.replaceChildren();
+      append(body, [
+        settings.passkeyReset.length
+          ? h('div', { className: 'alert critical' }, h('span', { className: 'alert-icon', 'aria-hidden': 'true' }, '!'), h('span', { className: 'alert-label' }, '要対応'),
+            h('span', null, 'ADMIN_PASSKEY_RESETが入ったままです。パスキーを登録し直したら、外してください。'))
+          : null,
+        h('div', { className: 'scroll' }, h('table', { className: 'settings' },
+          h('thead', null, h('tr', null, h('th', null, '項目'), h('th', null, '環境変数'), h('th', null, '値'))),
+          h('tbody', null,
+            row('受けるAxeのOrigin', ['ACCESS_CONTROL_ALLOW_ORIGIN'], list(settings.allowedOrigins)),
+            row('部屋を消すまでの時間（最後の1人が抜けてから）', ['ROOM_RETENTION_HOURS'], settings.roomRetentionHours + '時間'),
+            row('ログイン（Discord）', ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'SESSION_SECRET'], settings.login ? '設定してあります' : '設定していません'),
+            row('管理画面に入れる人（Discord ID）', ['ADMIN_DISCORD_IDS'], list(settings.admins)),
+            row('パスキーを登録し直せる人（Discord ID）', ['ADMIN_PASSKEY_RESET'], list(settings.passkeyReset)),
+            row('Discordへの知らせ', ['ADMIN_WEBHOOK_URL'], settings.webhook ? '送ります' : '送りません'))))
+      ]);
     }).catch(function (err) { body.replaceChildren(h('p', { className: 'error' }, messageOf(err))); });
   }
 
@@ -1898,6 +2035,10 @@ const SCRIPT = `
   $('uploads-more').addEventListener('click', function () { uploadsShown += 200; renderUploads(); });
   $('uploads-csv').addEventListener('click', saveUploads);
   $('asset-close').addEventListener('click', function () { $('asset-dialog').close(); });
+  // What is pressed below the facts (deleting, or getting a ban ready) goes on outside the dialog.
+  $('asset-actions').addEventListener('click', function (event) {
+    if (event.target.closest('button')) $('asset-dialog').close();
+  });
   $('asset-dialog').addEventListener('close', function () {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = null;
@@ -2030,7 +2171,7 @@ const BODY = `
                   <details><summary>数を表で見る</summary><div class="table-view scroll"></div></details>
                 </figure>
                 <figure class="chart" id="chart-bytes">
-                  <figcaption><span class="chart-title">置いたアセットの大きさ</span><span class="legend"></span></figcaption>
+                  <figcaption><span class="chart-title">置いた画像と音声の大きさ</span><span class="legend"></span></figcaption>
                   <div class="plot"></div>
                   <details><summary>数を表で見る</summary><div class="table-view scroll"></div></details>
                   <p class="note">新しく置いた画像と音声だけを数えます（置いてあるものと同じなら数えません）。</p>
@@ -2045,7 +2186,7 @@ const BODY = `
               <div class="order">
                 <label for="order">目立つ送信元とアカウントの並べかた</label>
                 <select id="order">
-                  <option value="bytes">置いたアセットの大きさ</option>
+                  <option value="bytes">置いた画像と音声の大きさ</option>
                   <option value="room">作った部屋の数</option>
                   <option value="blocked">制限・BAN・管理画面で断った</option>
                   <option value="total">出来事の数</option>
@@ -2055,8 +2196,8 @@ const BODY = `
                 <section class="block">
                   <div class="block-head"><h2>目立つ送信元</h2><span class="muted">IPアドレスごと</span></div>
                   <div class="scroll"><table>
-                    <thead><tr><th>IPアドレス</th><th class="num">部屋を作った</th><th class="num">アセット</th><th class="num">ログイン</th>
-                      <th class="num">回数の制限</th><th class="num">BANで断った</th><th>最後</th><th></th></tr></thead>
+                    <thead><tr><th>IPアドレス</th><th class="num">部屋を<wbr>作った</th><th class="num">画像と音声を<wbr>置いた</th><th class="num">置いた<wbr>大きさ</th>
+                      <th class="num">ログイン</th><th class="num">回数の<wbr>制限</th><th class="num">BANで<wbr>断った</th><th class="num">管理画面で<wbr>断った</th><th>最後</th><th></th></tr></thead>
                     <tbody id="senders-body"></tbody>
                   </table></div>
                   <button type="button" class="link more" id="senders-more" hidden></button>
@@ -2064,8 +2205,8 @@ const BODY = `
                 <section class="block">
                   <div class="block-head"><h2>目立つアカウント</h2><span class="muted">Discordのアカウントごと</span></div>
                   <div class="scroll"><table>
-                    <thead><tr><th>名前・Discord ID</th><th class="num">部屋を作った</th><th class="num">アセット</th><th class="num">ログイン</th>
-                      <th class="num">BANで断った</th><th>最後</th><th></th></tr></thead>
+                    <thead><tr><th>名前</th><th>Discord ID</th><th class="num">部屋を<wbr>作った</th><th class="num">画像と音声を<wbr>置いた</th><th class="num">置いた<wbr>大きさ</th>
+                      <th class="num">ログイン</th><th class="num">BANで<wbr>断った</th><th class="num">管理画面で<wbr>断った</th><th>最後</th><th></th></tr></thead>
                     <tbody id="accounts-body"></tbody>
                   </table></div>
                   <button type="button" class="link more" id="accounts-more" hidden></button>
@@ -2074,7 +2215,7 @@ const BODY = `
               <section class="block">
                 <div class="block-head"><h2>人がいる部屋</h2><span class="muted">人数の多いものから</span></div>
                 <div class="scroll"><table>
-                  <thead><tr><th>名前</th><th class="num">人数</th><th>パスワード</th><th>作った時刻</th><th></th></tr></thead>
+                  <thead><tr><th>名前</th><th class="num">人数</th><th>パスワード</th><th>作った<wbr>時刻</th><th></th></tr></thead>
                   <tbody id="busy-body"></tbody>
                 </table></div>
                 <button type="button" class="link more" id="busy-more" hidden>人がいる部屋をすべて見る</button>
@@ -2098,8 +2239,8 @@ const BODY = `
                 </div>
                 <div class="scroll"><table>
                   <thead><tr><th class="pick"><input type="checkbox" id="rooms-all" aria-label="表示している部屋をすべて選ぶ"></th>
-                    <th>名前</th><th>ID・鍵</th><th class="num">人数</th><th>パスワード</th><th>作った時刻</th>
-                    <th>作った人のDiscord ID</th><th>作った人のIPアドレス</th><th></th></tr></thead>
+                    <th>名前</th><th>ID</th><th>鍵</th><th class="num">人数</th><th>パスワード</th><th>作った<wbr>時刻</th>
+                    <th>作った人の<wbr>Discord ID</th><th>作った人の<wbr>IPアドレス</th><th></th></tr></thead>
                   <tbody id="rooms-body"></tbody>
                 </table></div>
     
@@ -2123,16 +2264,17 @@ const BODY = `
             <button type="button" id="uploads-csv">CSVで保存</button>
           </div>
           <div class="scroll"><table class="uploads">
-            <thead><tr><th>置いた時刻</th><th>名前・ID</th><th>種類</th><th class="num">大きさ</th><th>部屋</th><th>置いた人</th><th></th></tr></thead>
+            <thead><tr><th>置いた<wbr>時刻</th><th>ファイル名</th><th>種類</th><th class="num">大きさ</th><th>部屋</th><th class="num">ほかの<wbr>部屋</th>
+              <th>置いた人</th><th>置いた人の<wbr>Discord ID</th><th>置いた人の<wbr>IPアドレス</th><th></th></tr></thead>
             <tbody id="uploads-body"></tbody>
           </table></div>
           <button type="button" class="link more" id="uploads-more" hidden></button>
-          <p class="hint">置いた人は、記録（7日分）に残っているものだけを出します。「この部屋から消す」は、その部屋の1つだけを消します。部屋にいる人が手元に持っていれば、また置かれます。違法なものや権利を侵すものは「消して二度と置かせない」で、置いてあるすべての部屋から消し、どの部屋にも置けなくします。</p>
+          <p class="hint">「詳しく」で、SHA-256や部屋の鍵などをすべて出し、そこから消したりBANしたりできます。置いた人は、記録（7日分）に残っているものだけを出します。「この部屋から消す」は、その部屋の1つだけを消します。部屋にいる人が手元に持っていれば、また置かれます。違法なものや権利を侵すものは「消して二度と置かせない」で、置いてあるすべての部屋から消し、どの部屋にも置けなくします。</p>
         </section>
         <section class="card">
           <h2>場所を多く使っている部屋</h2>
           <div class="scroll"><table>
-            <thead><tr><th>部屋</th><th class="num">件数</th><th class="num">大きさ</th><th></th></tr></thead>
+            <thead><tr><th>部屋</th><th>部屋の鍵</th><th class="num">件数</th><th class="num">大きさ</th><th></th></tr></thead>
             <tbody id="usage-body"></tbody>
           </table></div>
         </section>
@@ -2152,7 +2294,7 @@ const BODY = `
                     <option value="">すべて</option>
                     <option value="login">ログイン</option>
                     <option value="room">部屋を作った</option>
-                    <option value="upload">アセットを置いた</option>
+                    <option value="upload">画像と音声を置いた</option>
                     <option value="limited">回数の制限</option>
                     <option value="refused">BANで断った</option>
                     <option value="admin">管理</option>
@@ -2163,7 +2305,7 @@ const BODY = `
                   <button type="button" id="activity-csv">CSVで保存</button>
                 </div>
                 <div class="scroll"><table>
-                  <thead><tr><th>時刻</th><th>出来事</th><th>名前・Discord ID</th><th>IPアドレス</th><th>部屋</th><th>中身</th><th></th></tr></thead>
+                  <thead><tr id="activity-head"></tr></thead>
                   <tbody id="activity-body"></tbody>
                 </table></div>
     
@@ -2193,7 +2335,7 @@ const BODY = `
                   <label class="check"><input type="checkbox" id="ban-rooms">この対象が作った部屋も削除する（入っている人の接続は切れ、卓と画像と音声は消えます）</label>
                   <button class="primary" id="ban-submit">BANする</button>
                 </form>
-                <p class="hint">IPv6のアドレスは、/を付けなければ先頭の/64をまとめてBANします。BANすると、部屋に入っている接続を切り、部屋に入る・部屋を作る・アセットを置く・ログイン・トークンの更新を、押したときからすべてのインスタンスで止めます。部屋の一覧や画像を読むなどのほかのリクエストは、ほかのインスタンスで最大30秒遅れて止まります。</p>
+                <p class="hint">IPv6のアドレスは、/を付けなければ先頭の/64をまとめてBANします。BANすると、部屋に入っている接続を切り、部屋に入る・部屋を作る・画像と音声を置く・ログイン・トークンの更新を、押したときからすべてのインスタンスで止めます。部屋の一覧や画像を読むなどのほかのリクエストは、ほかのインスタンスで最大30秒遅れて止まります。</p>
       
         </section>
         <section class="card">
@@ -2203,7 +2345,7 @@ const BODY = `
                   <button type="button" id="bans-csv">CSVで保存</button>
                 </div>
                 <div class="scroll"><table>
-                  <thead><tr><th>種類</th><th>対象</th><th>理由</th><th>BANした時刻</th><th>終わる時刻</th><th>残り</th><th></th></tr></thead>
+                  <thead><tr><th>種類</th><th>対象</th><th>理由</th><th>BANした<wbr>時刻</th><th>終わる<wbr>時刻</th><th>残り</th><th></th></tr></thead>
                   <tbody id="bans-body"></tbody>
                 </table></div>
     
@@ -2239,7 +2381,7 @@ const BODY = `
           <h2>パスキー</h2>
           <p class="hint">管理画面に入るときと、部屋の削除など戻せない操作の前に使います。端末を失くしたときのために、2つ以上の端末に登録しておいてください。</p>
           <div class="scroll"><table>
-            <thead><tr><th>名前</th><th>種類</th><th>登録した時刻</th><th>最後に使った時刻</th><th></th></tr></thead>
+            <thead><tr><th>名前</th><th>種類</th><th>登録した<wbr>時刻</th><th>最後に使った<wbr>時刻</th><th></th></tr></thead>
             <tbody id="passkeys-body"></tbody>
           </table></div>
           <div class="toolbar add-passkey">
@@ -2266,14 +2408,16 @@ const BODY = `
 </div>
 <dialog id="room-dialog">
   <div class="head"><h2 id="room-title"></h2><button type="button" id="room-close">閉じる</button></div>
-  <p class="muted" id="room-meta"></p>
+  <div id="room-meta"></div>
   <section><h3>入っている人</h3><div id="room-seats"></div></section>
   <section><h3>画像と音声</h3><div id="room-assets"></div></section>
   <section><button type="button" class="danger" id="room-delete">この部屋を削除</button></section>
 </dialog>
 <dialog id="asset-dialog">
   <div class="head"><h2 id="asset-title"></h2><button type="button" id="asset-close">閉じる</button></div>
+  <div id="asset-facts"></div>
   <div id="asset-body"></div>
+  <div class="toolbar" id="asset-actions"></div>
 </dialog>
 `;
 
