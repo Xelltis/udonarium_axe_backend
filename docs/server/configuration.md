@@ -135,7 +135,7 @@ Workerが使うCloudflareの資源です。
 | `LOBBY`          | Durable Object   | 部屋の一覧（`LobbyDurableObject`）。Workerに1つ                                                          |
 | `ACCOUNTS`       | Durable Object   | ログインした人ごとに1つ（`AccountDurableObject`）。名前は`discord:<ID>`                                  |
 | `MODERATION`     | Durable Object   | 運営する人のBANと記録（`ModerationDurableObject`）。Workerに1つ（→ [管理画面とBAN](/operate/admin)）     |
-| `UPLOAD_LIMITER` | レート制限       | 新しく置くPUTを、送信元ごとに1分100件まで                                                                |
+| `UPLOAD_LIMITER` | レート制限       | 新しく置くPUTと、部屋のアセットを消すDELETEを、送信元ごとに合わせて1分100件まで                          |
 | `READ_LIMITER`   | レート制限       | R2を読むGETとHEAD、部屋の一覧、鍵で1つ引く部屋、部屋のアセットの一覧を、送信元ごとに合わせて1分600件まで |
 | `ROOM_LIMITER`   | レート制限       | 部屋を作る・削除する・部屋に入るのを、送信元ごとに合わせて1分30回まで                                    |
 | `AUTH_LIMITER`   | レート制限       | Discordから戻るのと、トークンの発行・更新、ログアウトを、送信元ごとに合わせて1分60回まで                 |
