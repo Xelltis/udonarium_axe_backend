@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { notingLimits } from '../../src/core/http/moderation.js';
 import { formatRange, inRange, parseAddress, parseRange } from '../../src/core/moderation/address.js';
 import type { AddressRange } from '../../src/core/moderation/address.js';
 import {
@@ -534,10 +535,12 @@ describe('alerts', () => {
       .fn<(kind: AlertKind, ms: number) => Promise<boolean>>()
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
+    // Two instances: the store lets one of them send it.
     const send = webhookAlerts('https://discord.example/api/webhooks/1/token', claim);
+    const other = webhookAlerts('https://discord.example/api/webhooks/1/token', claim);
 
     await send('limited', {});
-    await send('limited', {});
+    await other('limited', {});
 
     expect(claim).toHaveBeenCalledWith('limited', ALERT_MS);
     expect(sent).toHaveBeenCalledOnce();
@@ -547,6 +550,21 @@ describe('alerts', () => {
     expect(body.allowed_mentions).toEqual({ parse: [] });
     expect(body.content).toContain('回数の上限');
     expect(body.content).not.toContain('192.0.2.1');
+  });
+
+  it('ask the store about one kind once in a while on each instance, however often it happens', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const claim = vi.fn<(kind: AlertKind, ms: number) => Promise<boolean>>(async () => false);
+    const send = webhookAlerts('https://discord.example/x', claim);
+
+    for (let i = 0; i < 5; i++) await send('refused', {});
+    await send('limited', {});
+    expect(claim.mock.calls.map(([kind]) => kind)).toEqual(['refused', 'limited']);
+
+    vi.advanceTimersByTime(ALERT_MS);
+    await send('refused', {});
+    expect(claim).toHaveBeenCalledTimes(3);
   });
 
   it('say who got into the dashboard every time, and what else happened once in a while', async () => {
@@ -631,5 +649,27 @@ describe('noteOnce', () => {
     for (let i = 0; i < 10_000; i++) noteOnce(`many-${i}`, 0);
 
     expect(noteOnce(key, 1)).toBe(true);
+  });
+});
+
+describe('notingLimits', () => {
+  it('writes down a sender over its limit once a while, counting an IPv6 /64 as one sender', async () => {
+    const note = vi.fn();
+    let address = '';
+    const limited = notingLimits(async () => false, {
+      addressOf: () => address,
+      moderation: { ...noModeration, note },
+    });
+    // A /64 of its own, so that what other tests wrote down does not count.
+    const net = `2001:db8:${(Date.now() % 0xffff).toString(16)}:${crypto.randomUUID().slice(0, 4)}`;
+
+    for (const host of ['1', '2', 'abcd:1', 'ffff:ffff:ffff:ffff']) {
+      address = `${net}::${host}`;
+      expect(await limited(new Request('https://backend.example/'), 'read')).toBe(false);
+    }
+    address = `${net.slice(0, -4)}ffff::1`;
+    await limited(new Request('https://backend.example/'), 'read');
+
+    expect(note.mock.calls.map(([entry]) => (entry as Activity).address)).toEqual([`${net}::1`, address]);
   });
 });

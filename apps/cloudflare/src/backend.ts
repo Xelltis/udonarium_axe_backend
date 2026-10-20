@@ -29,6 +29,21 @@ const addressOf = (request: Request): string => request.headers.get('CF-Connecti
 let bans: BanCache | null = null;
 
 /**
+ * The alerts for each webhook, made once in this isolate as the bans are, so that how often it asks
+ * the store whether to send one is counted across requests.
+ */
+const alerts = new Map<string, ReturnType<typeof webhookAlerts>>();
+
+const alertsOf = (env: Env) => {
+  const url = env.ADMIN_WEBHOOK_URL;
+  if (!url) return undefined;
+  const made =
+    alerts.get(url) ?? webhookAlerts(url, (kind, ms) => env.MODERATION.getByName(MODERATION_NAME).claimAlert(kind, ms));
+  alerts.set(url, made);
+  return made;
+};
+
+/**
  * The Worker's room server. It keeps rooms, the room list, accounts and the operator's bans in
  * Durable Objects and a room's assets in R2, and counts each sender's requests with the rate limit
  * bindings.
@@ -37,10 +52,7 @@ export const cloudflareBackend = (env: Env, waitUntil: (work: Promise<unknown>) 
   const store: ModerationStore = env.MODERATION.getByName(MODERATION_NAME);
   bans ??= banCache(() => env.MODERATION.getByName(MODERATION_NAME).state());
   // The settings have been checked before the backend is made, so a webhook here is an https:// URL.
-  const alert = env.ADMIN_WEBHOOK_URL
-    ? webhookAlerts(env.ADMIN_WEBHOOK_URL, (kind, ms) => store.claimAlert(kind, ms))
-    : undefined;
-  const moderation = moderationOf(store, bans, waitUntil, alert);
+  const moderation = moderationOf(store, bans, waitUntil, alertsOf(env));
 
   /**
    * Whether the count for the sender (each /64 for IPv6) is within the limit. namespace_id is shared

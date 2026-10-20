@@ -75,10 +75,18 @@ export const alertOf = (entry: Activity): AlertKind | null => {
  * Sends alerts to a Discord webhook (ADMIN_WEBHOOK_URL). claim asks the store whether this instance
  * is the one to send this kind now. Throws when the webhook does not take it.
  */
-export const webhookAlerts =
-  (url: string, claim: (kind: AlertKind, ms: number) => Promise<boolean>) =>
-  async (kind: AlertKind, facts: AlertFacts): Promise<void> => {
-    if (kind !== 'admin-login' && !(await claim(kind, kind === 'storage' ? STORAGE_ALERT_MS : ALERT_MS))) return;
+export const webhookAlerts = (url: string, claim: (kind: AlertKind, ms: number) => Promise<boolean>) => {
+  // When this instance last asked the store about each kind, so that a flood of one kind (a sender
+  // over a limit, again and again) asks the store once in a while rather than once a request.
+  const askedAt = new Map<AlertKind, number>();
+  return async (kind: AlertKind, facts: AlertFacts): Promise<void> => {
+    if (kind !== 'admin-login') {
+      const ms = kind === 'storage' ? STORAGE_ALERT_MS : ALERT_MS;
+      const now = Date.now();
+      if (now - (askedAt.get(kind) ?? -Infinity) < ms) return;
+      askedAt.set(kind, now);
+      if (!(await claim(kind, ms))) return;
+    }
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -87,3 +95,4 @@ export const webhookAlerts =
     });
     if (!res.ok) throw new Error(`The webhook answered ${res.status}`);
   };
+};

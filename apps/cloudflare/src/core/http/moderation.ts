@@ -6,6 +6,7 @@ import { discordIdOf } from '../moderation/bans.js';
 import type { Ban, BanList, PauseKind } from '../moderation/bans.js';
 import type { LimitKind, ServerBackend, ServerEnv } from './backend.js';
 import { fail } from './errors.js';
+import { networkOf } from './network.js';
 
 type ServerContext = Context<ServerEnv>;
 
@@ -20,9 +21,13 @@ const activityOf = (address: string, { accountKey, ...entry }: Happening): Activ
   return { at: Date.now(), address, ...(discordId === null ? {} : { discordId }), ...entry };
 };
 
-/** Writes down that a banned sender or account was turned away, once a minute for each. */
+/**
+ * Writes down that a banned sender or account was turned away, once a minute for each. Senders are
+ * told apart as the rate limits tell them (each /64 for IPv6), so that changing addresses inside one
+ * does not write each request down.
+ */
 const noteRefused = (backend: ServerBackend, address: string, ban: Ban, accountKey?: string) => {
-  if (!noteOnce(`refused|${address}|${accountKey ?? ''}`)) return;
+  if (!noteOnce(`refused|${networkOf(address)}|${accountKey ?? ''}`)) return;
   backend.moderation.note(activityOf(address, { kind: 'refused', accountKey, detail: banDetailOf(ban) }));
 };
 
@@ -110,6 +115,7 @@ export const notingLimits =
     const weight = (await moderation.current()).tighten[kind];
     if (await limit(request, kind, weight)) return true;
     const address = addressOf(request);
-    if (noteOnce(`limited|${address}|${kind}`)) moderation.note(activityOf(address, { kind: 'limited', detail: kind }));
+    if (noteOnce(`limited|${networkOf(address)}|${kind}`))
+      moderation.note(activityOf(address, { kind: 'limited', detail: kind }));
     return false;
   };
