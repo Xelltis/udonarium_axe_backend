@@ -373,7 +373,7 @@ describe('moderationOf', () => {
     claimAlert: async () => true,
     storageUsage: async () => null,
     putStorageUsage: async () => undefined,
-    putReport: async () => undefined,
+    putReport: async () => true,
     reports: async () => [],
     setReportStatus: async () => null,
     ...noModeration.admin,
@@ -453,7 +453,7 @@ describe('moderationOf', () => {
       handledAt: null,
       handledBy: null,
     } as const;
-    const putReport = vi.fn(async () => undefined);
+    const putReport = vi.fn(async () => true);
     const store = storeOf({ putReport, reports: async () => [kept], setReportStatus: async () => kept });
     const deferredWork: Promise<unknown>[] = [];
     const alert = vi.fn(async () => {
@@ -471,16 +471,19 @@ describe('moderationOf', () => {
       () => undefined
     );
 
-    await withAlerts.report(kept);
+    expect(await withAlerts.report(kept)).toBe(true);
     await without.report(kept);
+    // One its reporter has made too many of: not kept, and nobody is told.
+    putReport.mockResolvedValueOnce(false);
+    expect(await withAlerts.report(kept)).toBe(false);
     await Promise.all(deferredWork);
 
-    expect(putReport).toHaveBeenCalledTimes(2);
+    expect(putReport).toHaveBeenCalledTimes(3);
     expect(alert).toHaveBeenCalledExactlyOnceWith('report', {});
     expect(error).toHaveBeenCalledWith('Could not send the alert:', expect.any(Error));
     expect(await withAlerts.reports()).toEqual([kept]);
     expect(await withAlerts.setReportStatus('r', 'done', '1', 2)).toEqual(kept);
-    await noModeration.report(kept);
+    expect(await noModeration.report(kept)).toBe(true);
     expect(await noModeration.reports()).toEqual([]);
     expect(await noModeration.setReportStatus('r', 'done', '1', 2)).toBeNull();
   });

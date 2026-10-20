@@ -23,7 +23,8 @@ const reportSchema = object({
  * POST /v1/rooms/:roomKey/reports. A seat of the room, of any role, tells the operator of a picture
  * or sound in it, or of the room, with the room's asset token. Who reported (the address, the
  * account, the seat) is kept with it, so that false reports can be told apart and their senders
- * banned. Counted against the rate limit for rooms.
+ * banned. Counted against the rate limit for rooms, and turned away as over it when the reporter
+ * has made MAX_REPORTS_PER_REPORTER in the last day.
  */
 export const postReport = async (c: ReportContext) => {
   const { backend, config } = c.var;
@@ -54,6 +55,6 @@ export const postReport = async (c: ReportContext) => {
     handledAt: null,
     handledBy: null,
   };
-  await backend.moderation.report(report);
+  if (!(await backend.moderation.report(report))) return fail(c, 429, 'rate-limited');
   return c.json<ReportResponse>({ id: report.id }, 201);
 };

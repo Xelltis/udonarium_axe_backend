@@ -9,7 +9,7 @@ import {
 import type { Activity } from '../../src/core/moderation/activity.js';
 import type { Passkey } from '../../src/core/admin/webauthn.js';
 import type { Ban } from '../../src/core/moderation/bans.js';
-import { MAX_REPORTS, REPORT_MS } from '../../src/core/moderation/reports.js';
+import { MAX_REPORTS, MAX_REPORTS_PER_REPORTER, REPORTER_MS, REPORT_MS } from '../../src/core/moderation/reports.js';
 import type { Report } from '../../src/core/moderation/reports.js';
 import { redisModeration } from '../../src/server/moderation.js';
 import { freshKey, useRedis } from './redis-helpers.js';
@@ -31,14 +31,15 @@ const banOf = (value: string, createdAt: number, expiresAt: number | null = null
 const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
 const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
 
-const reportOf = (id: string, at: number): Report => ({
+/** A report, by a reporter of its own unless one is given. */
+const reportOf = (id: string, at: number, discordId: string | null = id): Report => ({
   id,
   at,
   roomKey: '0'.repeat(32),
   target: 'room',
   assetId: null,
   reason: 'x',
-  reporter: { address: '192.0.2.1', discordId: null, userId: 'u', role: 'pl' },
+  reporter: { address: '192.0.2.1', discordId, userId: 'u', role: 'pl' },
   status: 'open',
   handledAt: null,
   handledBy: null,
@@ -58,27 +59,56 @@ describe('a Redis store for the operator', () => {
     const key = freshKey();
     const store = redisModeration(connection.redis, key);
     const now = Date.now();
-    const many = Object.fromEntries(
-      Array.from({ length: MAX_REPORTS }, (_, i) => {
-        const report = reportOf(`r${String(i).padStart(4, '0')}`, now - MAX_REPORTS + i);
-        return [report.id, JSON.stringify(report)];
-      })
+    const many = Array.from({ length: MAX_REPORTS }, (_, i) =>
+      reportOf(`r${String(i).padStart(4, '0')}`, now - MAX_REPORTS + i)
     );
-    await connection.redis.hSet(key('mod', 'reports'), many);
-    await store.putReport(reportOf('too-old', now - REPORT_MS - 1));
-    await store.putReport(reportOf('newest', now + 1));
+    await connection.redis.hSet(
+      key('mod', 'reports'),
+      Object.fromEntries(many.map((report) => [report.id, JSON.stringify(report)]))
+    );
+    await connection.redis.zAdd(
+      key('mod', 'reports', 'at'),
+      many.map((report) => ({ score: report.at, value: report.id }))
+    );
+    expect(await store.putReport(reportOf('too-old', now - REPORT_MS - 1))).toBe(true);
+    expect(await store.putReport(reportOf('newest', now + 1))).toBe(true);
+    // One grown too old since the last was kept is left out until the next lets it go.
+    const stale = reportOf('stale', now - REPORT_MS - 1);
+    await connection.redis.hSet(key('mod', 'reports'), stale.id, JSON.stringify(stale));
 
     const kept = await store.reports();
     expect(kept).toHaveLength(MAX_REPORTS);
     expect(kept[0].id).toBe('newest');
     expect(kept.some((report) => report.id === 'too-old' || report.id === 'r0000')).toBe(false);
-    expect(await connection.redis.hLen(key('mod', 'reports'))).toBe(MAX_REPORTS);
+    expect(await connection.redis.hLen(key('mod', 'reports'))).toBe(MAX_REPORTS + 1);
+    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(MAX_REPORTS);
     expect(await store.setReportStatus('missing', 'done', '1', 5)).toBeNull();
     expect(await store.setReportStatus('r0001', 'dismissed', '1', 5)).toMatchObject({
       status: 'dismissed',
       handledBy: '1',
     });
     expect((await store.reports()).find((report) => report.id === 'r0001')?.status).toBe('dismissed');
+  });
+
+  it('keeps no more than MAX_REPORTS_PER_REPORTER from one reporter a day, those from a sender counted by its /64', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key);
+    const now = Date.now();
+    const answers: boolean[] = [];
+    answers.push(await store.putReport(reportOf('yesterday', now - REPORTER_MS, 'same')));
+    for (let i = 0; i <= MAX_REPORTS_PER_REPORTER; i++)
+      answers.push(await store.putReport(reportOf(`d${i}`, now, 'same')));
+    for (let i = 0; i <= MAX_REPORTS_PER_REPORTER; i++) {
+      const report = reportOf(`a${i}`, now, null);
+      answers.push(
+        await store.putReport({ ...report, reporter: { ...report.reporter, address: `2001:db8::${i + 1}` } })
+      );
+    }
+    answers.push(await store.putReport(reportOf('someone else', now)));
+
+    const fromOne = [true, ...Array<boolean>(MAX_REPORTS_PER_REPORTER).fill(true), false];
+    expect(answers).toEqual([...fromOne, ...fromOne.slice(1), true]);
+    expect(await connection.redis.pTTL(key('mod', 'reporter', 'discord:same'))).toBeGreaterThan(REPORTER_MS - 60_000);
   });
 
   it('keeps how tight the limits are, and when that began, until they go back', async () => {

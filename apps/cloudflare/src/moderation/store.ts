@@ -12,7 +12,7 @@ import type { Passkey, PasskeyAlgorithm } from '../core/admin/webauthn';
 import type { AlertKind } from '../core/moderation/alerts';
 import { NO_TIGHTEN } from '../core/moderation/bans';
 import type { Ban, BanKind, ModerationState, Pause, Tighten, TightenWeight } from '../core/moderation/bans';
-import { MAX_REPORTS, REPORT_MS } from '../core/moderation/reports';
+import { MAX_REPORTS, MAX_REPORTS_PER_REPORTER, REPORTER_MS, REPORT_MS, reporterOf } from '../core/moderation/reports';
 import type { Report, ReportStatus } from '../core/moderation/reports';
 import type { StorageUsage } from '../core/moderation/storage';
 
@@ -120,10 +120,13 @@ export class ModerationDurableObject extends DurableObject<Env> {
     sql.exec(`CREATE TABLE IF NOT EXISTS reports (
       id TEXT PRIMARY KEY,
       at INTEGER NOT NULL,
+      reporter TEXT NOT NULL,
       body TEXT NOT NULL
     )`);
-    // Those past their time are looked up by when, so that letting them go does not read them all.
+    // Those past their time are looked up by when, so that letting them go does not read them all,
+    // and a reporter's of late by who made them.
     sql.exec('CREATE INDEX IF NOT EXISTS reports_at ON reports (at)');
+    sql.exec('CREATE INDEX IF NOT EXISTS reports_reporter ON reports (reporter, at)');
     // What happened, and apart from it the operators' own steps, kept longer.
     for (const table of ['activity', 'operator_activity']) {
       sql.exec(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -307,22 +310,34 @@ export class ModerationDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. As for what happened,
-   * letting go reads only what it deletes: by at through its index, and by rowid, which grows with
-   * each report kept.
+   * Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS, or keeps nothing (false)
+   * when its reporter has made MAX_REPORTS_PER_REPORTER in the last REPORTER_MS. As for what
+   * happened, letting go reads only what it deletes: by at through its index, and by rowid, which
+   * grows with each report kept.
    */
-  putReport(report: Report): void {
+  putReport(report: Report): boolean {
     const sql = this.ctx.storage.sql;
+    const reporter = reporterOf(report);
+    const recent = sql
+      .exec<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM reports WHERE reporter = ? AND at > ?',
+        reporter,
+        report.at - REPORTER_MS
+      )
+      .one().n;
+    if (recent >= MAX_REPORTS_PER_REPORTER) return false;
     const { rowid } = sql
       .exec<{ rowid: number }>(
-        'INSERT INTO reports (id, at, body) VALUES (?, ?, ?) RETURNING rowid',
+        'INSERT INTO reports (id, at, reporter, body) VALUES (?, ?, ?, ?) RETURNING rowid',
         report.id,
         report.at,
+        reporter,
         JSON.stringify(report)
       )
       .one();
     sql.exec('DELETE FROM reports WHERE at < ?', Date.now() - REPORT_MS);
     sql.exec('DELETE FROM reports WHERE rowid <= ?', rowid - MAX_REPORTS);
+    return true;
   }
 
   /** The reports kept, newest first. */

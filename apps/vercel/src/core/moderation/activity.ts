@@ -92,8 +92,11 @@ export interface ModerationStore extends AdminStore {
   storageUsage(): Promise<StorageUsage | null>;
   /** Keeps the store's size as just counted. */
   putStorageUsage(usage: StorageUsage): Promise<void>;
-  /** Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. */
-  putReport(report: Report): Promise<void>;
+  /**
+   * Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. False, keeping nothing, when
+   * its reporter has made MAX_REPORTS_PER_REPORTER in the last REPORTER_MS.
+   */
+  putReport(report: Report): Promise<boolean>;
   /** The reports kept, newest first. */
   reports(): Promise<Report[]>;
   /** Sets what the operator made of a report. The report as it now stands, or null when there is none. */
@@ -128,8 +131,11 @@ export interface Moderation {
   putStorageUsage(usage: StorageUsage): Promise<void>;
   /** Tells the operator the store is past limitBytes (once a day at most). Nothing without alerts. */
   alertStorage(usage: StorageUsage, limitBytes: number): Promise<void>;
-  /** Keeps a report, and tells the operator of it after the response (when alerts are sent). */
-  report(report: Report): Promise<void>;
+  /**
+   * Keeps a report, and tells the operator of it after the response (when alerts are sent). False
+   * when its reporter has made too many of late (see putReport).
+   */
+  report(report: Report): Promise<boolean>;
   reports(): Promise<Report[]>;
   setReportStatus(id: string, status: ReportStatus, by: string, at: number): Promise<Report | null>;
   /** Where the dashboard keeps passkeys and the generation of its sessions. */
@@ -175,8 +181,9 @@ export const moderationOf = (
     if (alert) await alert('storage', { usage, limitBytes });
   },
   report: async (report) => {
-    await store.putReport(report);
+    if (!(await store.putReport(report))) return false;
     if (alert) defer(alert('report', {}).catch((err: unknown) => console.error('Could not send the alert:', err)));
+    return true;
   },
   reports: () => store.reports(),
   setReportStatus: (id, status, by, at) => store.setReportStatus(id, status, by, at),
@@ -197,7 +204,7 @@ export const noModeration: Moderation = {
   storageUsage: async () => null,
   putStorageUsage: async () => undefined,
   alertStorage: async () => undefined,
-  report: async () => undefined,
+  report: async () => true,
   reports: async () => [],
   setReportStatus: async () => null,
   // The dashboard answers 503 without login, so it asks nothing of these.

@@ -5,6 +5,7 @@ import { MAX_REPORT_REASON_LENGTH } from '../../contracts/protocol.js';
 import type { ReportResponse } from '../../contracts/protocol.js';
 import { ASSET_TOKEN_SECONDS, signToken } from '../../src/core/auth/tokens.js';
 import type { Activity } from '../../src/core/moderation/activity.js';
+import { MAX_REPORTS_PER_REPORTER } from '../../src/core/moderation/reports.js';
 import type { Report } from '../../src/core/moderation/reports.js';
 import { harness } from '../harness.js';
 import { callAdmin } from './admin-helpers.js';
@@ -131,6 +132,26 @@ describe('a report from a seat of the room', () => {
       for (let i = 0; i < 6; i++) statuses.push(await statusOf({ target: 'room', reason: `${i}` }, { ip }));
       expect(statuses).toEqual([201, 201, 201, 201, 201, 429]);
     });
+  });
+
+  it('is turned away once its reporter has made MAX_REPORTS_PER_REPORTER in a day, from any address', async () => {
+    const discordId = `8${String(Date.now()).padStart(17, '0')}`;
+    const token = signToken<'asset'>(
+      { aud: 'asset', room: ROOM_KEY, role: 'pl', uid: 'acct_flood', sub: `discord:${discordId}` },
+      ASSET_TOKEN_SECONDS,
+      SESSION_SECRET
+    );
+    const statuses: number[] = [];
+    for (let i = 0; i <= MAX_REPORTS_PER_REPORTER; i++) {
+      statuses.push((await report({ target: 'room', reason: `${i}` }, { token })).status);
+    }
+
+    expect(statuses).toEqual([...Array<number>(MAX_REPORTS_PER_REPORTER).fill(201), 429]);
+    expect((await reports()).filter((each) => each.reporter.discordId === discordId)).toHaveLength(
+      MAX_REPORTS_PER_REPORTER
+    );
+    // Someone else is not held back by it.
+    expect((await report({ target: 'room', reason: 'x' })).status).toBe(201);
   });
 });
 

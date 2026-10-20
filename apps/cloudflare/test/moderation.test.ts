@@ -16,7 +16,7 @@ import {
 import type { Activity } from '../src/core/moderation/activity';
 import type { Passkey } from '../src/core/admin/webauthn';
 import type { Ban } from '../src/core/moderation/bans';
-import { MAX_REPORTS, REPORT_MS } from '../src/core/moderation/reports';
+import { MAX_REPORTS, MAX_REPORTS_PER_REPORTER, REPORTER_MS, REPORT_MS } from '../src/core/moderation/reports';
 import type { Report } from '../src/core/moderation/reports';
 import { scheduled } from '../src/index';
 import { MODERATION_NAME } from '../src/moderation/store';
@@ -45,14 +45,15 @@ const banOf = (value: string, expiresAt: number | null): Ban => ({
 
 const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
 const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
-const reportOf = (id: string, at: number): Report => ({
+/** A report, by a reporter of its own unless one is given. */
+const reportOf = (id: string, at: number, discordId: string | null = id): Report => ({
   id,
   at,
   roomKey: '0'.repeat(32),
   target: 'room',
   assetId: null,
   reason: 'x',
-  reporter: { address: '192.0.2.1', discordId: null, userId: 'u', role: 'pl' },
+  reporter: { address: '192.0.2.1', discordId, userId: 'u', role: 'pl' },
   status: 'open',
   handledAt: null,
   handledBy: null,
@@ -190,6 +191,29 @@ describe('ModerationDurableObject', () => {
       handledAt: 5,
     });
     expect((await store.reports()).find((report) => report.id === 'r0001')?.status).toBe('dismissed');
+  });
+
+  it('keeps no more than MAX_REPORTS_PER_REPORTER from one reporter a day, those from a sender counted by its /64', async () => {
+    const store = freshStore();
+    const now = Date.now();
+    const kept = await runInDurableObject(store, (instance: ModerationDurableObject) => {
+      const answers: boolean[] = [];
+      answers.push(instance.putReport(reportOf('yesterday', now - REPORTER_MS, 'same')));
+      for (let i = 0; i <= MAX_REPORTS_PER_REPORTER; i++)
+        answers.push(instance.putReport(reportOf(`d${i}`, now, 'same')));
+      // A sender not logged in, changing addresses inside one /64.
+      for (let i = 0; i <= MAX_REPORTS_PER_REPORTER; i++) {
+        const report = reportOf(`a${i}`, now, null);
+        answers.push(
+          instance.putReport({ ...report, reporter: { ...report.reporter, address: `2001:db8::${i + 1}` } })
+        );
+      }
+      answers.push(instance.putReport(reportOf('someone else', now)));
+      return answers;
+    });
+
+    const fromOne = [true, ...Array<boolean>(MAX_REPORTS_PER_REPORTER).fill(true), false];
+    expect(kept).toEqual([...fromOne, ...fromOne.slice(1), true]);
   });
 
   it('keeps how tight the limits are, and when that began, until they go back', async () => {

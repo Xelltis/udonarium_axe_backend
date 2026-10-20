@@ -9,7 +9,13 @@ import type { Activity, ModerationStore } from '../core/moderation/activity.js';
 import type { Passkey } from '../core/admin/webauthn.js';
 import { NO_TIGHTEN } from '../core/moderation/bans.js';
 import type { Ban, BanKind, Pause, Tighten, TightenWeight } from '../core/moderation/bans.js';
-import { MAX_REPORTS, REPORT_MS } from '../core/moderation/reports.js';
+import {
+  MAX_REPORTS,
+  MAX_REPORTS_PER_REPORTER,
+  REPORTER_MS,
+  REPORT_MS,
+  reporterOf,
+} from '../core/moderation/reports.js';
 import type { Report } from '../core/moderation/reports.js';
 import type { StorageUsage } from '../core/moderation/storage.js';
 import type { KeyOf, Redis } from './redis.js';
@@ -33,6 +39,10 @@ import type { KeyOf, Redis } from './redis.js';
 //   mod:tighten       HASH    How tight each rate limit is: upload, read, room, auth (1, 2, 4 or 10), and since.
 //   mod:reports       HASH    report id → JSON of a report from a room's seat. Kept to the newest
 //                             MAX_REPORTS and to REPORT_MS.
+//   mod:reports:at    ZSET    The report ids by when they were made, so that the oldest go without
+//                             reading every report.
+//   mod:reporter:<r>  ZSET    The ids of the reports one reporter (reporterOf) made in the last
+//                             REPORTER_MS, by when. It goes away REPORTER_MS after the last.
 
 const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
@@ -46,17 +56,25 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
   const STORAGE = key('mod', 'storage');
   const TIGHTEN = key('mod', 'tighten');
   const REPORTS = key('mod', 'reports');
+  const REPORTS_AT = key('mod', 'reports', 'at');
 
-  /** Every report kept, newest first, those too old or past MAX_REPORTS deleted on the way. */
+  /** Every report kept, newest first. Those too old are left out, and let go when the next is kept. */
   const reports = async (): Promise<Report[]> => {
-    const all = Object.values(await redis.hGetAll(REPORTS))
-      .map((value) => JSON.parse(value) as Report)
-      .sort((a, b) => b.at - a.at || Number(a.id > b.id) - Number(a.id < b.id));
     const oldest = Date.now() - REPORT_MS;
-    const kept = all.filter((report, at) => report.at >= oldest && at < MAX_REPORTS);
-    const gone = all.filter((report) => !kept.includes(report)).map((report) => report.id);
-    if (gone.length > 0) await redis.hDel(REPORTS, gone);
-    return kept;
+    return Object.values(await redis.hGetAll(REPORTS))
+      .map((value) => JSON.parse(value) as Report)
+      .filter((report) => report.at >= oldest)
+      .sort((a, b) => b.at - a.at || Number(a.id > b.id) - Number(a.id < b.id));
+  };
+
+  /** Lets go of the reports made before oldest, and of the oldest past MAX_REPORTS. */
+  const trimReports = async (oldest: number): Promise<void> => {
+    const old = await redis.zRangeByScore(REPORTS_AT, '-inf', `(${oldest}`);
+    const over = (await redis.zCard(REPORTS_AT)) - old.length - MAX_REPORTS;
+    const gone = [...old, ...(over > 0 ? await redis.zRange(REPORTS_AT, old.length, old.length + over - 1) : [])];
+    if (gone.length === 0) return;
+    await redis.zRem(REPORTS_AT, gone);
+    await redis.hDel(REPORTS, gone);
   };
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
@@ -203,8 +221,17 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
     },
 
     async putReport(report) {
+      // How many its reporter made of late, as counted before this one. Two at the same moment may
+      // both get in; the cap is to keep one sender from crowding out the rest, not an exact count.
+      const reporter = key('mod', 'reporter', reporterOf(report));
+      await redis.zRemRangeByScore(reporter, '-inf', report.at - REPORTER_MS);
+      if ((await redis.zCard(reporter)) >= MAX_REPORTS_PER_REPORTER) return false;
+      await redis.zAdd(reporter, { score: report.at, value: report.id });
+      await redis.pExpire(reporter, REPORTER_MS);
       await redis.hSet(REPORTS, report.id, JSON.stringify(report));
-      await reports();
+      await redis.zAdd(REPORTS_AT, { score: report.at, value: report.id });
+      await trimReports(Date.now() - REPORT_MS);
+      return true;
     },
 
     reports,
