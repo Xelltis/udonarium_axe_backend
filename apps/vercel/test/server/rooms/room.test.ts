@@ -186,6 +186,20 @@ describe('a room held on Vercel', () => {
     room.stepDown();
   });
 
+  it('says so when it could not let the room go as it stepped down', async () => {
+    const { deps } = await roomDepsOf(connection.redis);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const room = await VercelRoom.open(deps, 'room');
+    const release = room.release.bind(room);
+    vi.spyOn(room, 'release').mockRejectedValueOnce(new Error('down'));
+
+    room.stepDown();
+
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('Could not let the room go:', expect.any(Error)));
+    vi.restoreAllMocks();
+    await release();
+  });
+
   it('says so when it could not renew its lease', async () => {
     const { deps } = await roomDepsOf(connection.redis);
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
