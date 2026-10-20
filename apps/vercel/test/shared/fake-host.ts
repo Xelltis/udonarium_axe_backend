@@ -111,6 +111,13 @@ export class FakeHost implements RoomHost<FakeConn> {
     conn.seat = seat;
   }
 
+  /** The address each connection came from, when it was told one. */
+  private readonly addresses = new WeakMap<FakeConn, string>();
+
+  addressOf(conn: FakeConn): string | undefined {
+    return this.addresses.get(conn);
+  }
+
   send(conn: FakeConn, frame: Uint8Array): void {
     conn.received.push(decodeFrame(frame) as ServerMessage);
   }
@@ -178,7 +185,8 @@ export class FakeHost implements RoomHost<FakeConn> {
   connect(address?: string): FakeConn {
     const conn = new FakeConn();
     this.conns.push(conn);
-    this.engine.accept(conn, address);
+    if (address !== undefined) this.addresses.set(conn, address);
+    this.engine.accept(conn);
     return conn;
   }
 

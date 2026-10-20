@@ -153,8 +153,10 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
    */
   override async fetch(request: Request): Promise<Response> {
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server);
-    this.engine.accept(server, request.headers.get('CF-Connecting-IP') ?? undefined);
+    // The sender's address goes in the socket's tags, which outlast the room sleeping before the hello.
+    const address = request.headers.get('CF-Connecting-IP');
+    this.ctx.acceptWebSocket(server, address === null ? [] : [address]);
+    this.engine.accept(server);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -269,6 +271,10 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
 
   setSeat(ws: WebSocket, seat: Seat): void {
     ws.serializeAttachment(seat);
+  }
+
+  addressOf(ws: WebSocket): string | undefined {
+    return this.ctx.getTags(ws)[0];
   }
 
   send(ws: WebSocket, frame: Uint8Array): void {

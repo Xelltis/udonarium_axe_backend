@@ -129,8 +129,6 @@ export class RoomEngine<C extends object> {
   private readonly refused = new WeakSet<C>();
   /** When a connection before its hello was taken in. One with no time here counts as having waited too long. */
   private readonly connectedAt = new WeakMap<C, number>();
-  /** The sender's IP address of each connection, kept on its seat for the operator. */
-  private readonly addresses = new WeakMap<C, string>();
   /**
    * The connections whose hello waits for the operator's bans to be read, and the frames that came
    * on each meanwhile. Those are taken in after the hello, in the order they came.
@@ -180,10 +178,8 @@ export class RoomEngine<C extends object> {
    * Accepts a connection. Even when there is no room or it is full, the connection is accepted, then
    * sent the reason and closed. Refused over HTTP before it is accepted, the browser cannot read the
    * reason and learns only that it did not connect.
-   * address is the sender's IP address, which goes on the seat so that the operator's bans can find it.
    */
-  accept(conn: C, address?: string): void {
-    if (address !== undefined) this.addresses.set(conn, address);
+  accept(conn: C): void {
     const missing = this.host.wiping() || !this.host.room();
     if (!missing) this.closeSilentSockets(conn);
     const full =
@@ -456,7 +452,7 @@ export class RoomEngine<C extends object> {
    */
   private admit(conn: C, hello: InferOutput<typeof helloSchema>, bans: BanList): void {
     // A banned sender is turned away before anything about the room is checked (such as its password).
-    const address = this.addresses.get(conn);
+    const address = this.host.addressOf(conn);
     if (address !== undefined && bans.addressBan(address)) return this.refuse(conn, 'banned');
 
     const room = this.host.room();

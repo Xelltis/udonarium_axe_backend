@@ -2,6 +2,7 @@ import {
   createExecutionContext,
   createScheduledController,
   env,
+  evictDurableObject,
   runInDurableObject,
   waitOnExecutionContext,
 } from 'cloudflare:test';
@@ -26,7 +27,7 @@ import type { RoomDurableObject } from '../src/rooms/room';
 import { harness } from './harness';
 import { callAdmin } from './shared/admin-helpers';
 import { freshIp } from './shared/helpers';
-import { Client, createRoom, join } from './shared/room-helpers';
+import { Client, createRoom, join, upgrade } from './shared/room-helpers';
 import { stubOf } from './cf-helpers';
 
 // The Cloudflare version's side of the operator's bans: the Durable Object that keeps them, and what
@@ -414,6 +415,22 @@ describe('a room seen by the operator', () => {
 
     expect(seat).toMatchObject({ peerId: 'quiet', account: false });
     expect(seat.address).toBeUndefined();
+  });
+
+  it('turns a sender banned while the room slept before its hello away at the hello', async () => {
+    const roomKey = await createRoom();
+    const ip = freshIp();
+    const res = await upgrade(roomKey, { 'CF-Connecting-IP': ip });
+    const client = new Client(res.socket as NonNullable<typeof res.socket>);
+    await evictDurableObject(stubOf(roomKey));
+    expect((await callAdmin('bans', { method: 'POST', body: { kind: 'ip', value: ip } })).status).toBe(201);
+    try {
+      client.hello('late', { accessToken: null });
+
+      expect((await client.next('error')).code).toBe('banned');
+    } finally {
+      await callAdmin(`bans?kind=ip&value=${ip}/32`, { method: 'DELETE' });
+    }
   });
 
   it('writes down a deletion by the operator as one', async () => {

@@ -80,6 +80,12 @@ export interface RoomHost<C extends object> {
   connections(): readonly C[];
   seatOf(conn: C): Seat | null;
   setSeat(conn: C, seat: Seat): void;
+  /**
+   * The sender's IP address, as the room server was told it when the connection was made, which goes
+   * on the seat so that the operator's bans can find it. Kept with the connection, where it outlasts
+   * the room sleeping before the hello comes.
+   */
+  addressOf(conn: C): string | undefined;
   /** Sends a frame. Does nothing when the connection is closing and cannot send. */
   send(conn: C, frame: Uint8Array): void;
   /** Closes the connection. Does nothing when it is already closed. */

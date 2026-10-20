@@ -220,7 +220,7 @@ export class VercelRoom implements RoomHost<Conn> {
   /** Takes a connection. */
   accept(conn: Conn): void {
     this.conns.add(conn);
-    this.engine.accept(conn, conn.address);
+    this.engine.accept(conn);
   }
 
   /** Closes the connections the operator's ban covers. Returns how many it closed. */
@@ -367,6 +367,10 @@ export class VercelRoom implements RoomHost<Conn> {
 
   seatOf(conn: Conn): Seat | null {
     return conn.seat;
+  }
+
+  addressOf(conn: Conn): string | undefined {
+    return conn.address;
   }
 
   setSeat(conn: Conn, seat: Seat): void {
