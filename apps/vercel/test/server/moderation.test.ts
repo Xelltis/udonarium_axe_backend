@@ -134,6 +134,19 @@ describe('a Redis store for the operator', () => {
     expect(ids.has('alt0')).toBe(false);
   });
 
+  it('keeps those not logged in when many accounts report once each', async () => {
+    const store = redisModeration(connection.redis, freshKey(), FEW);
+    const now = Date.now();
+    const lonely = reportOf('lonely', now - 30, null);
+    await store.putReport({ ...lonely, reporter: { ...lonely.reporter, address: '203.0.113.5' } });
+    for (let i = 0; i < FEW; i++) await store.putReport(reportOf(`one${i}`, now - 20 + i));
+    const ids = new Set((await store.reports()).map((report) => report.id));
+
+    expect(ids.size).toBe(FEW);
+    expect(ids.has('lonely')).toBe(true);
+    expect(ids.has('one0')).toBe(false);
+  });
+
   it('keeps MAX_REPORTS unless told otherwise', async () => {
     const key = freshKey();
     const store = redisModeration(connection.redis, key);

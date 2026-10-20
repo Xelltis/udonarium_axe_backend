@@ -50,11 +50,11 @@ import type { KeyOf, Redis } from './redis.js';
 //                             REPORTER_MS, by when. It goes away REPORTER_MS after the last.
 //   mod:rank:<g>      ZSET    The ids of the reports one rank (rankOf) has kept, by when. It goes
 //                             away REPORT_MS after the last.
-//   mod:reporters     ZSET    The ranks, highest first: the one that has kept the most (of those, the
-//                             one with the oldest). Past MAX_REPORTS, the oldest of the highest goes.
+//   mod:reporters     ZSET    The ranks of accounts, highest first: the one that has kept the most
+//                             (of those, the one with the oldest). Past MAX_REPORTS, the oldest of the
+//                             highest goes, from whichever side holds over half.
 //   mod:reporters:anonymous
-//                     ZSET    The same, of senders not logged in alone: taken from while they hold
-//                             over half of the reports kept.
+//                     ZSET    The same, of senders not logged in.
 //   mod:reports:anonymous
 //                     STRING  How many reports of senders not logged in are kept.
 
@@ -88,27 +88,27 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
       .sort((a, b) => b.at - a.at || Number(a.id > b.id) - Number(a.id < b.id));
   };
 
-  const REPORTERS = key('mod', 'reporters');
+  const ACCOUNT_REPORTERS = key('mod', 'reporters');
   const ANONYMOUS_REPORTERS = key('mod', 'reporters', 'anonymous');
   const ANONYMOUS_KEPT = key('mod', 'reports', 'anonymous');
   const reporterKeyOf = (reporter: string) => key('mod', 'reporter', reporter);
   const rankKeyOf = (rank: string) => key('mod', 'rank', rank);
 
   /**
-   * Puts a rank in its place among the ranks (and among those of senders not logged in, for one of
-   * those): by how many it has kept, then by how old its oldest is. Both fit in one score that a
-   * double holds exactly (up to 2^53).
+   * Puts a rank in its place among those of its side (senders not logged in, or accounts): by how
+   * many it has kept, then by how old its oldest is. Both fit in one score that a double holds exactly
+   * (up to 2^53).
    */
   const rankReporter = async (rank: string): Promise<void> => {
-    const among = rank.startsWith(ANONYMOUS_RANK) ? [REPORTERS, ANONYMOUS_REPORTERS] : [REPORTERS];
+    const side = rank.startsWith(ANONYMOUS_RANK) ? ANONYMOUS_REPORTERS : ACCOUNT_REPORTERS;
     const [oldest] = await redis.zRangeWithScores(rankKeyOf(rank), 0, 0);
     if (!oldest) {
-      for (const ranks of among) await redis.zRem(ranks, rank);
+      await redis.zRem(side, rank);
       return;
     }
     const kept = await redis.zCard(rankKeyOf(rank));
     const age = RANK_SPAN_MS - Math.min(Math.max(oldest.score - RANK_EPOCH_MS, 0), RANK_SPAN_MS - 1);
-    for (const ranks of among) await redis.zAdd(ranks, { score: kept * RANK_SPAN_MS + age, value: rank });
+    await redis.zAdd(side, { score: kept * RANK_SPAN_MS + age, value: rank });
   };
 
   /** Lets reports go, from wherever they are kept. */
@@ -130,17 +130,17 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
 
   /**
    * Lets go of the reports made before oldest, and past MAX_REPORTS, of the oldest of the rank that
-   * has kept the most (among senders not logged in while they hold over half), so that a flood from
-   * many senders pushes out its own reports rather than those of others.
+   * has kept the most on whichever side holds over half, so that a flood from many senders pushes out
+   * its own reports rather than those of others.
    */
   const trimReports = async (oldest: number): Promise<void> => {
     const old = await redis.zRangeByScore(REPORTS_AT, '-inf', `(${oldest}`);
     if (old.length > 0) await dropReports(old);
     if ((await redis.zCard(REPORTS_AT)) <= maxReports) return;
-    // Senders not logged in go first only while they hold over half, so that neither those nor
-    // accounts can push out every report of the other.
+    // It goes from whichever side holds over half, senders not logged in or accounts (past
+    // MAX_REPORTS one always does), so that neither can push out every report of the other.
     const anonymous = Number((await redis.get(ANONYMOUS_KEPT)) ?? 0);
-    const from = anonymous > maxReports / 2 ? ANONYMOUS_REPORTERS : REPORTERS;
+    const from = anonymous > maxReports / 2 ? ANONYMOUS_REPORTERS : ACCOUNT_REPORTERS;
     const [busiest] = await redis.zRange(from, 0, 0, { REV: true });
     await dropReports(await redis.zRange(rankKeyOf(busiest as string), 0, 0));
   };

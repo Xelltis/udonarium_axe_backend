@@ -153,7 +153,6 @@ export class ModerationDurableObject extends DurableObject<Env> {
       since INTEGER NOT NULL
     )`);
     sql.exec('CREATE INDEX IF NOT EXISTS reporters_rank ON reporters (anonymous, kept DESC, since)');
-    sql.exec('CREATE INDEX IF NOT EXISTS reporters_busiest ON reporters (kept DESC, since)');
     // What happened, and apart from it the operators' own steps, kept longer.
     for (const table of ['activity', 'operator_activity']) {
       sql.exec(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -365,9 +364,10 @@ export class ModerationDurableObject extends DurableObject<Env> {
   /**
    * Keeps a report, or keeps nothing (false) when its reporter has made MAX_REPORTS_PER_REPORTER in
    * the last REPORTER_MS. Those past REPORT_MS go. Past MAX_REPORTS, the one that goes is the oldest
-   * of the rank (rankOf) that has kept the most (of those, the one with the oldest), among senders not
-   * logged in while they hold over half, so that a flood from many senders pushes out its own
-   * reports rather than those of others. Letting go reads only what it deletes, through the indexes.
+   * of the rank (rankOf) that has kept the most (of those, the one with the oldest), on whichever side
+   * holds over half, senders not logged in or accounts, so that a flood from many senders pushes out
+   * its own reports rather than those of others. Letting go reads only what it deletes, through the
+   * indexes.
    */
   putReport(report: Report): boolean {
     const sql = this.ctx.storage.sql;
@@ -398,13 +398,13 @@ export class ModerationDurableObject extends DurableObject<Env> {
     for (const [each, count] of gone) this.countReporter(each, -count);
     const kept = this.reportsKept('reports_kept');
     if (kept > MAX_REPORTS) {
-      // Senders not logged in go first only while they hold over half, so that neither those nor
-      // accounts can push out every report of the other.
+      // It goes from whichever side holds over half, senders not logged in or accounts (past
+      // MAX_REPORTS one always does), so that neither can push out every report of the other.
+      const anonymous = this.reportsKept('reports_anonymous') > MAX_REPORTS / 2 ? 1 : 0;
       const busiest = sql
         .exec<{ reporter: string }>(
-          this.reportsKept('reports_anonymous') > MAX_REPORTS / 2
-            ? 'SELECT reporter FROM reporters WHERE anonymous = 1 ORDER BY kept DESC, since LIMIT 1'
-            : 'SELECT reporter FROM reporters ORDER BY kept DESC, since LIMIT 1'
+          'SELECT reporter FROM reporters WHERE anonymous = ? ORDER BY kept DESC, since LIMIT 1',
+          anonymous
         )
         .one().reporter;
       sql.exec(

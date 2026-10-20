@@ -50,9 +50,9 @@ export const reporterOf = (report: Report): string =>
 export const ANONYMOUS_RANK = 'anon:';
 
 /**
- * Whose reports go first past MAX_REPORTS: those of senders not logged in before those of accounts,
- * and senders taken together by a wider unit (wideNetworkOf), since many addresses come cheap. Those
- * not logged in are marked anon: so that the stores put them first.
+ * Who a report is counted as past MAX_REPORTS, where the oldest of whoever has kept the most goes,
+ * on whichever side holds over half (senders not logged in, or accounts). Senders not logged in are
+ * taken together by a wider unit (wideNetworkOf), since many addresses come cheap, and marked anon:.
  */
 export const rankOf = (report: Report): string =>
   report.reporter.discordId === null
