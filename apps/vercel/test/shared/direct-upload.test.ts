@@ -42,9 +42,10 @@ class Raw {
 }
 
 /** A fake room server that holds in memory what is uploaded for now and what is kept. */
-const setUp = (options: { direct?: boolean } = {}) => {
+const setUp = (options: { direct?: boolean; roomStorageLimitBytes?: number } = {}) => {
   const uploaded = new Map<string, Bytes>();
   const kept = new Map<string, { type: string; name: string }>();
+  const sizes = new Map<string, number>();
   const direct: DirectUploads = {
     maxPutBytes: MAX_PUT_BYTES,
     target: async (path, size) => ({
@@ -80,8 +81,10 @@ const setUp = (options: { direct?: boolean } = {}) => {
         const bytes = new Uint8Array(await new Response(body).arrayBuffer()) as Bytes;
         if (bytes.byteLength !== length || (await sha256Hex(bytes)) !== id) return 'hash-mismatch';
         kept.set(id, { type, name });
+        sizes.set(id, length);
         return 'stored';
       },
+      list: async () => [...kept.keys()].map((id) => ({ id, size: sizes.get(id) as number })),
       discard: vi.fn(async (_roomKey: string, id: string) => void kept.delete(id)),
       afterStore: vi.fn(),
       ...(options.direct === false ? {} : { direct }),
@@ -99,7 +102,7 @@ const setUp = (options: { direct?: boolean } = {}) => {
       admin: null,
       adminWebhook: null,
       storageAlertBytes: null,
-      roomStorageLimitBytes: null,
+      roomStorageLimitBytes: options.roomStorageLimitBytes ?? null,
       contactUrl: null,
       roomRetentionSeconds: 3600,
     });
@@ -172,6 +175,31 @@ describe('putting up an asset straight to the store', () => {
     expect(uploaded.size).toBe(0);
     expect(backend.assets.afterStore).toHaveBeenCalledOnce();
     expect(backend.limit).toHaveBeenCalledOnce();
+  });
+
+  it('checks again, once each is up, that the room has room for it, however many tickets went out', async () => {
+    const first = await fileFor(PNG_HEAD, MAX_PUT_BYTES * 2);
+    const second = await fileFor(PNG_HEAD, MAX_PUT_BYTES * 2 + 1);
+    const { kept, uploaded, ask, finish, upload } = setUp({
+      roomStorageLimitBytes: first.bytes.byteLength + second.bytes.byteLength - 1,
+    });
+
+    // Both tickets go out while the room is empty: neither is stored yet to count.
+    const tickets = [];
+    for (const { bytes, id } of [first, second]) {
+      const asked = await ask(id, { size: bytes.byteLength });
+      expect(asked.status).toBe(201);
+      tickets.push(await jsonOf<UploadTicketResponse>(asked));
+    }
+    upload(tickets[0], first.bytes);
+    upload(tickets[1], second.bytes);
+
+    expect((await finish(first.id, tickets[0].ticket)).status).toBe(201);
+    const refused = await finish(second.id, tickets[1].ticket);
+    expect(refused.status).toBe(413);
+    expect(await errorOf(refused)).toBe('room-storage-full');
+    expect([...kept.keys()]).toEqual([first.id]);
+    expect(uploaded.size).toBe(0);
   });
 
   it('answers that it is there already, before and after the upload, and lets the upload go', async () => {

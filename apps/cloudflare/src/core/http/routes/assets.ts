@@ -53,8 +53,10 @@ const noteStored = (
 /**
  * Checks whether it may be stored, in the same order for a PUT and for an upload straight to the
  * store. Returns a refusal when it cannot be stored, and the exists response when it is already
- * stored. With count, it also checks the limit counted each time something is stored, and whether
- * size more bytes would take the room past ROOM_STORAGE_LIMIT_MB.
+ * stored. With count, it also checks the limit counted each time something is stored. Whether size
+ * more bytes would take the room past ROOM_STORAGE_LIMIT_MB is checked every time: an upload straight
+ * to the store is checked when its ticket goes out and again once it is up, since the tickets out at
+ * once each saw the room without the others.
  */
 const admit = async (
   c: AssetContext,
@@ -89,7 +91,7 @@ const admit = async (
   if (await pausedNow(c, 'uploads')) return fail(c, 503, 'paused');
   // What the room keeps is counted only where a limit is set, and only once past the rest.
   const limit = config.roomStorageLimitBytes;
-  if (count && limit !== null) {
+  if (limit !== null) {
     const kept = (await backend.assets.list(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
     if (kept + size > limit) return fail(c, 413, 'room-storage-full');
   }
