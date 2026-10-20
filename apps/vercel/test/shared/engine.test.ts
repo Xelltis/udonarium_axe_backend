@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CHAT_TAB_LIST_IDENTIFIER, CLOSE_CODE, SyncEvent } from '../../contracts/protocol.js';
+import {
+  ASSET_REMOVAL_ALIAS,
+  ASSET_REMOVAL_PREFIX,
+  AuthorityEvent,
+  CHAT_TAB_LIST_IDENTIFIER,
+  CLOSE_CODE,
+  SyncEvent,
+} from '../../contracts/protocol.js';
 import { FLUSH_DELAY_MS, MAX_FRAMES_PER_WINDOW } from '../../src/core/rooms/limits.js';
 import { FakeHost } from './fake-host.js';
+import type { FakeConn } from './fake-host.js';
 
 // Checks, with the room in memory, what is hard to bring about from the room server.
 
@@ -227,5 +235,70 @@ describe('pings passed on from a socket on another instance', () => {
     expect(answered.at(-1)).toBe(false);
     expect(conn.closed?.reason).toBe('too-many-messages');
     expect(host.engine.takeRelayedPing(conn)).toBe(false);
+  });
+});
+
+describe('what takes a picture or sound out of the room', () => {
+  const SHA = 'a'.repeat(64);
+  const OTHER = 'b'.repeat(64);
+  const removalOf = (sha: string, majorVersion = 1) =>
+    contextOf(
+      `${ASSET_REMOVAL_PREFIX}${sha}`,
+      majorVersion,
+      { assetIdentifier: sha, kind: 'image', removed: '1' },
+      ASSET_REMOVAL_ALIAS
+    );
+  const remove = (identifier: string, aliasName = ASSET_REMOVAL_ALIAS) => ({
+    eventName: SyncEvent.DELETE,
+    data: { aliasName, identifier },
+  });
+  /** What the server sent back to the one who wrote, by event name. */
+  const answers = (conn: FakeConn) =>
+    conn
+      .of('data')
+      .flatMap((message) => message.events)
+      .map((event) => event.eventName);
+  const stored = (host: FakeHost, identifier: string) => {
+    host.engine.flushNow();
+    return host.objects.rows.get(identifier)?.entry.majorVersion ?? null;
+  };
+
+  it('is made, changed and deleted by the GM alone', () => {
+    const host = new FakeHost();
+    const gm = host.join('gm', 'gm');
+    const pl = host.join('pl');
+    const guest = host.join('guest', 'guest');
+    for (const conn of [gm, pl, guest]) conn.received.splice(0);
+    const id = `${ASSET_REMOVAL_PREFIX}${SHA}`;
+
+    host.emit(pl, [update(removalOf(SHA))]);
+    expect(answers(pl)).toEqual([AuthorityEvent.WITHDRAW]);
+    expect(stored(host, id)).toBeNull();
+
+    host.emit(gm, [update(removalOf(SHA))]);
+    expect(stored(host, id)).toBe(1);
+    host.emit(pl, [update(removalOf(SHA, 2)), remove(id), remove(id, '')]);
+    host.emit(guest, [remove(id)]);
+    expect(stored(host, id)).toBe(1);
+    expect(answers(pl).slice(-3)).toEqual(Array(3).fill(AuthorityEvent.AUTHORITATIVE));
+
+    host.emit(gm, [remove(id)]);
+    expect(stored(host, id)).toBeNull();
+  });
+
+  it('keeps its identifiers for the GM, so that no one can take one first or delete one before it is there', () => {
+    const host = new FakeHost();
+    const gm = host.join('gm', 'gm');
+    const pl = host.join('pl');
+    for (const conn of [gm, pl]) conn.received.splice(0);
+    const id = `${ASSET_REMOVAL_PREFIX}${OTHER}`;
+
+    host.emit(pl, [update(contextOf(id)), remove(id, '')]);
+    host.emit(gm, [update(contextOf(`${ASSET_REMOVAL_PREFIX}gm-piece`))]);
+    expect(answers(pl)).toEqual([AuthorityEvent.WITHDRAW, AuthorityEvent.WITHDRAW]);
+    expect(answers(gm)).toEqual([AuthorityEvent.WITHDRAW]);
+
+    host.emit(gm, [update(removalOf(OTHER))]);
+    expect(stored(host, id)).toBe(1);
   });
 });

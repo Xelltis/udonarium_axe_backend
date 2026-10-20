@@ -3,6 +3,8 @@ import type { InferOutput } from 'valibot';
 
 import {
   ACCOUNT_USER_ID_PREFIX,
+  ASSET_REMOVAL_ALIAS,
+  ASSET_REMOVAL_PREFIX,
   AUTHORITY_ONLY_EVENTS,
   AUTHORITY_PEER_ID,
   AuthorityEvent,
@@ -897,6 +899,13 @@ export class RoomEngine<C extends object> {
     // it off as a cursor.
     const existing = this.store.entryOf(identifier);
     if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
+    // What takes a picture or sound out of the room is the GM's to write, and its identifiers are
+    // kept for it.
+    if (
+      (aliasName === ASSET_REMOVAL_ALIAS && seat.role !== 'gm') ||
+      (aliasName !== ASSET_REMOVAL_ALIAS && identifier.startsWith(ASSET_REMOVAL_PREFIX))
+    )
+      return this.refuseWrite(identifier, seat, reply);
     // A view hint that is too big fits neither in the index nor in one row of the store. New objects
     // are limited in number too. A version may not jump far at once.
     if (
@@ -1368,6 +1377,13 @@ export class RoomEngine<C extends object> {
     // Already deleted as a descendant.
     if (!entry && this.store.isDeleted(identifier)) return;
     if (this.kindOf(identifier, seat) === 'hidden') return;
+    // What takes a picture or sound out of the room is the GM's to delete, and so is its identifier
+    // before it is there (a tombstone would keep the GM from writing it).
+    const removal =
+      entry?.alias === ASSET_REMOVAL_ALIAS ||
+      aliasName === ASSET_REMOVAL_ALIAS ||
+      identifier.startsWith(ASSET_REMOVAL_PREFIX);
+    if (removal && seat.role !== 'gm') return this.refuseWrite(identifier, seat, reply);
     const owner = entry?.owner ?? null;
     // What is kept only while its person is there (a cursor) can be deleted only by that person.
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)

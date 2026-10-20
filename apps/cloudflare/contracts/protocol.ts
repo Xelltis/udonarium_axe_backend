@@ -759,6 +759,15 @@ export const CHAT_TAB_ALIAS = 'chat-tab';
 export const PEER_CURSOR_ALIAS = 'PeerCursor';
 
 /**
+ * The kind of object that says the GM took a picture or sound out of the room, and the start of its
+ * identifier (asset-removal_<SHA-256>). Every seat hides what it names, so only a GM may make, change
+ * or delete one. No one else may take an identifier with that start either, nor delete one before it
+ * is there: either would keep the GM from writing it.
+ */
+export const ASSET_REMOVAL_ALIAS = 'asset-removal';
+export const ASSET_REMOVAL_PREFIX = 'asset-removal_';
+
+/**
  * The data of UPDATE_GAME_OBJECT. Apart from certain fields, the server does not read syncData, and
  * stores and returns it as it is.
  * The SyncVars of an ObjectNode (a card, a chat line, a tab, a data element and so on) go in
