@@ -122,6 +122,8 @@ export class ModerationDurableObject extends DurableObject<Env> {
       at INTEGER NOT NULL,
       body TEXT NOT NULL
     )`);
+    // Those past their time are looked up by when, so that letting them go does not read them all.
+    sql.exec('CREATE INDEX IF NOT EXISTS reports_at ON reports (at)');
     // What happened, and apart from it the operators' own steps, kept longer.
     for (const table of ['activity', 'operator_activity']) {
       sql.exec(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -134,6 +136,7 @@ export class ModerationDurableObject extends DurableObject<Env> {
         room_key TEXT,
         detail TEXT
       )`);
+      sql.exec(`CREATE INDEX IF NOT EXISTS ${table}_at ON ${table} (at)`);
     }
   }
 
@@ -196,22 +199,29 @@ export class ModerationDurableObject extends DurableObject<Env> {
     return this.ctx.storage.sql.exec('DELETE FROM bans WHERE kind = ? AND value = ?', kind, value).rowsWritten > 0;
   }
 
-  /** Writes one down, and lets go of those older than ACTIVITY_MS and those past the newest MAX_ACTIVITY. */
+  /**
+   * Writes one down, and lets go of those older than ACTIVITY_MS and those past the newest
+   * MAX_ACTIVITY. Each is something a sender can bring about again and again, so letting go reads
+   * only what it deletes: those past their time through the index on at, and those past the number
+   * by id, counted back from the new one.
+   */
   note(entry: Activity): void {
     const sql = this.ctx.storage.sql;
     const { table, ms, max } = isOperatorStep(entry) ? OPERATOR_LOG : LOG;
-    sql.exec(
-      `INSERT INTO ${table} (at, kind, address, discord_id, name, room_key, detail) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      entry.at,
-      entry.kind,
-      entry.address,
-      entry.discordId ?? null,
-      entry.name ?? null,
-      entry.roomKey ?? null,
-      entry.detail ?? null
-    );
+    const { id } = sql
+      .exec<{ id: number }>(
+        `INSERT INTO ${table} (at, kind, address, discord_id, name, room_key, detail) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        entry.at,
+        entry.kind,
+        entry.address,
+        entry.discordId ?? null,
+        entry.name ?? null,
+        entry.roomKey ?? null,
+        entry.detail ?? null
+      )
+      .one();
     sql.exec(`DELETE FROM ${table} WHERE at < ?`, Date.now() - ms);
-    sql.exec(`DELETE FROM ${table} WHERE id <= (SELECT id FROM ${table} ORDER BY id DESC LIMIT 1 OFFSET ?)`, max);
+    sql.exec(`DELETE FROM ${table} WHERE id <= ?`, id - max);
   }
 
   /** The passkeys of one operator, oldest first. */
@@ -296,12 +306,23 @@ export class ModerationDurableObject extends DurableObject<Env> {
     else sql.exec("INSERT OR REPLACE INTO admin_state (name, value) VALUES ('tighten_since', ?)", tighten.since);
   }
 
-  /** Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. */
+  /**
+   * Keeps a report, letting the oldest go past MAX_REPORTS or REPORT_MS. As for what happened,
+   * letting go reads only what it deletes: by at through its index, and by rowid, which grows with
+   * each report kept.
+   */
   putReport(report: Report): void {
     const sql = this.ctx.storage.sql;
-    sql.exec('INSERT INTO reports (id, at, body) VALUES (?, ?, ?)', report.id, report.at, JSON.stringify(report));
+    const { rowid } = sql
+      .exec<{ rowid: number }>(
+        'INSERT INTO reports (id, at, body) VALUES (?, ?, ?) RETURNING rowid',
+        report.id,
+        report.at,
+        JSON.stringify(report)
+      )
+      .one();
     sql.exec('DELETE FROM reports WHERE at < ?', Date.now() - REPORT_MS);
-    sql.exec('DELETE FROM reports WHERE id NOT IN (SELECT id FROM reports ORDER BY at DESC, id LIMIT ?)', MAX_REPORTS);
+    sql.exec('DELETE FROM reports WHERE rowid <= ?', rowid - MAX_REPORTS);
   }
 
   /** The reports kept, newest first. */

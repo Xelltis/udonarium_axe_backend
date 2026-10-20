@@ -244,6 +244,28 @@ describe('ModerationDurableObject', () => {
     ).toBe(2);
   });
 
+  it('reads only a few rows to write one down or keep a report, however many are kept', async () => {
+    const store = freshStore();
+    const now = Date.now();
+    const read = await runInDurableObject(store, (instance: ModerationDurableObject, state) => {
+      for (let i = 0; i < MAX_ACTIVITY; i++) instance.note(entryOf(now, `n${i}`));
+      for (let i = 0; i < MAX_REPORTS; i++) instance.putReport(reportOf(`r${i}`, now));
+      // What each statement read, once a sender over its limit is written down and a report is kept.
+      const exec = state.storage.sql.exec.bind(state.storage.sql);
+      const cursors: SqlStorageCursor<Record<string, SqlStorageValue>>[] = [];
+      vi.spyOn(state.storage.sql, 'exec').mockImplementation((query, ...bindings) => {
+        const cursor = exec(query, ...bindings);
+        cursors.push(cursor);
+        return cursor;
+      });
+      instance.note(entryOf(now, 'one more'));
+      instance.putReport(reportOf('one more', now));
+      return cursors.reduce((sum, cursor) => sum + cursor.rowsRead, 0);
+    });
+
+    expect(read).toBeLessThan(20);
+  });
+
   it('keeps the newest MAX_ACTIVITY, and nothing older than ACTIVITY_MS', async () => {
     const store = freshStore();
     const now = Date.now();
