@@ -9,6 +9,8 @@
 // The text is in Japanese, as is the guide for operators. The script is kept free of backticks and
 // of dollar-brace, so that it can sit inside this template string as it is.
 
+import { ADMIN_ICON } from './icon.js';
+
 const STYLE = `
 :root {
   color-scheme: light dark;
@@ -2685,7 +2687,7 @@ export const adminPage = (nonce: string): string => `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>部屋のサーバーの管理</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="${ADMIN_ICON}" type="image/svg+xml">
 <style nonce="${nonce}">${STYLE}</style>
 </head>
 <body>${BODY}<script nonce="${nonce}">${SCRIPT}</script>

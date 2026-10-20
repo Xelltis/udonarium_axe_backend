@@ -122,6 +122,18 @@ describe('the dashboard page', () => {
     expect(first.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(first.headers.get('Referrer-Policy')).toBe('no-referrer');
   });
+
+  it('shows its own icon, inside the page, where its policy lets images in', async () => {
+    const res = await harness.fetch(new Request(ADMIN));
+    const icon = /<link rel="icon" href="([^"]+)" type="image\/svg\+xml">/.exec(await res.text())?.[1] as string;
+    const svg = decodeURIComponent(icon.slice('data:image/svg+xml,'.length));
+
+    expect(icon).toMatch(/^data:image\/svg\+xml,/);
+    expect(res.headers.get('Content-Security-Policy')).toMatch(/img-src [^;]*data:/);
+    expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1003 1015">/);
+    expect(svg).toContain('fill="#c62f2f"');
+    expect(svg).toMatch(/<\/svg>$/);
+  });
 });
 
 describe('the dashboard API', () => {
