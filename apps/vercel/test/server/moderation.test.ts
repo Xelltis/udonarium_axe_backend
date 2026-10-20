@@ -31,6 +31,9 @@ const banOf = (value: string, createdAt: number, expiresAt: number | null = null
 const entryOf = (at: number, detail: string): Activity => ({ at, kind: 'login', address: '192.0.2.1', detail });
 const stepOf = (at: number, detail: string): Activity => ({ at, kind: 'admin', address: '192.0.2.9', detail });
 
+/** How many reports the stores here keep, so that filling one does not take long. */
+const FEW = 10;
+
 /** A report, by a reporter of its own unless one is given. */
 const reportOf = (id: string, at: number, discordId: string | null = id): Report => ({
   id,
@@ -55,21 +58,12 @@ describe('a Redis store for the operator', () => {
     expect((await store.reports()).map((report) => report.id)).toEqual(['a', 'b']);
   });
 
-  it('keeps reports newest first, lets the oldest go past MAX_REPORTS or REPORT_MS, and sets what came of one', async () => {
+  it('keeps reports newest first, lets the oldest go past the most kept or REPORT_MS, and sets what came of one', async () => {
     const key = freshKey();
-    const store = redisModeration(connection.redis, key);
+    // Kept to a few here, so that filling it does not take long.
+    const store = redisModeration(connection.redis, key, FEW);
     const now = Date.now();
-    const many = Array.from({ length: MAX_REPORTS }, (_, i) =>
-      reportOf(`r${String(i).padStart(4, '0')}`, now - MAX_REPORTS + i)
-    );
-    await connection.redis.hSet(
-      key('mod', 'reports'),
-      Object.fromEntries(many.map((report) => [report.id, JSON.stringify(report)]))
-    );
-    await connection.redis.zAdd(
-      key('mod', 'reports', 'at'),
-      many.map((report) => ({ score: report.at, value: report.id }))
-    );
+    for (let i = 0; i < FEW; i++) await store.putReport(reportOf(`r${i}`, now - FEW + i));
     expect(await store.putReport(reportOf('too-old', now - REPORT_MS - 1))).toBe(true);
     expect(await store.putReport(reportOf('newest', now + 1))).toBe(true);
     // One grown too old since the last was kept is left out until the next lets it go.
@@ -77,17 +71,46 @@ describe('a Redis store for the operator', () => {
     await connection.redis.hSet(key('mod', 'reports'), stale.id, JSON.stringify(stale));
 
     const kept = await store.reports();
-    expect(kept).toHaveLength(MAX_REPORTS);
+    expect(kept).toHaveLength(FEW);
     expect(kept[0].id).toBe('newest');
-    expect(kept.some((report) => report.id === 'too-old' || report.id === 'r0000')).toBe(false);
-    expect(await connection.redis.hLen(key('mod', 'reports'))).toBe(MAX_REPORTS + 1);
-    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(MAX_REPORTS);
+    expect(kept.some((report) => report.id === 'too-old' || report.id === 'r0')).toBe(false);
+    expect(await connection.redis.hLen(key('mod', 'reports'))).toBe(FEW + 1);
+    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(FEW);
     expect(await store.setReportStatus('missing', 'done', '1', 5)).toBeNull();
-    expect(await store.setReportStatus('r0001', 'dismissed', '1', 5)).toMatchObject({
+    expect(await store.setReportStatus('r1', 'dismissed', '1', 5)).toMatchObject({
       status: 'dismissed',
       handledBy: '1',
     });
-    expect((await store.reports()).find((report) => report.id === 'r0001')?.status).toBe('dismissed');
+    expect((await store.reports()).find((report) => report.id === 'r1')?.status).toBe('dismissed');
+  });
+
+  it('lets the oldest of whoever kept the most go past the most kept, not that of someone with one', async () => {
+    const store = redisModeration(connection.redis, freshKey(), FEW);
+    const now = Date.now();
+    await store.putReport(reportOf('lonely', now - 10));
+    for (let i = 0; i < 5; i++) await store.putReport(reportOf(`flood${i}`, now - 9 + i, 'flood'));
+    for (let i = 0; i < FEW - 6; i++) await store.putReport(reportOf(`one${i}`, now));
+    await store.putReport(reportOf('one more', now));
+    const ids = new Set((await store.reports()).map((report) => report.id));
+
+    expect(ids.size).toBe(FEW);
+    expect(ids.has('lonely')).toBe(true);
+    expect(ids.has('flood0')).toBe(false);
+    expect(ids.has('flood1')).toBe(true);
+  });
+
+  it('keeps MAX_REPORTS unless told otherwise', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key);
+    // Ids by time with no report behind them, as one let go at the same moment on another instance.
+    await connection.redis.zAdd(key('mod', 'reports', 'at'), [
+      ...Array.from({ length: MAX_REPORTS }, (_, i) => ({ score: Date.now(), value: `seeded${i}` })),
+      { score: 1, value: 'gone' },
+    ]);
+
+    await store.putReport(reportOf('one', Date.now()));
+
+    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(MAX_REPORTS);
   });
 
   it('keeps no more than MAX_REPORTS_PER_REPORTER from one reporter a day, those from a sender counted by its /64', async () => {
@@ -108,7 +131,7 @@ describe('a Redis store for the operator', () => {
 
     const fromOne = [true, ...Array<boolean>(MAX_REPORTS_PER_REPORTER).fill(true), false];
     expect(answers).toEqual([...fromOne, ...fromOne.slice(1), true]);
-    expect(await connection.redis.pTTL(key('mod', 'reporter', 'discord:same'))).toBeGreaterThan(REPORTER_MS - 60_000);
+    expect(await connection.redis.pTTL(key('mod', 'reporter', 'discord:same'))).toBeGreaterThan(REPORT_MS - 60_000);
   });
 
   it('keeps how tight the limits are, and when that began, until they go back', async () => {

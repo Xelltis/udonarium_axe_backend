@@ -194,6 +194,23 @@ describe('ModerationDurableObject', () => {
     expect((await store.reports()).find((report) => report.id === 'r0001')?.status).toBe('dismissed');
   });
 
+  it('lets the oldest of whoever kept the most go past MAX_REPORTS, not that of someone with one', async () => {
+    const store = freshStore();
+    const now = Date.now();
+    await runInDurableObject(store, (instance: ModerationDurableObject) => {
+      instance.putReport(reportOf('lonely', now - 10));
+      for (let i = 0; i < 5; i++) instance.putReport(reportOf(`flood${i}`, now - 9 + i, 'flood'));
+      for (let i = 0; i < MAX_REPORTS - 6; i++) instance.putReport(reportOf(`one${i}`, now));
+      instance.putReport(reportOf('one more', now));
+    });
+    const ids = new Set((await store.reports()).map((report) => report.id));
+
+    expect(ids.size).toBe(MAX_REPORTS);
+    expect(ids.has('lonely')).toBe(true);
+    expect(ids.has('flood0')).toBe(false);
+    expect(ids.has('flood1')).toBe(true);
+  });
+
   it('keeps no more than MAX_REPORTS_PER_REPORTER from one reporter a day, those from a sender counted by its /64', async () => {
     const store = freshStore();
     const now = Date.now();
