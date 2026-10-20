@@ -456,15 +456,17 @@ describe('a room whose sockets reach different instances', () => {
     const subscribe = vi.spyOn(a.relay, 'subscribe');
     const unsubscribe = vi.spyOn(a.relay, 'unsubscribe');
     const own = a.relay.ownerControlOf('room');
+    const ban = a.relay.banControlOf('room');
     const inbound = a.relay.inboundOf('room');
     const named = (spy: typeof subscribe | typeof unsubscribe, channel: string) =>
       spy.mock.calls.filter(([called]) => called === channel).length;
 
     attach(a).close(1000, 'bye');
 
-    await vi.waitFor(() => expect([named(subscribe, own), named(unsubscribe, own)]).toEqual([1, 1]));
+    await vi.waitFor(() => expect([named(subscribe, ban), named(unsubscribe, ban)]).toEqual([1, 1]));
+    expect([named(subscribe, own), named(unsubscribe, own)]).toEqual([1, 1]);
     await Promise.all([...subscribe.mock.results, ...unsubscribe.mock.results].map((result) => result.value));
-    expect(await a.redis.pubSubNumSub([inbound, own])).toEqual({ [inbound]: 0, [own]: 0 });
+    expect(await a.redis.pubSubNumSub([inbound, own, ban])).toEqual({ [inbound]: 0, [own]: 0, [ban]: 0 });
   });
 
   it('claims afresh a room let go while a second socket waited for it, rather than seat that one alone', async () => {
@@ -658,10 +660,14 @@ describe('a room whose sockets reach different instances', () => {
     });
     const refused = (ws: FakeWs) =>
       ws.messages().some((message) => message.type === 'error' && message.code === 'banned');
+    // An owner from before there were bans takes whatever comes on the owner's channel as a deletion.
+    const toOldOwner = vi.fn();
+    await b.relay.subscribe(b.relay.ownerControlOf('room'), toOldOwner);
 
     await b.runtime.expel('room', banOf('ip', '192.0.2.0/24'));
 
     await vi.waitFor(() => expect(refused(bob)).toBe(true));
+    expect(toOldOwner).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(left(alice, 'bob')).toBe(true));
     expect(refused(alice)).toBe(false);
 

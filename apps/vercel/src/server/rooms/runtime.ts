@@ -3,7 +3,7 @@ import type { WebSocket } from 'ws';
 import { COME_BACK_CODE, PING, PONG } from '../../../contracts/protocol.js';
 import type { Ban } from '../../core/moderation/bans.js';
 import { expiryKeyOf, readRoomMeta, roomKeysOf } from './keys.js';
-import type { Control, Inbound, Outbound, OwnerControl, Relay } from './relay.js';
+import type { BanControl, Control, Inbound, Outbound, OwnerControl, Relay } from './relay.js';
 import { LEASE_MS, VercelRoom } from './room.js';
 import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
 
@@ -236,7 +236,7 @@ export class RoomRuntime {
       return;
     }
     const relay = this.relay as Relay;
-    await relay.publish(relay.ownerControlOf(roomKey), { t: 'expel', ban });
+    await relay.publish(relay.banControlOf(roomKey), { t: 'ban', ban });
   }
 
   /** Takes a WebSocket that connected to a room. address is the sender's IP address. */
@@ -451,16 +451,13 @@ export class RoomRuntime {
       if (room.takeRelayedPing(conn)) conn.socket.send(PONG);
     });
     await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), (control) => {
-      if (control.t === 'expel') {
-        room.expel(control.ban);
-        return;
-      }
       this.deps.defer(
         room
           .deletedElsewhere(control.operator === true)
           .catch((err: unknown) => console.error('Could not delete the room asked for:', err))
       );
     });
+    await relay.subscribe<BanControl>(relay.banControlOf(room.roomKey), ({ ban }) => room.expel(ban));
   }
 
   /** Stepped down as owner. Has the WebSockets that landed on other instances reconnect. */
@@ -469,6 +466,7 @@ export class RoomRuntime {
     if (!relay || !this.served.has(room)) return;
     await relay.unsubscribe(relay.inboundOf(room.roomKey));
     await relay.unsubscribe(relay.ownerControlOf(room.roomKey));
+    await relay.unsubscribe(relay.banControlOf(room.roomKey));
     if (room.remotes.length > 0) await relay.publish(relay.controlOf(room.roomKey), { t: 'moved' });
   }
 }

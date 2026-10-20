@@ -39,7 +39,16 @@ export interface Control {
 }
 
 /** To the owner alone. A deletion by the operator says so, for the room's log. */
-export type OwnerControl = { t: 'delete'; operator?: boolean } | { t: 'expel'; ban: Ban };
+export interface OwnerControl {
+  t: 'delete';
+  operator?: boolean;
+}
+
+/** To the owner alone: a ban, whose seats it closes. */
+export interface BanControl {
+  t: 'ban';
+  ban: Ban;
+}
 
 /** One of the parts. m is the number the sender gives each message. */
 interface Part {
@@ -76,6 +85,12 @@ export class Relay {
   controlOf = (roomKey: string) => this.key('r', roomKey, 'ctl');
   /** Heard by the owner alone, so that one instance answering means the owner is there. */
   ownerControlOf = (roomKey: string) => this.key('r', roomKey, 'own');
+  /**
+   * Heard by the owner alone, for bans. Kept apart from ownerControlOf, which an owner from before
+   * there were bans takes as a deletion whatever is said there, and such an owner can still hold
+   * rooms for a few minutes while a new version comes in.
+   */
+  banControlOf = (roomKey: string) => this.key('r', roomKey, 'ban');
   aliveOf = (instance: string) => this.key('i', instance);
 
   /**
@@ -121,7 +136,7 @@ export class Relay {
   }
 
   /** Sends. Returns how many instances got it. When it is sent in parts, the count for the last part. */
-  async publish(channel: string, message: Inbound | Outbound | Control | OwnerControl): Promise<number> {
+  async publish(channel: string, message: Inbound | Outbound | Control | OwnerControl | BanControl): Promise<number> {
     const bytes = Buffer.from(encode(message));
     if (bytes.byteLength <= PART_BYTES) return this.redis.publish(channel, bytes);
     const id = ++this.sent;
