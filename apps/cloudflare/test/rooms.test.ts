@@ -312,20 +312,35 @@ describe('the lobby', () => {
 });
 
 describe('what a room’s assets take up', () => {
-  it('is kept once counted, and nothing is kept for a room that is not there', async () => {
-    const roomKey = await createRoom();
+  const A = 'a'.repeat(64);
+  const B = 'b'.repeat(64);
+
+  it('is counted once from the listing, then as assets come and go, each once', async () => {
+    const room = stubOf(await createRoom());
+
+    expect(await room.assetBytes()).toBeNull();
+    // Before it is counted, nothing is kept: the listing will find it.
+    await room.keepAsset(B, 3);
+    await room.dropAsset(B);
+    expect(await room.assetBytes()).toBeNull();
+    expect(await room.countAssetBytes([{ id: A, size: 10 }])).toBe(10);
+    expect(await room.countAssetBytes([{ id: B, size: 99 }])).toBe(10);
+
+    // Stored twice at once, or taken out twice at once: counted once each way.
+    await room.keepAsset(B, 5);
+    await room.keepAsset(B, 5);
+    expect(await room.assetBytes()).toBe(15);
+    await room.dropAsset(A);
+    await room.dropAsset(A);
+    expect(await room.assetBytes()).toBe(5);
+  });
+
+  it('keeps nothing for a room that is not there', async () => {
     const missing = stubOf('d'.repeat(32));
 
-    expect(await stubOf(roomKey).assetBytes()).toBeNull();
-    await stubOf(roomKey).addAssetBytes(5);
-    expect(await stubOf(roomKey).assetBytes()).toBeNull();
-    expect(await stubOf(roomKey).countAssetBytes(10)).toBe(10);
-    expect(await stubOf(roomKey).countAssetBytes(99)).toBe(10);
-    await stubOf(roomKey).addAssetBytes(-15);
-    expect(await stubOf(roomKey).assetBytes()).toBe(0);
-
-    expect(await missing.countAssetBytes(7)).toBe(7);
-    await missing.addAssetBytes(7);
+    expect(await missing.countAssetBytes([{ id: A, size: 7 }])).toBe(7);
+    await missing.keepAsset(A, 7);
+    await missing.dropAsset(A);
     expect(await missing.assetBytes()).toBeNull();
   });
 });

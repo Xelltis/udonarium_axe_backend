@@ -138,8 +138,9 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
 
   // ---- What the room's assets take up ----
   // Kept as they are stored and taken out, so that the room's limit (ROOM_STORAGE_LIMIT_MB) is
-  // checked without listing them in R2. It is counted by listing once, the first time it is asked
-  // for, and goes with the rest of the room.
+  // checked without listing them in R2. Each asset's size is kept by its id, so that one stored or
+  // taken out twice (as by requests at the same moment) counts once. It is counted by listing once,
+  // the first time it is asked for, and goes with the rest of the room.
 
   /** The bytes the room's assets take up, or null while not counted yet (or when the room is gone). */
   assetBytes(): number | null {
@@ -147,21 +148,37 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.ctx.storage.sql.exec<{ bytes: number }>('SELECT bytes FROM asset_bytes').one().bytes;
   }
 
-  /** Adds to what the room's assets take up (or takes from it), once it has been counted. */
-  addAssetBytes(bytes: number): void {
+  /** Counts an asset stored, once the room has been counted, unless it is counted already. */
+  keepAsset(id: string, size: number): void {
     if (!this.roomRow() || !this.assetBytesCounted()) return;
-    this.ctx.storage.sql.exec('UPDATE asset_bytes SET bytes = MAX(bytes + ?, 0)', bytes);
+    const sql = this.ctx.storage.sql;
+    if (sql.exec('INSERT OR IGNORE INTO asset_sizes (id, size) VALUES (?, ?)', id, size).rowsWritten > 0) {
+      sql.exec('UPDATE asset_bytes SET bytes = bytes + ?', size);
+    }
+  }
+
+  /** Takes an asset taken out off the count, when it is counted. */
+  dropAsset(id: string): void {
+    if (!this.roomRow() || !this.assetBytesCounted()) return;
+    const sql = this.ctx.storage.sql;
+    const [gone] = sql.exec<{ size: number }>('DELETE FROM asset_sizes WHERE id = ? RETURNING size', id).toArray();
+    if (gone) sql.exec('UPDATE asset_bytes SET bytes = bytes - ?', gone.size);
   }
 
   /**
-   * Keeps what listing counted, unless the room has been counted meanwhile. Returns what the room
+   * Keeps what listing found, unless the room has been counted meanwhile. Returns what the room
    * stands at. Nothing is kept for a room that is gone.
    */
-  countAssetBytes(bytes: number): number {
-    if (!this.roomRow()) return bytes;
+  countAssetBytes(assets: { id: string; size: number }[]): number {
+    const listed = assets.reduce((sum, asset) => sum + asset.size, 0);
+    if (!this.roomRow()) return listed;
     const sql = this.ctx.storage.sql;
     sql.exec('CREATE TABLE IF NOT EXISTS asset_bytes (id INTEGER PRIMARY KEY CHECK (id = 1), bytes INTEGER NOT NULL)');
-    sql.exec('INSERT OR IGNORE INTO asset_bytes (id, bytes) VALUES (1, ?)', bytes);
+    sql.exec('CREATE TABLE IF NOT EXISTS asset_sizes (id TEXT PRIMARY KEY, size INTEGER NOT NULL)');
+    if (sql.exec('INSERT OR IGNORE INTO asset_bytes (id, bytes) VALUES (1, ?)', listed).rowsWritten > 0) {
+      for (const { id, size } of assets)
+        sql.exec('INSERT OR IGNORE INTO asset_sizes (id, size) VALUES (?, ?)', id, size);
+    }
     return sql.exec<{ bytes: number }>('SELECT bytes FROM asset_bytes').one().bytes;
   }
 

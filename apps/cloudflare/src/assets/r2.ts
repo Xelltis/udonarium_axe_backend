@@ -112,14 +112,13 @@ export const r2Assets = (
       if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) return 'hash-mismatch';
       throw err;
     }
-    await env.ROOMS.getByName(roomKey).addAssetBytes(length);
+    await env.ROOMS.getByName(roomKey).keepAsset(id, length);
     return 'stored';
   },
 
   discard: async (roomKey, id) => {
-    const object = await env.ASSETS.head(roomAssetKey(roomKey, id));
     await env.ASSETS.delete(roomAssetKey(roomKey, id));
-    if (object) await env.ROOMS.getByName(roomKey).addAssetBytes(-object.size);
+    await env.ROOMS.getByName(roomKey).dropAsset(id);
   },
 
   /**
@@ -184,8 +183,8 @@ export const r2Assets = (
     const room = env.ROOMS.getByName(roomKey);
     const kept = await room.assetBytes();
     if (kept !== null) return kept;
-    const listed = (await listRoom(env.ASSETS, roomKey)).reduce((sum, asset) => sum + asset.size, 0);
-    return room.countAssetBytes(listed);
+    const listed = await listRoom(env.ASSETS, roomKey);
+    return room.countAssetBytes(listed.map(({ id, size }) => ({ id, size })));
   },
 
   inventory: async (cursor) => {
