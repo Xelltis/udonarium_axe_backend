@@ -152,7 +152,8 @@ export class ModerationDurableObject extends DurableObject<Env> {
       kept INTEGER NOT NULL,
       since INTEGER NOT NULL
     )`);
-    sql.exec('CREATE INDEX IF NOT EXISTS reporters_rank ON reporters (anonymous DESC, kept DESC, since)');
+    sql.exec('CREATE INDEX IF NOT EXISTS reporters_rank ON reporters (anonymous, kept DESC, since)');
+    sql.exec('CREATE INDEX IF NOT EXISTS reporters_busiest ON reporters (kept DESC, since)');
     // What happened, and apart from it the operators' own steps, kept longer.
     for (const table of ['activity', 'operator_activity']) {
       sql.exec(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -364,9 +365,9 @@ export class ModerationDurableObject extends DurableObject<Env> {
   /**
    * Keeps a report, or keeps nothing (false) when its reporter has made MAX_REPORTS_PER_REPORTER in
    * the last REPORTER_MS. Those past REPORT_MS go. Past MAX_REPORTS, the one that goes is the oldest
-   * of the rank (rankOf) that has kept the most, senders not logged in first (of those, the one with
-   * the oldest), so that a flood from many senders pushes out its own reports rather than those of
-   * others. Letting go reads only what it deletes, through the indexes.
+   * of the rank (rankOf) that has kept the most (of those, the one with the oldest), among senders not
+   * logged in while they hold over half, so that a flood from many senders pushes out its own
+   * reports rather than those of others. Letting go reads only what it deletes, through the indexes.
    */
   putReport(report: Report): boolean {
     const sql = this.ctx.storage.sql;
@@ -395,10 +396,16 @@ export class ModerationDurableObject extends DurableObject<Env> {
     const gone = new Map<string, number>();
     for (const row of old) gone.set(row.rank, (gone.get(row.rank) ?? 0) + 1);
     for (const [each, count] of gone) this.countReporter(each, -count);
-    const kept = sql.exec<{ value: number }>("SELECT value FROM admin_state WHERE name = 'reports_kept'").one().value;
+    const kept = this.reportsKept('reports_kept');
     if (kept > MAX_REPORTS) {
+      // Senders not logged in go first only while they hold over half, so that neither those nor
+      // accounts can push out every report of the other.
       const busiest = sql
-        .exec<{ reporter: string }>('SELECT reporter FROM reporters ORDER BY anonymous DESC, kept DESC, since LIMIT 1')
+        .exec<{ reporter: string }>(
+          this.reportsKept('reports_anonymous') > MAX_REPORTS / 2
+            ? 'SELECT reporter FROM reporters WHERE anonymous = 1 ORDER BY kept DESC, since LIMIT 1'
+            : 'SELECT reporter FROM reporters ORDER BY kept DESC, since LIMIT 1'
+        )
         .one().reporter;
       sql.exec(
         'DELETE FROM reports WHERE rowid = (SELECT rowid FROM reports WHERE rank = ? ORDER BY at LIMIT 1)',
@@ -428,10 +435,22 @@ export class ModerationDurableObject extends DurableObject<Env> {
         by,
         since
       );
-    sql.exec(
-      `INSERT INTO admin_state (name, value) VALUES ('reports_kept', ?)
-       ON CONFLICT (name) DO UPDATE SET value = value + excluded.value`,
-      by
+    const counts = rank.startsWith(ANONYMOUS_RANK) ? ['reports_kept', 'reports_anonymous'] : ['reports_kept'];
+    for (const name of counts) {
+      sql.exec(
+        `INSERT INTO admin_state (name, value) VALUES (?, ?)
+         ON CONFLICT (name) DO UPDATE SET value = value + excluded.value`,
+        name,
+        by
+      );
+    }
+  }
+
+  /** How many reports are kept in all (reports_kept), or from senders not logged in (reports_anonymous). */
+  private reportsKept(name: 'reports_kept' | 'reports_anonymous'): number {
+    return (
+      this.ctx.storage.sql.exec<{ value: number }>('SELECT value FROM admin_state WHERE name = ?', name).toArray()[0]
+        ?.value ?? 0
     );
   }
 

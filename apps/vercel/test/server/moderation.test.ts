@@ -120,6 +120,20 @@ describe('a Redis store for the operator', () => {
     expect(ids.has('flood0')).toBe(false);
   });
 
+  it('lets those of accounts go when accounts hold most, so that they cannot push out those not logged in', async () => {
+    const store = redisModeration(connection.redis, freshKey(), FEW);
+    const now = Date.now();
+    const lonely = reportOf('lonely', now - 30, null);
+    await store.putReport({ ...lonely, reporter: { ...lonely.reporter, address: '203.0.113.5' } });
+    // Two accounts reporting all at once.
+    for (let i = 0; i < FEW; i++) await store.putReport(reportOf(`alt${i}`, now - 20 + i, `alt${i % 2}`));
+    const ids = new Set((await store.reports()).map((report) => report.id));
+
+    expect(ids.size).toBe(FEW);
+    expect(ids.has('lonely')).toBe(true);
+    expect(ids.has('alt0')).toBe(false);
+  });
+
   it('keeps MAX_REPORTS unless told otherwise', async () => {
     const key = freshKey();
     const store = redisModeration(connection.redis, key);
