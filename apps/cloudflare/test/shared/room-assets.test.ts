@@ -177,7 +177,12 @@ describe('taking an asset out of a room', () => {
     const pl = await join(roomKey, 'pl');
     const id = await putIn(roomKey, pl.welcome.assetToken);
 
-    for (const token of [pl.welcome.assetToken, assetTokenFor('gm', roomKey, ASSET_TOKEN_SECONDS, 'user-pl')]) {
+    for (const token of [
+      pl.welcome.assetToken,
+      assetTokenFor('gm', roomKey, ASSET_TOKEN_SECONDS, 'user-pl'),
+      // A guest's token, even under the GM's user id.
+      assetTokenFor('guest', roomKey, ASSET_TOKEN_SECONDS, 'user-gm'),
+    ]) {
       const res = await tryDelete(roomKey, id, token);
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({ error: 'not-game-master' });

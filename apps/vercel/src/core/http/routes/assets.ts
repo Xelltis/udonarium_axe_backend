@@ -190,6 +190,8 @@ export const deleteRoomAsset = async (c: AssetContext) => {
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
   const claims = await claimsOf(c, roomKey);
   if (claims instanceof Response) return claims;
+  // A guest is never a GM (a guest's role cannot be changed), so the room need not be asked.
+  if (claims.role === 'guest') return fail(c, 403, 'not-game-master');
 
   // The role in the token may be 15 minutes old, so the room is asked whether that person is
   // seated as its GM now.
