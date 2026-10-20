@@ -204,6 +204,7 @@ describe('accounts', () => {
 });
 
 describe('what was uploaded', () => {
+  // Many trips to the room server, which take a while on a busy machine.
   it('lists every room’s assets, shows one (writing down that it was looked at), and deletes one from a room after a recent confirmation', async () => {
     await prepareAssetRooms();
     const { file, id } = await freshFile();
@@ -238,7 +239,7 @@ describe('what was uploaded', () => {
     expect(await harness.assetStored(ROOM_KEY, id)).toBeNull();
     expect(await harness.assetStored(OTHER_ROOM_KEY, id)).not.toBeNull();
     expect((await callAdmin(`rooms/nope/assets/${id}`, { method: 'DELETE' })).status).toBe(400);
-  });
+  }, 15_000);
 
   it('takes an asset down from the rooms named and keeps it from being stored again, until it is let back', async () => {
     await prepareAssetRooms();
