@@ -175,6 +175,19 @@ describe('a Redis store for the operator', () => {
     );
   });
 
+  it('puts right a rank left at the top with nothing in it, and goes on holding the cap', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key, FEW);
+    const now = Date.now();
+    // Written back by a trim at the same moment as its last report went.
+    await connection.redis.zAdd(key('mod', 'reporters'), { score: 1e15, value: 'discord:ghost' });
+
+    for (let i = 0; i <= FEW; i++) await store.putReport(reportOf(`r${i}`, now + i));
+
+    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(FEW);
+    expect(await connection.redis.zScore(key('mod', 'reporters'), 'discord:ghost')).toBeNull();
+  });
+
   it('leaves the cap to the next report when the side to take from has no ranks yet', async () => {
     const key = freshKey();
     const store = redisModeration(connection.redis, key);

@@ -144,11 +144,15 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
       const anonymous = await redis.zCard(ANONYMOUS_REPORTS);
       const from = anonymous > maxReports / 2 ? ANONYMOUS_REPORTERS : ACCOUNT_REPORTERS;
       const [busiest] = await redis.zRange(from, 0, 0, { REV: true });
-      const gone = busiest === undefined ? [] : await redis.zRange(rankKeyOf(busiest), 0, 0);
       // Nothing to take on that side (its ranks not written yet by a report kept at the same
       // moment): the next report kept takes it.
-      if (gone.length === 0) return;
-      await dropReports(gone);
+      if (busiest === undefined) return;
+      // Taken off its rank in one step, so that trims at the same moment each take a different one.
+      const gone = await redis.zPopMin(rankKeyOf(busiest));
+      // A rank left at the top with nothing in it (written back by a trim at the same moment as it
+      // emptied) is put right, so that it does not stop the trims after it.
+      if (gone === null) await rankReporter(busiest);
+      else await dropReports([gone.value]);
     }
   };
 
