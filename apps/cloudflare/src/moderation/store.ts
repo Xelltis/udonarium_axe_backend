@@ -12,7 +12,15 @@ import type { Passkey, PasskeyAlgorithm } from '../core/admin/webauthn';
 import type { AlertKind } from '../core/moderation/alerts';
 import { NO_TIGHTEN } from '../core/moderation/bans';
 import type { Ban, BanKind, ModerationState, Pause, Tighten, TightenWeight } from '../core/moderation/bans';
-import { MAX_REPORTS, MAX_REPORTS_PER_REPORTER, REPORTER_MS, REPORT_MS, reporterOf } from '../core/moderation/reports';
+import {
+  ANONYMOUS_RANK,
+  MAX_REPORTS,
+  MAX_REPORTS_PER_REPORTER,
+  REPORTER_MS,
+  REPORT_MS,
+  rankOf,
+  reporterOf,
+} from '../core/moderation/reports';
 import type { Report, ReportStatus } from '../core/moderation/reports';
 import type { StorageUsage } from '../core/moderation/storage';
 
@@ -128,20 +136,23 @@ export class ModerationDurableObject extends DurableObject<Env> {
       id TEXT PRIMARY KEY,
       at INTEGER NOT NULL,
       reporter TEXT NOT NULL,
+      rank TEXT NOT NULL,
       body TEXT NOT NULL
     )`);
     // Those past their time are looked up by when, so that letting them go does not read them all,
     // and a reporter's of late by who made them.
     sql.exec('CREATE INDEX IF NOT EXISTS reports_at ON reports (at)');
     sql.exec('CREATE INDEX IF NOT EXISTS reports_reporter ON reports (reporter, at)');
-    // How many reports each reporter has kept, and when the oldest was made, so that the one let go
-    // past MAX_REPORTS is found by reading one row.
+    sql.exec('CREATE INDEX IF NOT EXISTS reports_rank ON reports (rank, at)');
+    // How many reports each rank (rankOf) has kept, and when the oldest was made, so that the one let
+    // go past MAX_REPORTS is found by reading one row.
     sql.exec(`CREATE TABLE IF NOT EXISTS reporters (
       reporter TEXT PRIMARY KEY,
+      anonymous INTEGER NOT NULL,
       kept INTEGER NOT NULL,
       since INTEGER NOT NULL
     )`);
-    sql.exec('CREATE INDEX IF NOT EXISTS reporters_rank ON reporters (kept DESC, since)');
+    sql.exec('CREATE INDEX IF NOT EXISTS reporters_rank ON reporters (anonymous DESC, kept DESC, since)');
     // What happened, and apart from it the operators' own steps, kept longer.
     for (const table of ['activity', 'operator_activity']) {
       sql.exec(`CREATE TABLE IF NOT EXISTS ${table} (
@@ -353,9 +364,9 @@ export class ModerationDurableObject extends DurableObject<Env> {
   /**
    * Keeps a report, or keeps nothing (false) when its reporter has made MAX_REPORTS_PER_REPORTER in
    * the last REPORTER_MS. Those past REPORT_MS go. Past MAX_REPORTS, the one that goes is the oldest
-   * of whoever has kept the most (of those, whoever has the oldest), so that a flood from many
-   * senders pushes out its own reports rather than those of others. Letting go reads only what it
-   * deletes, through the indexes.
+   * of the rank (rankOf) that has kept the most, senders not logged in first (of those, the one with
+   * the oldest), so that a flood from many senders pushes out its own reports rather than those of
+   * others. Letting go reads only what it deletes, through the indexes.
    */
   putReport(report: Report): boolean {
     const sql = this.ctx.storage.sql;
@@ -368,27 +379,29 @@ export class ModerationDurableObject extends DurableObject<Env> {
       )
       .one().n;
     if (recent >= MAX_REPORTS_PER_REPORTER) return false;
+    const rank = rankOf(report);
     sql.exec(
-      'INSERT INTO reports (id, at, reporter, body) VALUES (?, ?, ?, ?)',
+      'INSERT INTO reports (id, at, reporter, rank, body) VALUES (?, ?, ?, ?, ?)',
       report.id,
       report.at,
       reporter,
+      rank,
       JSON.stringify(report)
     );
-    this.countReporter(reporter, 1);
+    this.countReporter(rank, 1);
     const old = sql
-      .exec<{ reporter: string }>('DELETE FROM reports WHERE at < ? RETURNING reporter', Date.now() - REPORT_MS)
+      .exec<{ rank: string }>('DELETE FROM reports WHERE at < ? RETURNING rank', Date.now() - REPORT_MS)
       .toArray();
     const gone = new Map<string, number>();
-    for (const row of old) gone.set(row.reporter, (gone.get(row.reporter) ?? 0) + 1);
+    for (const row of old) gone.set(row.rank, (gone.get(row.rank) ?? 0) + 1);
     for (const [each, count] of gone) this.countReporter(each, -count);
     const kept = sql.exec<{ value: number }>("SELECT value FROM admin_state WHERE name = 'reports_kept'").one().value;
     if (kept > MAX_REPORTS) {
       const busiest = sql
-        .exec<{ reporter: string }>('SELECT reporter FROM reporters ORDER BY kept DESC, since LIMIT 1')
+        .exec<{ reporter: string }>('SELECT reporter FROM reporters ORDER BY anonymous DESC, kept DESC, since LIMIT 1')
         .one().reporter;
       sql.exec(
-        'DELETE FROM reports WHERE rowid = (SELECT rowid FROM reports WHERE reporter = ? ORDER BY at LIMIT 1)',
+        'DELETE FROM reports WHERE rowid = (SELECT rowid FROM reports WHERE rank = ? ORDER BY at LIMIT 1)',
         busiest
       );
       this.countReporter(busiest, -1);
@@ -397,20 +410,21 @@ export class ModerationDurableObject extends DurableObject<Env> {
   }
 
   /**
-   * Counts by reports one reporter has kept more or fewer, with when its oldest was made (one row
-   * read through the index), and the reports kept in all.
+   * Counts by reports one rank has kept more or fewer, with when its oldest was made (one row read
+   * through the index), and the reports kept in all.
    */
-  private countReporter(reporter: string, by: number): void {
+  private countReporter(rank: string, by: number): void {
     const sql = this.ctx.storage.sql;
     const { since } = sql
-      .exec<{ since: number | null }>('SELECT MIN(at) AS since FROM reports WHERE reporter = ?', reporter)
+      .exec<{ since: number | null }>('SELECT MIN(at) AS since FROM reports WHERE rank = ?', rank)
       .one();
-    if (since === null) sql.exec('DELETE FROM reporters WHERE reporter = ?', reporter);
+    if (since === null) sql.exec('DELETE FROM reporters WHERE reporter = ?', rank);
     else
       sql.exec(
-        `INSERT INTO reporters (reporter, kept, since) VALUES (?, ?, ?)
+        `INSERT INTO reporters (reporter, anonymous, kept, since) VALUES (?, ?, ?, ?)
          ON CONFLICT (reporter) DO UPDATE SET kept = kept + excluded.kept, since = excluded.since`,
-        reporter,
+        rank,
+        rank.startsWith(ANONYMOUS_RANK) ? 1 : 0,
         by,
         since
       );

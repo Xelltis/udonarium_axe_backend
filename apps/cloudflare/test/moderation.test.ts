@@ -222,6 +222,29 @@ describe('ModerationDurableObject', () => {
     expect(ids.has('flood1')).toBe(true);
   });
 
+  it('lets those of senders not logged in go first, taken together by their wider network', async () => {
+    const store = freshStore();
+    const now = Date.now();
+    const anonymous = (id: string, at: number, address: string): Report => {
+      const report = reportOf(id, at, null);
+      return { ...report, reporter: { ...report.reporter, address } };
+    };
+    await runInDurableObject(store, (instance: ModerationDurableObject) => {
+      instance.putReport(reportOf('account', now - 20));
+      instance.putReport(anonymous('lonely', now - 19, '203.0.113.5'));
+      // A flood, one report from each of many /64s inside one /48.
+      for (let i = 0; i < MAX_REPORTS - 1; i++) {
+        instance.putReport(anonymous(`flood${i}`, now - 18 + i / MAX_REPORTS, `2001:db8:1:${i.toString(16)}::1`));
+      }
+    });
+    const ids = new Set((await store.reports()).map((report) => report.id));
+
+    expect(ids.size).toBe(MAX_REPORTS);
+    expect(ids.has('account')).toBe(true);
+    expect(ids.has('lonely')).toBe(true);
+    expect(ids.has('flood0')).toBe(false);
+  });
+
   it('keeps no more than MAX_REPORTS_PER_REPORTER from one reporter a day, those from a sender counted by its /64', async () => {
     const store = freshStore();
     const now = Date.now();

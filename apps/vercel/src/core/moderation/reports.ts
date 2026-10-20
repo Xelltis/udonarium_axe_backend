@@ -1,5 +1,5 @@
 import type { PeerRole, ReportTarget } from '../../../contracts/protocol.js';
-import { networkOf } from '../http/network.js';
+import { networkOf, wideNetworkOf } from '../http/network.js';
 
 /** What the operator made of a report. */
 export const REPORT_STATUSES = ['open', 'done', 'dismissed'] as const;
@@ -45,3 +45,16 @@ export interface Report {
  */
 export const reporterOf = (report: Report): string =>
   report.reporter.discordId === null ? networkOf(report.reporter.address) : `discord:${report.reporter.discordId}`;
+
+/** The start of the rank of a sender not logged in. */
+export const ANONYMOUS_RANK = 'anon:';
+
+/**
+ * Whose reports go first past MAX_REPORTS: those of senders not logged in before those of accounts,
+ * and senders taken together by a wider unit (wideNetworkOf), since many addresses come cheap. Those
+ * not logged in are marked anon: so that the stores put them first.
+ */
+export const rankOf = (report: Report): string =>
+  report.reporter.discordId === null
+    ? `${ANONYMOUS_RANK}${wideNetworkOf(report.reporter.address)}`
+    : `discord:${report.reporter.discordId}`;

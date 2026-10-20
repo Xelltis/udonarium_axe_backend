@@ -10,10 +10,12 @@ import type { Passkey } from '../core/admin/webauthn.js';
 import { NO_TIGHTEN } from '../core/moderation/bans.js';
 import type { Ban, BanKind, Pause, Tighten, TightenWeight } from '../core/moderation/bans.js';
 import {
+  ANONYMOUS_RANK,
   MAX_REPORTS,
   MAX_REPORTS_PER_REPORTER,
   REPORTER_MS,
   REPORT_MS,
+  rankOf,
   reporterOf,
 } from '../core/moderation/reports.js';
 import type { Report } from '../core/moderation/reports.js';
@@ -44,10 +46,13 @@ import type { KeyOf, Redis } from './redis.js';
 //                             MAX_REPORTS and to REPORT_MS.
 //   mod:reports:at    ZSET    The report ids by when they were made, so that the oldest go without
 //                             reading every report.
-//   mod:reporter:<r>  ZSET    The ids of the reports one reporter (reporterOf) has kept, by when. It
-//                             goes away REPORT_MS after the last.
-//   mod:reporters     ZSET    The reporters, the one that has kept the most (of those, the one with
-//                             the oldest) highest: past MAX_REPORTS, its oldest goes.
+//   mod:reporter:<r>  ZSET    The ids of the reports one reporter (reporterOf) made in the last
+//                             REPORTER_MS, by when. It goes away REPORTER_MS after the last.
+//   mod:rank:<g>      ZSET    The ids of the reports one rank (rankOf) has kept, by when. It goes
+//                             away REPORT_MS after the last.
+//   mod:reporters     ZSET    The ranks, highest first: those of senders not logged in, then the one
+//                             that has kept the most (of those, the one with the oldest). Past
+//                             MAX_REPORTS, the oldest of the highest goes.
 
 const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
@@ -55,6 +60,8 @@ const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 const RANK_EPOCH_MS = Date.UTC(2025, 0, 1);
 /** Room in a reporter's score for when its oldest report was made (milliseconds, about 31 years). */
 const RANK_SPAN_MS = 1e12;
+/** What puts senders not logged in above every account: more than any count of reports can reach. */
+const ANONYMOUS_SCORE = 2e15;
 
 /** The store for the operator in Redis. maxReports is how many reports are kept (fewer in tests). */
 export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPORTS): ModerationStore => {
@@ -81,36 +88,38 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
 
   const REPORTERS = key('mod', 'reporters');
   const reporterKeyOf = (reporter: string) => key('mod', 'reporter', reporter);
+  const rankKeyOf = (rank: string) => key('mod', 'rank', rank);
 
   /**
-   * Puts a reporter in its place among the reporters: by how many it has kept, then by how old its
-   * oldest is. Both fit in one score that a double holds exactly (up to 2^53).
+   * Puts a rank in its place among the ranks: senders not logged in first, then by how many it has
+   * kept, then by how old its oldest is. All fit in one score that a double holds exactly (up to 2^53).
    */
-  const rankReporter = async (reporter: string): Promise<void> => {
-    const [oldest] = await redis.zRangeWithScores(reporterKeyOf(reporter), 0, 0);
+  const rankReporter = async (rank: string): Promise<void> => {
+    const [oldest] = await redis.zRangeWithScores(rankKeyOf(rank), 0, 0);
     if (!oldest) {
-      await redis.zRem(REPORTERS, reporter);
+      await redis.zRem(REPORTERS, rank);
       return;
     }
-    const kept = await redis.zCard(reporterKeyOf(reporter));
+    const kept = await redis.zCard(rankKeyOf(rank));
     const age = RANK_SPAN_MS - Math.min(Math.max(oldest.score - RANK_EPOCH_MS, 0), RANK_SPAN_MS - 1);
-    await redis.zAdd(REPORTERS, { score: kept * RANK_SPAN_MS + age, value: reporter });
+    const anonymous = rank.startsWith(ANONYMOUS_RANK) ? ANONYMOUS_SCORE : 0;
+    await redis.zAdd(REPORTERS, { score: anonymous + kept * RANK_SPAN_MS + age, value: rank });
   };
 
   /** Lets reports go, from wherever they are kept. */
   const dropReports = async (ids: string[]): Promise<void> => {
     const values = await redis.hmGet(REPORTS, ids);
-    const reporters = new Set<string>();
+    const ranks = new Set<string>();
     for (const [at, value] of values.entries()) {
       // A report already gone (let go at the same moment by another instance) is nobody's.
       if (value === null) continue;
-      const reporter = reporterOf(JSON.parse(value) as Report);
-      reporters.add(reporter);
-      await redis.zRem(reporterKeyOf(reporter), ids[at] as string);
+      const rank = rankOf(JSON.parse(value) as Report);
+      ranks.add(rank);
+      await redis.zRem(rankKeyOf(rank), ids[at] as string);
     }
     await redis.zRem(REPORTS_AT, ids);
     await redis.hDel(REPORTS, ids);
-    for (const reporter of reporters) await rankReporter(reporter);
+    for (const rank of ranks) await rankReporter(rank);
   };
 
   /**
@@ -123,7 +132,7 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
     if (old.length > 0) await dropReports(old);
     if ((await redis.zCard(REPORTS_AT)) <= maxReports) return;
     const [busiest] = await redis.zRange(REPORTERS, 0, 0, { REV: true });
-    await dropReports(await redis.zRange(reporterKeyOf(busiest as string), 0, 0));
+    await dropReports(await redis.zRange(rankKeyOf(busiest as string), 0, 0));
   };
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
@@ -277,14 +286,17 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
     async putReport(report) {
       // How many its reporter made of late, as counted before this one. Two at the same moment may
       // both get in; the cap is to keep one sender from crowding out the rest, not an exact count.
-      const reporter = reporterOf(report);
-      const made = reporterKeyOf(reporter);
-      if ((await redis.zCount(made, `(${report.at - REPORTER_MS}`, '+inf')) >= MAX_REPORTS_PER_REPORTER) return false;
+      const made = reporterKeyOf(reporterOf(report));
+      await redis.zRemRangeByScore(made, '-inf', report.at - REPORTER_MS);
+      if ((await redis.zCard(made)) >= MAX_REPORTS_PER_REPORTER) return false;
+      await redis.zAdd(made, { score: report.at, value: report.id });
+      await redis.pExpire(made, REPORTER_MS);
+      const rank = rankOf(report);
       await redis.hSet(REPORTS, report.id, JSON.stringify(report));
       await redis.zAdd(REPORTS_AT, { score: report.at, value: report.id });
-      await redis.zAdd(made, { score: report.at, value: report.id });
-      await redis.pExpire(made, REPORT_MS);
-      await rankReporter(reporter);
+      await redis.zAdd(rankKeyOf(rank), { score: report.at, value: report.id });
+      await redis.pExpire(rankKeyOf(rank), REPORT_MS);
+      await rankReporter(rank);
       await trimReports(Date.now() - REPORT_MS);
       return true;
     },

@@ -16,3 +16,13 @@ export const networkOf = (address: string): string => {
   const groups = [...left, ...zeros, ...right].slice(0, 4);
   return `${groups.map((group) => parseInt(group, 16).toString(16)).join(':')}::/64`;
 };
+
+/**
+ * A wider unit than networkOf, for telling apart senders that are not logged in where many addresses
+ * come cheap: an IPv4 address's /24, and an IPv6 address's /48 (a site, or a tunnel broker's block).
+ */
+export const wideNetworkOf = (address: string): string => {
+  const network = networkOf(address);
+  if (!network.includes(':')) return `${network.split('.').slice(0, 3).join('.')}.0/24`;
+  return `${network.split(':').slice(0, 3).join(':')}::/48`;
+};

@@ -99,6 +99,27 @@ describe('a Redis store for the operator', () => {
     expect(ids.has('flood1')).toBe(true);
   });
 
+  it('lets those of senders not logged in go first, taken together by their wider network', async () => {
+    const store = redisModeration(connection.redis, freshKey(), FEW);
+    const now = Date.now();
+    const anonymous = (id: string, at: number, address: string): Report => {
+      const report = reportOf(id, at, null);
+      return { ...report, reporter: { ...report.reporter, address } };
+    };
+    await store.putReport(reportOf('account', now - 20));
+    await store.putReport(anonymous('lonely', now - 19, '203.0.113.5'));
+    // A flood, one report from each of many /64s inside one /48.
+    for (let i = 0; i < FEW - 1; i++) {
+      await store.putReport(anonymous(`flood${i}`, now - 18 + i, `2001:db8:1:${i.toString(16)}::1`));
+    }
+    const ids = new Set((await store.reports()).map((report) => report.id));
+
+    expect(ids.size).toBe(FEW);
+    expect(ids.has('account')).toBe(true);
+    expect(ids.has('lonely')).toBe(true);
+    expect(ids.has('flood0')).toBe(false);
+  });
+
   it('keeps MAX_REPORTS unless told otherwise', async () => {
     const key = freshKey();
     const store = redisModeration(connection.redis, key);
@@ -131,7 +152,7 @@ describe('a Redis store for the operator', () => {
 
     const fromOne = [true, ...Array<boolean>(MAX_REPORTS_PER_REPORTER).fill(true), false];
     expect(answers).toEqual([...fromOne, ...fromOne.slice(1), true]);
-    expect(await connection.redis.pTTL(key('mod', 'reporter', 'discord:same'))).toBeGreaterThan(REPORT_MS - 60_000);
+    expect(await connection.redis.pTTL(key('mod', 'reporter', 'discord:same'))).toBeGreaterThan(REPORTER_MS - 60_000);
   });
 
   it('keeps what the operator barred with the bans, until it is let back', async () => {
