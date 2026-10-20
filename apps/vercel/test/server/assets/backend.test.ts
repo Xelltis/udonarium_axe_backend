@@ -274,6 +274,8 @@ describe('the operator’s view of the store', () => {
         JSON.stringify({ type: 'image/png', size: 1, name: '', uploadedAt: 1 })
       );
     }
+    // A room counted for its limit too, whose total is not an index.
+    writing.set(assetBytesOf(key, rooms[0] as string), '1');
     await writing.exec();
 
     const seen: string[] = [];

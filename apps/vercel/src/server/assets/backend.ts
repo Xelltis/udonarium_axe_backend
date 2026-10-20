@@ -36,8 +36,9 @@ export const assetIndexOf = (key: KeyOf, roomKey: string): string => key('a', ro
 /**
  * The key of the bytes a room's assets take up, for ROOM_STORAGE_LIMIT_MB. It is there once the room
  * has been counted (the first time it is asked for), and kept as assets are stored and taken out.
+ * It is kept out of the indexes' a: so that the inventory, which scans a:, meets indexes alone.
  */
-export const assetBytesOf = (key: KeyOf, roomKey: string): string => key('a', roomKey, 'bytes');
+export const assetBytesOf = (key: KeyOf, roomKey: string): string => key('asset-bytes', roomKey);
 
 /** Adds to what a room's assets take up, only once it has been counted. */
 const ADD_IF_COUNTED = `
