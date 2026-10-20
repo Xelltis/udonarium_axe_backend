@@ -147,6 +147,51 @@ describe('a Redis store for the operator', () => {
     expect(ids.has('one0')).toBe(false);
   });
 
+  it('holds the cap and counts those not logged in exactly when reports come at the same moment', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key, FEW);
+    const now = Date.now();
+    const anonymous = (id: string, at: number, address: string): Report => {
+      const report = reportOf(id, at, null);
+      return { ...report, reporter: { ...report.reporter, address } };
+    };
+    for (let round = 0; round < 8; round++) {
+      await Promise.all(
+        Array.from({ length: 8 }, (_, i) =>
+          store.putReport(
+            i % 2
+              ? reportOf(`a${round}-${i}`, now + round * 8 + i)
+              : anonymous(`g${round}-${i}`, now + round * 8 + i, `2001:db8:${round}:${i}::1`)
+          )
+        )
+      );
+    }
+    const kept = await store.reports();
+
+    expect(kept.length).toBeLessThanOrEqual(FEW);
+    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(kept.length);
+    expect(await connection.redis.zCard(key('mod', 'anonymous-reports'))).toBe(
+      kept.filter((report) => report.reporter.discordId === null).length
+    );
+  });
+
+  it('leaves the cap to the next report when the side to take from has no ranks yet', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key);
+    // Counted as reports of senders not logged in, with no ranks written for them yet.
+    await connection.redis.zAdd(
+      key('mod', 'reports', 'at'),
+      Array.from({ length: MAX_REPORTS }, (_, i) => ({ score: Date.now(), value: `seeded${i}` }))
+    );
+    await connection.redis.zAdd(
+      key('mod', 'anonymous-reports'),
+      Array.from({ length: MAX_REPORTS }, (_, i) => ({ score: Date.now(), value: `seeded${i}` }))
+    );
+
+    expect(await store.putReport(reportOf('one', Date.now()))).toBe(true);
+    expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(MAX_REPORTS + 1);
+  });
+
   it('keeps MAX_REPORTS unless told otherwise', async () => {
     const key = freshKey();
     const store = redisModeration(connection.redis, key);

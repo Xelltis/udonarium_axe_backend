@@ -55,8 +55,9 @@ import type { KeyOf, Redis } from './redis.js';
 //                             highest goes, from whichever side holds over half.
 //   mod:reporters:anonymous
 //                     ZSET    The same, of senders not logged in.
-//   mod:reports:anonymous
-//                     STRING  How many reports of senders not logged in are kept.
+//   mod:anonymous-reports
+//                     ZSET    The ids of the reports of senders not logged in that are kept, by when,
+//                             so that how many there are stays exact however many come at once.
 
 const fieldOf = (kind: BanKind, value: string) => `${kind}:${value}`;
 
@@ -90,7 +91,7 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
 
   const ACCOUNT_REPORTERS = key('mod', 'reporters');
   const ANONYMOUS_REPORTERS = key('mod', 'reporters', 'anonymous');
-  const ANONYMOUS_KEPT = key('mod', 'reports', 'anonymous');
+  const ANONYMOUS_REPORTS = key('mod', 'anonymous-reports');
   const reporterKeyOf = (reporter: string) => key('mod', 'reporter', reporter);
   const rankKeyOf = (rank: string) => key('mod', 'rank', rank);
 
@@ -121,9 +122,9 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
       const rank = rankOf(JSON.parse(value) as Report);
       ranks.add(rank);
       await redis.zRem(rankKeyOf(rank), ids[at] as string);
-      if (rank.startsWith(ANONYMOUS_RANK)) await redis.decr(ANONYMOUS_KEPT);
     }
     await redis.zRem(REPORTS_AT, ids);
+    await redis.zRem(ANONYMOUS_REPORTS, ids);
     await redis.hDel(REPORTS, ids);
     for (const rank of ranks) await rankReporter(rank);
   };
@@ -136,13 +137,19 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
   const trimReports = async (oldest: number): Promise<void> => {
     const old = await redis.zRangeByScore(REPORTS_AT, '-inf', `(${oldest}`);
     if (old.length > 0) await dropReports(old);
-    if ((await redis.zCard(REPORTS_AT)) <= maxReports) return;
-    // It goes from whichever side holds over half, senders not logged in or accounts (past
-    // MAX_REPORTS one always does), so that neither can push out every report of the other.
-    const anonymous = Number((await redis.get(ANONYMOUS_KEPT)) ?? 0);
-    const from = anonymous > maxReports / 2 ? ANONYMOUS_REPORTERS : ACCOUNT_REPORTERS;
-    const [busiest] = await redis.zRange(from, 0, 0, { REV: true });
-    await dropReports(await redis.zRange(rankKeyOf(busiest as string), 0, 0));
+    // One at a time until the cap holds: reports kept at the same moment each see the others.
+    while ((await redis.zCard(REPORTS_AT)) > maxReports) {
+      // It goes from whichever side holds over half, senders not logged in or accounts (past
+      // MAX_REPORTS one always does), so that neither can push out every report of the other.
+      const anonymous = await redis.zCard(ANONYMOUS_REPORTS);
+      const from = anonymous > maxReports / 2 ? ANONYMOUS_REPORTERS : ACCOUNT_REPORTERS;
+      const [busiest] = await redis.zRange(from, 0, 0, { REV: true });
+      const gone = busiest === undefined ? [] : await redis.zRange(rankKeyOf(busiest), 0, 0);
+      // Nothing to take on that side (its ranks not written yet by a report kept at the same
+      // moment): the next report kept takes it.
+      if (gone.length === 0) return;
+      await dropReports(gone);
+    }
   };
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */
@@ -306,7 +313,7 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
       await redis.zAdd(REPORTS_AT, { score: report.at, value: report.id });
       await redis.zAdd(rankKeyOf(rank), { score: report.at, value: report.id });
       await redis.pExpire(rankKeyOf(rank), REPORT_MS);
-      if (rank.startsWith(ANONYMOUS_RANK)) await redis.incr(ANONYMOUS_KEPT);
+      if (rank.startsWith(ANONYMOUS_RANK)) await redis.zAdd(ANONYMOUS_REPORTS, { score: report.at, value: report.id });
       await rankReporter(rank);
       await trimReports(Date.now() - REPORT_MS);
       return true;
