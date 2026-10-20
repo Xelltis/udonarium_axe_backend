@@ -247,7 +247,8 @@ const SCRIPT = `
   var storageState = { usage: null, limitBytes: null, roomLimitBytes: null };
   /** Every asset in the store as last read (on the uploads tab), and the barred ones. */
   var uploads = null;
-  var uploadsLoading = false;
+  /** The read of the uploads under way, which a second ask waits for rather than reading again. */
+  var uploadsLoading = null;
   var uploadsShown = 200;
   /** The object URL of the asset being looked at, let go when the preview closes. */
   var previewUrl = null;
@@ -1715,8 +1716,7 @@ const SCRIPT = `
 
   /** Reads every asset in the store (it lists them a page at a time), and the ones barred. */
   function loadUploads() {
-    if (uploadsLoading) return Promise.resolve();
-    uploadsLoading = true;
+    if (uploadsLoading) return uploadsLoading;
     var all = [];
     $('uploads-summary').textContent = '読み込んでいます…';
     function page(cursor, pages) {
@@ -1725,17 +1725,19 @@ const SCRIPT = `
         return res.cursor && pages < MAX_INVENTORY_PAGES ? page(res.cursor, pages + 1) : res.cursor;
       });
     }
-    return Promise.all([page(null, 1), api('GET', 'blocked')]).then(function (results) {
+    uploadsLoading = Promise.all([page(null, 1), api('GET', 'blocked')]).then(function (results) {
       uploads = { assets: all, more: results[0] !== null, blocked: results[1].ids };
       renderUploads();
     }).catch(function (err) {
       $('uploads-summary').textContent = '';
       setStatus(messageOf(err), 'error');
-    }).then(function () { uploadsLoading = false; });
+    }).then(function () { uploadsLoading = null; });
+    return uploadsLoading;
   }
 
   /** Takes what is gone out of the list kept, so that nothing has to be read again. */
   function dropUploads(match) {
+    if (!uploads) return;
     uploads.assets = uploads.assets.filter(function (asset) { return !match(asset); });
     renderUploads();
   }
@@ -1839,9 +1841,10 @@ const SCRIPT = `
     }));
   }
 
-  /** The rooms the uploads tab found the asset in. */
+  /** The rooms the uploads tab found the asset in, or null when it could not read them. */
   function roomsOf(asset) {
-    var found = uploads ? uploads.assets.filter(function (each) { return each.id === asset.id; }).map(function (each) { return each.roomKey; }) : [];
+    if (!uploads) return null;
+    var found = uploads.assets.filter(function (each) { return each.id === asset.id; }).map(function (each) { return each.roomKey; });
     return found.length ? found : [asset.roomKey];
   }
 
@@ -1865,7 +1868,7 @@ const SCRIPT = `
       fact('置いた時刻', time(asset.uploadedAt)),
       fact('部屋', roomName(asset.roomKey) || h('span', { className: 'muted' }, '（一覧にない部屋）')),
       fact('部屋の鍵', h('span', { className: 'mono long' }, asset.roomKey)),
-      fact('ほかの部屋', count(roomsOf(asset).length - 1) + '件'),
+      fact('ほかの部屋', roomsOf(asset) ? count(roomsOf(asset).length - 1) + '件' : h('span', { className: 'muted' }, '（アップロードの一覧を読めていません）')),
       fact('置いた人', (by.discordId && names[by.discordId]) || dash()),
       fact('置いた人のDiscord ID', by.discordId ? mono(by.discordId) : dash()),
       fact('置いた人のIPアドレス', by.address ? mono(by.address) : dash()))));
@@ -1924,10 +1927,15 @@ const SCRIPT = `
   }
 
   function takeDown(asset, rooms) {
+    // Without the list, the rooms it is in besides this one are not known, and would keep it.
+    if (!rooms) {
+      setStatus('アップロードの一覧を読めていないので、置いてある部屋が分かりません。「アップロード」で読み込み直してから、もう一度試してください。', 'error');
+      return;
+    }
     if (!confirm('「' + assetLabel(asset) + '」を、置いてある部屋（' + rooms.length + '件）からすべて消し、どの部屋でも二度と置かせないようにしますか。')) return;
     api('POST', 'assets/' + asset.id + '/block', { rooms: rooms }).then(function (res) {
       setStatus(res.deleted + '件の部屋から消し、二度と置かせないようにしました。' + (res.failed ? '消せなかった部屋が' + res.failed + '件あります。読み込み直して、もう一度試してください。' : ''), res.failed ? 'error' : 'ok');
-      if (uploads.blocked.indexOf(asset.id) < 0) uploads.blocked.push(asset.id);
+      if (uploads && uploads.blocked.indexOf(asset.id) < 0) uploads.blocked.push(asset.id);
       if (!res.failed) dropUploads(function (each) { return each.id === asset.id; });
       else loadUploads();
     }).catch(function (err) { setStatus(messageOf(err), 'error'); });
@@ -2029,7 +2037,10 @@ const SCRIPT = `
 
   /** Opens the reported picture or sound as the uploads tab does, when the room still keeps it. */
   function showReportedAsset(report) {
-    api('GET', 'rooms/' + report.roomKey + '/assets').then(function (res) {
+    // The rooms it is in besides this one come from the uploads, which may not have been read yet.
+    (uploads ? Promise.resolve() : loadUploads()).then(function () {
+      return api('GET', 'rooms/' + report.roomKey + '/assets');
+    }).then(function (res) {
       var asset = res.assets.filter(function (each) { return each.id === report.assetId; })[0];
       if (!asset) {
         setStatus('この画像か音声は、部屋の置き場所にありません（部屋が消えたか、消されたか、部屋の接続だけで配られたもの）。', 'error');
