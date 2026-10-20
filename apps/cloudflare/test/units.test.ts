@@ -228,4 +228,31 @@ describe('r2Assets', () => {
     expect(dropAsset).toHaveBeenCalledWith('a'.repeat(64));
     expect(dropAsset.mock.invocationCallOrder[0]).toBeLessThan(del.mock.invocationCallOrder[0] as number);
   });
+
+  it('holds storing and taking out with waitUntil, so that a client going away does not stop them halfway', async () => {
+    const held: Promise<unknown>[] = [];
+    const keepAsset = vi.fn(async () => undefined);
+    const fakeEnv = {
+      ASSETS: {
+        put: vi.fn(async () => null),
+        delete: vi.fn().mockRejectedValueOnce(new Error('down')),
+      },
+      ROOMS: { getByName: () => ({ keepAsset, dropAsset: async () => undefined }) },
+    } as unknown as Env;
+    const assets = r2Assets(
+      fakeEnv,
+      (work) => void held.push(work),
+      async () => true
+    );
+
+    const stored = await assets.store('r'.repeat(32), 'a'.repeat(64), new Blob([]).stream(), 0, 'image/png', '');
+    const discarded = assets.discard('r'.repeat(32), 'a'.repeat(64));
+
+    expect(stored).toBe('stored');
+    expect(keepAsset).toHaveBeenCalledWith('a'.repeat(64), 0);
+    await expect(discarded).rejects.toThrow('down');
+    // What waitUntil holds does not fail with it.
+    await expect(Promise.all(held)).resolves.toBeDefined();
+    expect(held).toHaveLength(2);
+  });
 });
