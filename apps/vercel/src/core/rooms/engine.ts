@@ -96,6 +96,13 @@ type Reply = (eventName: string, data: unknown) => void;
 /** The alias of a deck, whose cards keep their faces from everyone. */
 const CARD_STACK_ALIAS = 'card-stack';
 
+/**
+ * Whether something of another kind would take an identifier kept for what takes a picture or sound
+ * out of the room (asset-removal_<SHA-256>), which would keep the GM from writing it.
+ */
+const takesRemovalIdentifier = (identifier: string, aliasName: string): boolean =>
+  aliasName !== ASSET_REMOVAL_ALIAS && identifier.startsWith(ASSET_REMOVAL_PREFIX);
+
 /** What the deck check reads of an index row: what the object is, where it sits and how it is seen. */
 type DeckRow = Pick<StoredEntry, 'alias' | 'parent' | 'view'>;
 
@@ -901,10 +908,7 @@ export class RoomEngine<C extends object> {
     if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
     // What takes a picture or sound out of the room is the GM's to write, and its identifiers are
     // kept for it.
-    if (
-      (aliasName === ASSET_REMOVAL_ALIAS && seat.role !== 'gm') ||
-      (aliasName !== ASSET_REMOVAL_ALIAS && identifier.startsWith(ASSET_REMOVAL_PREFIX))
-    )
+    if ((aliasName === ASSET_REMOVAL_ALIAS && seat.role !== 'gm') || takesRemovalIdentifier(identifier, aliasName))
       return this.refuseWrite(identifier, seat, reply);
     // A view hint that is too big fits neither in the index nor in one row of the store. New objects
     // are limited in number too. A version may not jump far at once.
@@ -1265,6 +1269,7 @@ export class RoomEngine<C extends object> {
     if (this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier)) return;
     if (
       message.aliasName !== CHAT_MESSAGE_ALIAS ||
+      takesRemovalIdentifier(message.identifier, message.aliasName) ||
       !fitsIndex(message) ||
       message.majorVersion > MAX_VERSION_STEP ||
       this.store.size >= MAX_OBJECTS ||
