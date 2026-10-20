@@ -92,9 +92,14 @@ export const r2Assets = (
     return 'stored';
   },
 
+  /**
+   * Takes it off the room's total first, and then out of R2. With a store of the same asset at the
+   * same moment, the total can then only count it when it is gone (which taking it out again puts
+   * right), never miss it while it is there.
+   */
   discard: async (roomKey, id) => {
-    await env.ASSETS.delete(roomAssetKey(roomKey, id));
     await env.ROOMS.getByName(roomKey).dropAsset(id);
+    await env.ASSETS.delete(roomAssetKey(roomKey, id));
   },
 
   /**

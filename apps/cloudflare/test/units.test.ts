@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { r2Assets } from '../src/assets/r2';
 import { setContentRange } from '../src/assets/response';
 import { ORPHAN_GRACE_MS, deleteRoomAssets, randomStart, sweepOrphans } from '../src/assets/sweep';
 import { ConfigError, parseConfig } from '../src/config';
@@ -206,5 +207,25 @@ describe('parseConfig', () => {
     ['a room limit that is not a whole number of MB', { ROOM_STORAGE_LIMIT_MB: '1.5' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
+  });
+});
+
+describe('r2Assets', () => {
+  it('takes an asset off the room’s total before it takes it out of R2', async () => {
+    const dropAsset = vi.fn(async () => undefined);
+    const del = vi.fn(async () => undefined);
+    const fakeEnv = {
+      ASSETS: { delete: del },
+      ROOMS: { getByName: () => ({ dropAsset }) },
+    } as unknown as Env;
+
+    await r2Assets(
+      fakeEnv,
+      () => undefined,
+      async () => true
+    ).discard('r'.repeat(32), 'a'.repeat(64));
+
+    expect(dropAsset).toHaveBeenCalledWith('a'.repeat(64));
+    expect(dropAsset.mock.invocationCallOrder[0]).toBeLessThan(del.mock.invocationCallOrder[0] as number);
   });
 });
