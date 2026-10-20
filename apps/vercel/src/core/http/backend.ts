@@ -147,6 +147,13 @@ export interface DirectUploads {
   open(path: string): Promise<ReadableStream<Uint8Array> | null>;
   /** Deletes the waiting upload. */
   discard(path: string): Promise<void>;
+  /**
+   * Takes the word that the upload at path is done, once only while its ticket lasts. False when it
+   * has been taken already.
+   */
+  claim(path: string): Promise<boolean>;
+  /** Gives the word back, when nothing was uploaded yet and it may be said again. */
+  release(path: string): Promise<void>;
 }
 
 /**

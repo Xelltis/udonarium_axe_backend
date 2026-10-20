@@ -262,6 +262,13 @@ export const completeUpload = async (c: AssetContext) => {
   if (!ticket || ticket.room !== roomKey || ticket.id !== id || ticket.uid !== claims.uid) {
     return fail(c, 400, 'invalid-request');
   }
+  // A ticket is taken once, so that saying it is done again, or many times at once, does nothing more
+  // (the upload itself was counted against the limit when the ticket went out). Said again once it is
+  // in, as when the answer was lost on the way, it is answered as there, as for a PUT.
+  if (!(await direct.claim(ticket.path))) {
+    if (await backend.assets.exists(roomKey, id)) return c.json<AssetStoredResponse>({ id, status: 'exists' }, 200);
+    return fail(c, 400, 'invalid-request');
+  }
   try {
     return await keepUpload(c, direct, roomKey, ticket);
   } finally {
@@ -285,7 +292,11 @@ const keepUpload = async (
   if (admitted instanceof Response) return admitted;
 
   const body = await direct.open(ticket.path);
-  if (!body) return fail(c, 404, 'not-found');
+  if (!body) {
+    // Said done before the upload was: it may be said again once it is up.
+    await direct.release(ticket.path);
+    return fail(c, 404, 'not-found');
+  }
   const reader = body.getReader();
   const head = await readHead(reader, SNIFF_BYTES);
   const sniffed = sniff(joinChunks(head).subarray(0, SNIFF_BYTES));

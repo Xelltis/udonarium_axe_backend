@@ -44,6 +44,8 @@ class Raw {
 /** A fake room server that holds in memory what is uploaded for now and what is kept. */
 const setUp = (options: { direct?: boolean; roomStorageLimitBytes?: number } = {}) => {
   const uploaded = new Map<string, Bytes>();
+  /** The uploads said done, whose tickets are taken. */
+  const claimed = new Set<string>();
   const kept = new Map<string, { type: string; name: string }>();
   const sizes = new Map<string, number>();
   const direct: DirectUploads = {
@@ -59,6 +61,8 @@ const setUp = (options: { direct?: boolean; roomStorageLimitBytes?: number } = {
       return bytes ? new Blob([bytes]).stream() : null;
     },
     discard: async (path) => void uploaded.delete(path),
+    claim: async (path) => !claimed.has(path) && Boolean(claimed.add(path)),
+    release: async (path) => void claimed.delete(path),
   };
   const backend = {
     addressOf: () => '192.0.2.1',
@@ -320,6 +324,33 @@ describe('putting up an asset straight to the store', () => {
       [400, 'invalid-request'],
       [404, 'not-found'],
     ]);
+  });
+
+  it('takes each ticket once, however often or at once it is said done, until something is up', async () => {
+    const { kept, ask, finish, upload } = setUp();
+    const { bytes, id } = await fileFor();
+    const ticket = await jsonOf<UploadTicketResponse>(await ask(id, { size: bytes.byteLength }));
+    const other = await fileFor(PNG_HEAD, MAX_PUT_BYTES * 3);
+    const spent = await jsonOf<UploadTicketResponse>(await ask(other.id, { size: other.bytes.byteLength }));
+
+    // Said done before the upload: it may be said again once it is up.
+    expect((await finish(id, ticket.ticket)).status).toBe(404);
+    upload(ticket, bytes);
+    const [first, second] = await Promise.all([finish(id, ticket.ticket), finish(id, ticket.ticket)]);
+    // Said again once it is in, as when the answer was lost: it is there.
+    const again = await finish(id, ticket.ticket);
+    // A ticket spent on what could not be kept is not taken again.
+    const wrong = other.bytes.slice() as Bytes;
+    wrong[wrong.length - 1] ^= 1;
+    upload(spent, wrong);
+    expect((await finish(other.id, spent.ticket)).status).toBe(400);
+    const retried = await finish(other.id, spent.ticket);
+
+    expect(first.status).toBe(201);
+    expect([200, 400]).toContain(second.status);
+    expect(await jsonOf<AssetStoredResponse>(again)).toEqual({ id, status: 'exists' });
+    expect([retried.status, await errorOf(retried)]).toEqual([400, 'invalid-request']);
+    expect(kept.has(id)).toBe(true);
   });
 
   it('keeps nothing that is not what was promised, and lets the upload go each time', async () => {

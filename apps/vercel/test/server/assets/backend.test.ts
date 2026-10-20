@@ -174,6 +174,17 @@ describe('room assets on Vercel', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it('takes the word that an upload is done once, until it is given back', async () => {
+    const { assets } = await stored();
+    const direct = assets.direct as NonNullable<typeof assets.direct>;
+    const path = `uploads/r/a/${crypto.randomUUID()}`;
+
+    expect(await direct.claim(path)).toBe(true);
+    expect(await direct.claim(path)).toBe(false);
+    await direct.release(path);
+    expect(await direct.claim(path)).toBe(true);
+  });
+
   it('does what it was given to do after storing', async () => {
     const afterStore = vi.fn();
     const { assets } = await stored({ afterStore });

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { RoomAsset } from '../../../contracts/protocol.js';
 import { assetHeaders, privately } from '../../core/assets/headers.js';
 import { blockedKeyOf, roomAssetKey } from '../../core/assets/keys.js';
+import { UPLOAD_TICKET_SECONDS } from '../../core/auth/tokens.js';
 import type { AssetBackend, LimitKind, StoredRoomAsset } from '../../core/http/backend.js';
 import { failure } from '../../core/http/errors.js';
 import type { KeyOf, Redis } from '../redis.js';
@@ -212,6 +213,13 @@ export const vercelAssets = (
         target: bucket.target,
         open: (path: string) => bucket.get(path),
         discard: (path: string) => bucket.delete([path]),
+        // The word that an upload is done, taken once while its ticket lasts.
+        claim: async (path: string) =>
+          (await redis.set(key('upload', path), '1', {
+            condition: 'NX',
+            expiration: { type: 'EX', value: UPLOAD_TICKET_SECONDS },
+          })) !== null,
+        release: async (path: string) => void (await redis.del(key('upload', path))),
       },
     }),
 
