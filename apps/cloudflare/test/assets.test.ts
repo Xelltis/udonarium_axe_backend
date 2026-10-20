@@ -1,6 +1,8 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { blockedKeyOf } from '../src/core/assets/keys';
+import { BAN_CACHE_MS } from '../src/core/moderation/bans';
 import app from '../src/index';
 import {
   BASE,
@@ -33,7 +35,7 @@ const readOnce = async (id: string) => {
   const ctx = createExecutionContext();
   const first = await app.fetch(
     new Request(`${BASE}/${id}`, {
-      headers: { Origin: ORIGIN, Authorization: `Bearer ${assetTokenFor('guest')}` },
+      headers: { Origin: ORIGIN, Authorization: `Bearer ${assetTokenFor('guest')}`, 'CF-Connecting-IP': freshIp() },
     }),
     env,
     ctx
@@ -150,6 +152,35 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
     expect(revalidated.status).toBe(304);
     expect(revalidated.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+  });
+
+  it('stops serving the copy left in the data centre once the operator takes it down', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    await readOnce(id);
+    // Taken down on another instance: this one reads what is barred again a short while later.
+    await env.ASSETS.put(blockedKeyOf(id), new Uint8Array());
+    await env.ASSETS.delete(storedKeyOf(id));
+    vi.useFakeTimers({ now: Date.now() + BAN_CACHE_MS, toFake: ['Date'] });
+
+    const got = await call(id);
+    const headed = await call(id, { method: 'HEAD' });
+
+    expect(got.status).toBe(451);
+    expect(await got.json()).toEqual({ error: 'blocked' });
+    expect(headed.status).toBe(451);
+    await env.ASSETS.delete(blockedKeyOf(id));
+  });
+
+  it('reads what is barred again next time when the read fails, rather than keep the failure', async () => {
+    const { file, id } = await freshFile();
+    await put(id, file);
+    vi.useFakeTimers({ now: Date.now() + 2 * BAN_CACHE_MS, toFake: ['Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(env.ASSETS, 'list').mockRejectedValueOnce(new Error('down'));
+
+    expect((await call(id)).status).toBe(500);
+    expect((await call(id)).status).toBe(200);
   });
 });
 
