@@ -93,7 +93,7 @@ describe('putting up an asset', () => {
   /** A room server that keeps whatever comes, with the room's answers and listings given. */
   const putWith = async (
     canUpload: ServerBackend['rooms']['canUpload'],
-    list: ServerBackend['assets']['list'],
+    usage: ServerBackend['assets']['usage'],
     limit: number | null = null
   ) => {
     const file = fileOf(PNG_HEAD, 64);
@@ -111,7 +111,7 @@ describe('putting up an asset', () => {
         store: async () => 'stored' as const,
         discard,
         afterStore,
-        list,
+        usage,
       },
     } as unknown as ServerBackend;
     const res = await appOf(backend, limit).fetch(
@@ -133,7 +133,7 @@ describe('putting up an asset', () => {
       .fn<ServerBackend['rooms']['canUpload']>()
       .mockResolvedValueOnce('ok')
       .mockResolvedValueOnce('room-not-found');
-    const { res, id, discard, afterStore } = await putWith(canUpload, async () => []);
+    const { res, id, discard, afterStore } = await putWith(canUpload, async () => 0);
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'room-not-found' });
@@ -143,14 +143,8 @@ describe('putting up an asset', () => {
 
   it('takes it away again when others stored at the same moment took the room past its limit', async () => {
     // Empty as it is counted before, and full with what came at the same moment once it is in.
-    const list = vi
-      .fn<ServerBackend['assets']['list']>()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        { id: 'a'.repeat(64), type: 'image/png', size: 64, name: '' },
-        { id: 'b'.repeat(64), type: 'image/png', size: 64, name: '' },
-      ]);
-    const { res, id, discard, afterStore } = await putWith(async () => 'ok', list, 100);
+    const usage = vi.fn<ServerBackend['assets']['usage']>().mockResolvedValueOnce(0).mockResolvedValueOnce(128);
+    const { res, id, discard, afterStore } = await putWith(async () => 'ok', usage, 100);
 
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({ error: 'room-storage-full' });

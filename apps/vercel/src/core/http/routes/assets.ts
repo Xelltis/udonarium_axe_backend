@@ -98,8 +98,7 @@ const admit = async (
 const overLimit = async (c: AssetContext, roomKey: string, adding: number): Promise<boolean> => {
   const limit = c.var.config.roomStorageLimitBytes;
   if (limit === null) return false;
-  const kept = (await c.var.backend.assets.list(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
-  return kept + adding > limit;
+  return (await c.var.backend.assets.usage(roomKey)) + adding > limit;
 };
 
 /**

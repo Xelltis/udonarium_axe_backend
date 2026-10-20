@@ -104,6 +104,11 @@ export interface AssetBackend {
   /** Removes what was stored (when the room was deleted while it was being stored). */
   discard(roomKey: string, id: string): Promise<void>;
   /**
+   * The bytes the room's assets take up, for ROOM_STORAGE_LIMIT_MB. Kept as assets are stored and
+   * taken out, so that it is answered without listing them (counted by listing only the first time).
+   */
+  usage(roomKey: string): Promise<number>;
+  /**
    * The response to a GET. The token has been checked. Rate limits, conditional requests and Range
    * are handled here.
    */

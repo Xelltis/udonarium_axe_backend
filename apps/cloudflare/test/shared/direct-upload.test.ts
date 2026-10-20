@@ -88,7 +88,7 @@ const setUp = (options: { direct?: boolean; roomStorageLimitBytes?: number } = {
         sizes.set(id, length);
         return 'stored';
       },
-      list: async () => [...kept.keys()].map((id) => ({ id, size: sizes.get(id) as number })),
+      usage: async () => [...kept.keys()].reduce((sum, id) => sum + (sizes.get(id) as number), 0),
       discard: vi.fn(async (_roomKey: string, id: string) => void kept.delete(id)),
       afterStore: vi.fn(),
       ...(options.direct === false ? {} : { direct }),

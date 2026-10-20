@@ -724,4 +724,34 @@ describe('the most one room may keep (ROOM_STORAGE_LIMIT_MB)', () => {
     expect(await refused.json()).toEqual({ error: 'room-storage-full' });
     expect(await harness.assetStored(ROOM_KEY, big.id)).toBeNull();
   });
+
+  it('counts what the room keeps as assets come and go, so that taking one out makes room', async () => {
+    const listed = await jsonOf<{ assets: { size: number }[] }>(
+      await harness.fetch(
+        new Request(BASE, {
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: `Bearer ${assetTokenFor('pl')}` },
+        })
+      )
+    );
+    const kept = listed.assets.reduce((sum, asset) => sum + asset.size, 0);
+    // A limit with between 4000 and a little over a million bytes to spare.
+    const limitMb = Math.ceil((kept + 4000) / 1_000_000);
+    const env = { ROOM_STORAGE_LIMIT_MB: String(limitMb) };
+    const first = await freshFile(PNG_HEAD, limitMb * 1_000_000 - kept - 1000);
+    const second = await freshFile(PNG_HEAD, 2000);
+    const takeOut = (id: string) =>
+      harness.fetchWith(
+        new Request(urlIn(ROOM_KEY, id), {
+          method: 'DELETE',
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: `Bearer ${assetTokenFor('gm')}` },
+        }),
+        env
+      );
+
+    expect((await putWith(first.id, first.file, env)).status).toBe(201);
+    expect((await putWith(second.id, second.file, env)).status).toBe(413);
+    expect((await takeOut(first.id)).status).toBe(204);
+    expect((await putWith(second.id, second.file, env)).status).toBe(201);
+    await takeOut(second.id);
+  });
 });

@@ -136,6 +136,42 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.engine.canDiscard(userId);
   }
 
+  // ---- What the room's assets take up ----
+  // Kept as they are stored and taken out, so that the room's limit (ROOM_STORAGE_LIMIT_MB) is
+  // checked without listing them in R2. It is counted by listing once, the first time it is asked
+  // for, and goes with the rest of the room.
+
+  /** The bytes the room's assets take up, or null while not counted yet (or when the room is gone). */
+  assetBytes(): number | null {
+    if (!this.roomRow() || !this.assetBytesCounted()) return null;
+    return this.ctx.storage.sql.exec<{ bytes: number }>('SELECT bytes FROM asset_bytes').one().bytes;
+  }
+
+  /** Adds to what the room's assets take up (or takes from it), once it has been counted. */
+  addAssetBytes(bytes: number): void {
+    if (!this.roomRow() || !this.assetBytesCounted()) return;
+    this.ctx.storage.sql.exec('UPDATE asset_bytes SET bytes = MAX(bytes + ?, 0)', bytes);
+  }
+
+  /**
+   * Keeps what listing counted, unless the room has been counted meanwhile. Returns what the room
+   * stands at. Nothing is kept for a room that is gone.
+   */
+  countAssetBytes(bytes: number): number {
+    if (!this.roomRow()) return bytes;
+    const sql = this.ctx.storage.sql;
+    sql.exec('CREATE TABLE IF NOT EXISTS asset_bytes (id INTEGER PRIMARY KEY CHECK (id = 1), bytes INTEGER NOT NULL)');
+    sql.exec('INSERT OR IGNORE INTO asset_bytes (id, bytes) VALUES (1, ?)', bytes);
+    return sql.exec<{ bytes: number }>('SELECT bytes FROM asset_bytes').one().bytes;
+  }
+
+  private assetBytesCounted(): boolean {
+    return (
+      this.ctx.storage.sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'asset_bytes'").toArray()
+        .length > 0
+    );
+  }
+
   /** Who is in the room now, for the operator's dashboard. */
   seats(): Seat[] {
     return this.engine.seats().map(({ seat }) => seat);

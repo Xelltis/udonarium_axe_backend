@@ -33,6 +33,19 @@ export const MAX_PUT_BYTES = 4_000_000;
 /** The key of a room's asset index. */
 export const assetIndexOf = (key: KeyOf, roomKey: string): string => key('a', roomKey);
 
+/**
+ * The key of the bytes a room's assets take up, for ROOM_STORAGE_LIMIT_MB. It is there once the room
+ * has been counted (the first time it is asked for), and kept as assets are stored and taken out.
+ */
+export const assetBytesOf = (key: KeyOf, roomKey: string): string => key('a', roomKey, 'bytes');
+
+/** Adds to what a room's assets take up, only once it has been counted. */
+const ADD_IF_COUNTED = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+redis.call('INCRBY', KEYS[1], ARGV[1])
+return 1
+`;
+
 /** The ETag. The name is the SHA-256 of the contents, so it is made from the name. */
 const etagOf = (id: string) => `"${id}"`;
 
@@ -88,6 +101,15 @@ export const vercelAssets = (
   const headersOf = (id: string, asset: Indexed) =>
     assetHeaders({ type: asset.type, size: asset.size, etag: etagOf(id), name: asset.name });
 
+  const listRoom = async (roomKey: string): Promise<RoomAsset[]> =>
+    Object.entries(await redis.hGetAll(assetIndexOf(key, roomKey))).map(([id, value]) => {
+      const { type, size, name } = JSON.parse(value) as Indexed;
+      return { id, type, size, name };
+    });
+
+  const addBytes = (roomKey: string, bytes: number) =>
+    redis.eval(ADD_IF_COUNTED, { keys: [assetBytesOf(key, roomKey)], arguments: [String(bytes)] });
+
   return {
     blocked: (id) => bucket.exists(blockedKeyOf(id)),
 
@@ -110,13 +132,27 @@ export const vercelAssets = (
       if (size !== length || hash.digest('hex') !== id) return 'hash-mismatch';
       await bucket.put(roomAssetKey(roomKey, id), Buffer.concat(chunks), type);
       const asset: Indexed = { type, size, name, uploadedAt: Date.now() };
-      await redis.hSet(assetIndexOf(key, roomKey), id, JSON.stringify(asset));
+      // Only the one that puts it in the index adds its bytes (two at once may store the same).
+      if ((await redis.hSet(assetIndexOf(key, roomKey), id, JSON.stringify(asset))) === 1)
+        await addBytes(roomKey, size);
       return 'stored';
     },
 
     discard: async (roomKey, id) => {
+      const was = await indexed(roomKey, id);
       await bucket.delete([roomAssetKey(roomKey, id)]);
-      await redis.hDel(assetIndexOf(key, roomKey), id);
+      // Only the one that takes it out of the index takes its bytes off.
+      if (was && (await redis.hDel(assetIndexOf(key, roomKey), id)) === 1) await addBytes(roomKey, -was.size);
+    },
+
+    /** What the room's assets take up: counted from the index the first time, and kept from then on. */
+    usage: async (roomKey) => {
+      const bytes = assetBytesOf(key, roomKey);
+      const kept = await redis.get(bytes);
+      if (kept !== null) return Number(kept);
+      const listed = (await listRoom(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
+      await redis.set(bytes, String(listed), { condition: 'NX' });
+      return Number(await redis.get(bytes));
     },
 
     head: async (request, roomKey, id) => {
@@ -161,11 +197,7 @@ export const vercelAssets = (
       return privately(new Response(slice(body, range.start, range.end), { status: 206, headers }));
     },
 
-    list: async (roomKey): Promise<RoomAsset[]> =>
-      Object.entries(await redis.hGetAll(assetIndexOf(key, roomKey))).map(([id, value]) => {
-        const { type, size, name } = JSON.parse(value) as Indexed;
-        return { id, type, size, name };
-      }),
+    list: listRoom,
 
     afterStore,
 
@@ -227,7 +259,7 @@ export const vercelAssets = (
     deleteRoom: async (roomKey) => {
       const ids = await redis.hKeys(assetIndexOf(key, roomKey));
       if (ids.length > 0) await bucket.delete(ids.map((id) => roomAssetKey(roomKey, id)));
-      await redis.del(assetIndexOf(key, roomKey));
+      await redis.del([assetIndexOf(key, roomKey), assetBytesOf(key, roomKey)]);
     },
   };
 };

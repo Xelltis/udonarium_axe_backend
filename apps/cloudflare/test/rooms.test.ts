@@ -310,3 +310,22 @@ describe('the lobby', () => {
     expect(failure).toHaveBeenCalledWith('Lobby update failed:', expect.any(Error));
   });
 });
+
+describe('what a room’s assets take up', () => {
+  it('is kept once counted, and nothing is kept for a room that is not there', async () => {
+    const roomKey = await createRoom();
+    const missing = stubOf('d'.repeat(32));
+
+    expect(await stubOf(roomKey).assetBytes()).toBeNull();
+    await stubOf(roomKey).addAssetBytes(5);
+    expect(await stubOf(roomKey).assetBytes()).toBeNull();
+    expect(await stubOf(roomKey).countAssetBytes(10)).toBe(10);
+    expect(await stubOf(roomKey).countAssetBytes(99)).toBe(10);
+    await stubOf(roomKey).addAssetBytes(-15);
+    expect(await stubOf(roomKey).assetBytes()).toBe(0);
+
+    expect(await missing.countAssetBytes(7)).toBe(7);
+    await missing.addAssetBytes(7);
+    expect(await missing.assetBytes()).toBeNull();
+  });
+});

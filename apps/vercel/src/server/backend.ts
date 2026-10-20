@@ -183,6 +183,7 @@ export const storelessBackend = (upgrades: Upgrades): ServerBackend => {
       read: none,
       head: none,
       list: none,
+      usage: none,
       afterStore: none,
       inventory: none,
       content: none,

@@ -63,6 +63,32 @@ const barredNow = (bucket: R2Bucket): Promise<Set<string>> => {
   return barred.ids;
 };
 
+/** The assets kept for a room, up to MAX_LIST_PAGES pages of them. */
+const listRoom = async (bucket: R2Bucket, roomKey: string): Promise<RoomAsset[]> => {
+  const assets: RoomAsset[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const listed = await bucket.list({
+      prefix: roomAssetPrefix(roomKey),
+      include: ['httpMetadata', 'customMetadata'],
+      ...(cursor ? { cursor } : {}),
+    });
+    for (const object of listed.objects) {
+      const id = object.key.slice(roomAssetPrefix(roomKey).length);
+      if (!ASSET_ID.test(id)) continue;
+      assets.push({
+        id,
+        type: object.httpMetadata?.contentType ?? 'application/octet-stream',
+        size: object.size,
+        name: object.customMetadata?.name ?? '',
+      });
+    }
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  return assets;
+};
+
 /** Keeps a room's assets in R2 and serves them through the Cache API. */
 export const r2Assets = (
   env: Env,
@@ -86,11 +112,14 @@ export const r2Assets = (
       if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) return 'hash-mismatch';
       throw err;
     }
+    await env.ROOMS.getByName(roomKey).addAssetBytes(length);
     return 'stored';
   },
 
   discard: async (roomKey, id) => {
+    const object = await env.ASSETS.head(roomAssetKey(roomKey, id));
     await env.ASSETS.delete(roomAssetKey(roomKey, id));
+    if (object) await env.ROOMS.getByName(roomKey).addAssetBytes(-object.size);
   },
 
   /**
@@ -145,29 +174,18 @@ export const r2Assets = (
     return privately(response);
   },
 
-  list: async (roomKey) => {
-    const assets: RoomAsset[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < MAX_LIST_PAGES; page++) {
-      const listed = await env.ASSETS.list({
-        prefix: roomAssetPrefix(roomKey),
-        include: ['httpMetadata', 'customMetadata'],
-        ...(cursor ? { cursor } : {}),
-      });
-      for (const object of listed.objects) {
-        const id = object.key.slice(roomAssetPrefix(roomKey).length);
-        if (!ASSET_ID.test(id)) continue;
-        assets.push({
-          id,
-          type: object.httpMetadata?.contentType ?? 'application/octet-stream',
-          size: object.size,
-          name: object.customMetadata?.name ?? '',
-        });
-      }
-      if (!listed.truncated) break;
-      cursor = listed.cursor;
-    }
-    return assets;
+  list: (roomKey) => listRoom(env.ASSETS, roomKey),
+
+  /**
+   * What the room's assets take up, as the room keeps it. The first time, they are listed and
+   * counted, and the room keeps the count from then on.
+   */
+  usage: async (roomKey) => {
+    const room = env.ROOMS.getByName(roomKey);
+    const kept = await room.assetBytes();
+    if (kept !== null) return kept;
+    const listed = (await listRoom(env.ASSETS, roomKey)).reduce((sum, asset) => sum + asset.size, 0);
+    return room.countAssetBytes(listed);
   },
 
   inventory: async (cursor) => {
