@@ -65,7 +65,7 @@ describe('onError', () => {
 });
 
 /** The routes, in front of a fake room server. */
-const appOf = (backend: ServerBackend) => {
+const appOf = (backend: ServerBackend, roomStorageLimitBytes: number | null = null) => {
   const app = new Hono<ServerEnv>();
   app.use('*', async (c, next) => {
     c.set('config', {
@@ -78,7 +78,7 @@ const appOf = (backend: ServerBackend) => {
       admin: null,
       adminWebhook: null,
       storageAlertBytes: null,
-      roomStorageLimitBytes: null,
+      roomStorageLimitBytes,
       contactUrl: null,
       roomRetentionSeconds: 3600,
     });
@@ -90,13 +90,14 @@ const appOf = (backend: ServerBackend) => {
 };
 
 describe('putting up an asset', () => {
-  it('takes it away again when the room went while it was being kept', async () => {
+  /** A room server that keeps whatever comes, with the room's answers and listings given. */
+  const putWith = async (
+    canUpload: ServerBackend['rooms']['canUpload'],
+    list: ServerBackend['assets']['list'],
+    limit: number | null = null
+  ) => {
     const file = fileOf(PNG_HEAD, 64);
     const id = await sha256Hex(file);
-    const canUpload = vi
-      .fn<ServerBackend['rooms']['canUpload']>()
-      .mockResolvedValueOnce('ok')
-      .mockResolvedValueOnce('room-not-found');
     const discard = vi.fn(async () => undefined);
     const afterStore = vi.fn();
     const backend = {
@@ -110,9 +111,10 @@ describe('putting up an asset', () => {
         store: async () => 'stored' as const,
         discard,
         afterStore,
+        list,
       },
     } as unknown as ServerBackend;
-    const res = await appOf(backend).fetch(
+    const res = await appOf(backend, limit).fetch(
       new Request(`https://backend.example/v1/rooms/${ROOM_KEY}/assets/${id}`, {
         method: 'PUT',
         body: file,
@@ -123,9 +125,35 @@ describe('putting up an asset', () => {
         },
       })
     );
+    return { res, id, discard, afterStore };
+  };
+
+  it('takes it away again when the room went while it was being kept', async () => {
+    const canUpload = vi
+      .fn<ServerBackend['rooms']['canUpload']>()
+      .mockResolvedValueOnce('ok')
+      .mockResolvedValueOnce('room-not-found');
+    const { res, id, discard, afterStore } = await putWith(canUpload, async () => []);
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'room-not-found' });
+    expect(discard).toHaveBeenCalledWith(ROOM_KEY, id);
+    expect(afterStore).not.toHaveBeenCalled();
+  });
+
+  it('takes it away again when others stored at the same moment took the room past its limit', async () => {
+    // Empty as it is counted before, and full with what came at the same moment once it is in.
+    const list = vi
+      .fn<ServerBackend['assets']['list']>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 'a'.repeat(64), type: 'image/png', size: 64, name: '' },
+        { id: 'b'.repeat(64), type: 'image/png', size: 64, name: '' },
+      ]);
+    const { res, id, discard, afterStore } = await putWith(async () => 'ok', list, 100);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: 'room-storage-full' });
     expect(discard).toHaveBeenCalledWith(ROOM_KEY, id);
     expect(afterStore).not.toHaveBeenCalled();
   });

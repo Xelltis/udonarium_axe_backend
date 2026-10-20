@@ -185,7 +185,7 @@ describe('putting up an asset straight to the store', () => {
     });
 
     // Both tickets go out while the room is empty: neither is stored yet to count.
-    const tickets = [];
+    const tickets: UploadTicketResponse[] = [];
     for (const { bytes, id } of [first, second]) {
       const asked = await ask(id, { size: bytes.byteLength });
       expect(asked.status).toBe(201);
@@ -200,6 +200,24 @@ describe('putting up an asset straight to the store', () => {
     expect(await errorOf(refused)).toBe('room-storage-full');
     expect([...kept.keys()]).toEqual([first.id]);
     expect(uploaded.size).toBe(0);
+  });
+
+  it('keeps the room within its limit when uploads are said done at the same moment', async () => {
+    const files = [await fileFor(PNG_HEAD, MAX_PUT_BYTES * 2), await fileFor(PNG_HEAD, MAX_PUT_BYTES * 2 + 1)];
+    const limit = files[0].bytes.byteLength + files[1].bytes.byteLength - 1;
+    const { kept, ask, finish, upload } = setUp({ roomStorageLimitBytes: limit });
+    const tickets: UploadTicketResponse[] = [];
+    for (const { bytes, id } of files) {
+      const ticket = await jsonOf<UploadTicketResponse>(await ask(id, { size: bytes.byteLength }));
+      upload(ticket, bytes);
+      tickets.push(ticket);
+    }
+
+    const done = await Promise.all(files.map(({ id }, at) => finish(id, tickets[at].ticket)));
+
+    expect(done.map((res) => res.status)).toContain(413);
+    const sizes = files.filter(({ id }) => kept.has(id)).map(({ bytes }) => bytes.byteLength);
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeLessThanOrEqual(limit);
   });
 
   it('answers that it is there already, before and after the upload, and lets the upload go', async () => {

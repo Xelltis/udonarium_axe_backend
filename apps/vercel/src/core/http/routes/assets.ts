@@ -65,7 +65,7 @@ const admit = async (
   count: boolean,
   size: number
 ): Promise<Response | Claims<'asset'>> => {
-  const { backend, config } = c.var;
+  const { backend } = c.var;
   const claims = await claimsOf(c, roomKey);
   if (claims instanceof Response) return claims;
   if (claims.role === 'guest') return fail(c, 403, 'not-a-player');
@@ -89,13 +89,31 @@ const admit = async (
   if (count && !(await backend.limit(c.req.raw, 'upload'))) return fail(c, 429, 'rate-limited');
   // The operator may have stopped storing for now. Read as it stands, once past the limit.
   if (await pausedNow(c, 'uploads')) return fail(c, 503, 'paused');
-  // What the room keeps is counted only where a limit is set, and only once past the rest.
-  const limit = config.roomStorageLimitBytes;
-  if (limit !== null) {
-    const kept = (await backend.assets.list(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
-    if (kept + size > limit) return fail(c, 413, 'room-storage-full');
-  }
+  // What the room keeps is counted only once past the rest.
+  if (await overLimit(c, roomKey, size)) return fail(c, 413, 'room-storage-full');
   return claims;
+};
+
+/** Whether adding more bytes takes the room past ROOM_STORAGE_LIMIT_MB. Counted only where it is set. */
+const overLimit = async (c: AssetContext, roomKey: string, adding: number): Promise<boolean> => {
+  const limit = c.var.config.roomStorageLimitBytes;
+  if (limit === null) return false;
+  const kept = (await c.var.backend.assets.list(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
+  return kept + adding > limit;
+};
+
+/**
+ * Looks again once what was stored is in, and takes it out when it may not stay: when the room was
+ * deleted while the contents flowed in (what the deletion missed), or when stores at the same moment
+ * took the room past ROOM_STORAGE_LIMIT_MB, each having counted the room without the others. Those
+ * may then all be refused, but the room never stays past it. A refusal, or null when it is kept.
+ */
+const settle = async (c: AssetContext, roomKey: string, id: string, uid: string): Promise<Response | null> => {
+  const { backend } = c.var;
+  const gone = (await backend.rooms.canUpload(roomKey, uid)) === 'room-not-found';
+  if (!gone && !(await overLimit(c, roomKey, 0))) return null;
+  await backend.assets.discard(roomKey, id);
+  return gone ? fail(c, 404, 'room-not-found') : fail(c, 413, 'room-storage-full');
 };
 
 /**
@@ -151,11 +169,8 @@ export const putRoomAsset = async (c: AssetContext) => {
   const name = assetNameOf(c.req.header(ASSET_NAME_HEADER) ?? '');
   const stored = await backend.assets.store(roomKey, id, rejoin(head, reader), length, sniffed.type, name);
   if (stored === 'hash-mismatch') return fail(c, 400, 'hash-mismatch');
-  // When the room was deleted while the contents flowed in, what the deletion missed is deleted.
-  if ((await backend.rooms.canUpload(roomKey, claims.uid)) === 'room-not-found') {
-    await backend.assets.discard(roomKey, id);
-    return fail(c, 404, 'room-not-found');
-  }
+  const refused = await settle(c, roomKey, id, claims.uid);
+  if (refused) return refused;
   backend.assets.afterStore();
   noteStored(c, claims, roomKey, sniffed.type, length, id);
   return c.json<AssetStoredResponse>({ id, status: 'stored' }, 201);
@@ -285,11 +300,8 @@ const keepUpload = async (
 
   const stored = await backend.assets.store(roomKey, id, rejoin(head, reader), ticket.size, sniffed.type, ticket.name);
   if (stored === 'hash-mismatch') return fail(c, 400, 'hash-mismatch');
-  // When the room was deleted during the check, what the deletion missed is deleted.
-  if ((await backend.rooms.canUpload(roomKey, admitted.uid)) === 'room-not-found') {
-    await backend.assets.discard(roomKey, id);
-    return fail(c, 404, 'room-not-found');
-  }
+  const refused = await settle(c, roomKey, id, admitted.uid);
+  if (refused) return refused;
   backend.assets.afterStore();
   noteStored(c, admitted, roomKey, sniffed.type, ticket.size, id);
   return c.json<AssetStoredResponse>({ id, status: 'stored' }, 201);
