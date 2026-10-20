@@ -66,6 +66,49 @@ const RANK_EPOCH_MS = Date.UTC(2025, 0, 1);
 /** Room in a reporter's score for when its oldest report was made (milliseconds, about 31 years). */
 const RANK_SPAN_MS = 1e12;
 
+/**
+ * Lets one report go when more than the cap are kept, as one step (see trimReports). It goes from
+ * whichever side holds over half (senders not logged in, or accounts; past the cap one always does),
+ * so that neither can push out every report of the other: the oldest of the rank highest on that
+ * side, which is then put back in its place, or taken off when it has nothing left. A rank at the
+ * top with nothing in it (expired, or left by a report let go by its age) is taken off on the way.
+ * Answers 1 when it let one go, 0 when the cap holds or there is nothing on that side to take.
+ *
+ * KEYS: the reports by when, the reports of senders not logged in, the ranks of those, the ranks of
+ * accounts, the reports. ARGV: the cap, the start of a rank's key, RANK_EPOCH_MS, RANK_SPAN_MS.
+ * The score is passed as a whole number written out in full, which Lua would round to 14 digits.
+ */
+const TRIM_ONE = `
+if redis.call('ZCARD', KEYS[1]) <= tonumber(ARGV[1]) then return 0 end
+local side = KEYS[4]
+if redis.call('ZCARD', KEYS[2]) > tonumber(ARGV[1]) / 2 then side = KEYS[3] end
+while true do
+  local top = redis.call('ZREVRANGE', side, 0, 0)
+  if #top == 0 then return 0 end
+  local rank = top[1]
+  local ranked = ARGV[2] .. rank
+  local popped = redis.call('ZPOPMIN', ranked)
+  if #popped == 0 then
+    redis.call('ZREM', side, rank)
+  else
+    local id = popped[1]
+    redis.call('ZREM', KEYS[1], id)
+    redis.call('ZREM', KEYS[2], id)
+    redis.call('HDEL', KEYS[5], id)
+    local oldest = redis.call('ZRANGE', ranked, 0, 0, 'WITHSCORES')
+    if #oldest == 0 then
+      redis.call('ZREM', side, rank)
+    else
+      local span = tonumber(ARGV[4])
+      local since = math.min(math.max(tonumber(oldest[2]) - tonumber(ARGV[3]), 0), span - 1)
+      local score = redis.call('ZCARD', ranked) * span + (span - since)
+      redis.call('ZADD', side, string.format('%.0f', score), rank)
+    end
+    return 1
+  end
+end
+`;
+
 /** The store for the operator in Redis. maxReports is how many reports are kept (fewer in tests). */
 export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPORTS): ModerationStore => {
   const BANS = key('mod', 'bans');
@@ -137,23 +180,15 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
   const trimReports = async (oldest: number): Promise<void> => {
     const old = await redis.zRangeByScore(REPORTS_AT, '-inf', `(${oldest}`);
     if (old.length > 0) await dropReports(old);
-    // One at a time until the cap holds: reports kept at the same moment each see the others.
-    while ((await redis.zCard(REPORTS_AT)) > maxReports) {
-      // It goes from whichever side holds over half, senders not logged in or accounts (past
-      // MAX_REPORTS one always does), so that neither can push out every report of the other.
-      const anonymous = await redis.zCard(ANONYMOUS_REPORTS);
-      const from = anonymous > maxReports / 2 ? ANONYMOUS_REPORTERS : ACCOUNT_REPORTERS;
-      const [busiest] = await redis.zRange(from, 0, 0, { REV: true });
-      // Nothing to take on that side (its ranks not written yet by a report kept at the same
-      // moment): the next report kept takes it.
-      if (busiest === undefined) return;
-      // Taken off its rank in one step, so that trims at the same moment each take a different one.
-      const gone = await redis.zPopMin(rankKeyOf(busiest));
-      // A rank left at the top with nothing in it (written back by a trim at the same moment as it
-      // emptied) is put right, so that it does not stop the trims after it.
-      if (gone === null) await rankReporter(busiest);
-      else await dropReports([gone.value]);
-    }
+    // One report at a time until the cap holds, each in one script (TRIM_ONE): trims at the same
+    // moment take turns, so that none takes more than is over the cap, nor goes after the same
+    // report as another, and one that finds the cap holding stops.
+    const trimOne = async () =>
+      (await redis.eval(TRIM_ONE, {
+        keys: [REPORTS_AT, ANONYMOUS_REPORTS, ANONYMOUS_REPORTERS, ACCOUNT_REPORTERS, REPORTS],
+        arguments: [String(maxReports), rankKeyOf(''), String(RANK_EPOCH_MS), String(RANK_SPAN_MS)],
+      })) === 1;
+    while (await trimOne());
   };
 
   /** Every ban in force, newest first. Those past their end are deleted on the way. */

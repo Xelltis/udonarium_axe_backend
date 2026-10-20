@@ -168,7 +168,8 @@ describe('a Redis store for the operator', () => {
     }
     const kept = await store.reports();
 
-    expect(kept.length).toBeLessThanOrEqual(FEW);
+    // Exactly the cap: trims at the same moment take turns, and none takes more than is over it.
+    expect(kept.length).toBe(FEW);
     expect(await connection.redis.zCard(key('mod', 'reports', 'at'))).toBe(kept.length);
     expect(await connection.redis.zCard(key('mod', 'anonymous-reports'))).toBe(
       kept.filter((report) => report.reporter.discordId === null).length
