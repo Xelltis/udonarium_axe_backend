@@ -1,9 +1,9 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { blockedKeyOf } from '../src/core/assets/keys';
 import { BAN_CACHE_MS } from '../src/core/moderation/bans';
 import app from '../src/index';
+import { MODERATION_NAME } from '../src/moderation/store';
 import {
   BASE,
   ORIGIN,
@@ -158,8 +158,8 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     const { file, id } = await freshFile();
     await put(id, file);
     await readOnce(id);
-    // Taken down on another instance: this one reads what is barred again a short while later.
-    await env.ASSETS.put(blockedKeyOf(id), new Uint8Array());
+    // Taken down on another instance: this one reads the bans, with what is barred, a short while later.
+    await env.MODERATION.getByName(MODERATION_NAME).setBlocked(id, true);
     await env.ASSETS.delete(storedKeyOf(id));
     vi.useFakeTimers({ now: Date.now() + BAN_CACHE_MS, toFake: ['Date'] });
 
@@ -169,18 +169,7 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     expect(got.status).toBe(451);
     expect(await got.json()).toEqual({ error: 'blocked' });
     expect(headed.status).toBe(451);
-    await env.ASSETS.delete(blockedKeyOf(id));
-  });
-
-  it('reads what is barred again next time when the read fails, rather than keep the failure', async () => {
-    const { file, id } = await freshFile();
-    await put(id, file);
-    vi.useFakeTimers({ now: Date.now() + 2 * BAN_CACHE_MS, toFake: ['Date'] });
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    vi.spyOn(env.ASSETS, 'list').mockRejectedValueOnce(new Error('down'));
-
-    expect((await call(id)).status).toBe(500);
-    expect((await call(id)).status).toBe(200);
+    await env.MODERATION.getByName(MODERATION_NAME).setBlocked(id, false);
   });
 });
 

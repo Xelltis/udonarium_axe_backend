@@ -134,6 +134,16 @@ describe('a Redis store for the operator', () => {
     expect(await connection.redis.pTTL(key('mod', 'reporter', 'discord:same'))).toBeGreaterThan(REPORT_MS - 60_000);
   });
 
+  it('keeps what the operator barred with the bans, until it is let back', async () => {
+    const store = redisModeration(connection.redis, freshKey());
+    const id = 'a'.repeat(64);
+
+    await store.setBlocked(id, true);
+    expect((await store.state()).blocked).toEqual([id]);
+    await store.setBlocked(id, false);
+    expect((await store.state()).blocked).toEqual([]);
+  });
+
   it('keeps how tight the limits are, and when that began, until they go back', async () => {
     const store = redisModeration(connection.redis, freshKey());
 

@@ -39,6 +39,7 @@ import type { KeyOf, Redis } from './redis.js';
 //   mod:pause         HASH    What the operator has stopped for now: rooms, uploads, logins ("1"), and since.
 //   mod:storage       STRING  JSON of the store's size as last counted (once a day, by the sweep).
 //   mod:tighten       HASH    How tight each rate limit is: upload, read, room, auth (1, 2, 4 or 10), and since.
+//   mod:blocked       SET     The assets the operator barred from the dashboard, held with the bans.
 //   mod:reports       HASH    report id → JSON of a report from a room's seat. Kept to the newest
 //                             MAX_REPORTS and to REPORT_MS.
 //   mod:reports:at    ZSET    The report ids by when they were made, so that the oldest go without
@@ -66,6 +67,7 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
   const STORAGE = key('mod', 'storage');
   const TIGHTEN = key('mod', 'tighten');
   const REPORTS = key('mod', 'reports');
+  const BLOCKED = key('mod', 'blocked');
   const REPORTS_AT = key('mod', 'reports', 'at');
 
   /** Every report kept, newest first. Those too old are left out, and let go when the next is kept. */
@@ -164,8 +166,13 @@ export const redisModeration = (redis: Redis, key: KeyOf, maxReports = MAX_REPOR
     bans,
 
     async state() {
-      const [kept, stopped, tight] = await Promise.all([bans(), pause(), tighten()]);
-      return { bans: kept, pause: stopped, tighten: tight };
+      const [kept, stopped, tight, blocked] = await Promise.all([bans(), pause(), tighten(), redis.sMembers(BLOCKED)]);
+      return { bans: kept, pause: stopped, tighten: tight, blocked };
+    },
+
+    async setBlocked(id, blocked) {
+      if (blocked) await redis.sAdd(BLOCKED, id);
+      else await redis.sRem(BLOCKED, id);
     },
 
     async setTighten({ since, ...weights }) {

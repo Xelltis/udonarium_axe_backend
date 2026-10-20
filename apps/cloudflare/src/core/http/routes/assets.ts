@@ -17,7 +17,7 @@ import type { Claims } from '../../auth/tokens.js';
 import type { LoginConfig } from '../../config/login.js';
 import type { DirectUploads, ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
-import { accountBanOf, note, pausedNow } from '../moderation.js';
+import { accountBanOf, blockedNow, note, pausedNow } from '../moderation.js';
 import { assetClaimsOf, declaredLengthOf } from '../request.js';
 
 type AssetContext = Context<ServerEnv>;
@@ -121,7 +121,10 @@ const settle = async (c: AssetContext, roomKey: string, id: string, uid: string)
  * Hono sends HEAD down the GET route too, and throws away the body returned.
  *
  * What the operator took down is answered 451 rather than 404, so that Axe asks nobody in the room
- * for it either. Only what is not there is asked about, so a read that finds it costs no more.
+ * for it either. What was taken down from the dashboard is known with the bans, so that it is not
+ * served from a room the takedown missed, nor from a copy left in a data center's cache. A mark put
+ * in the store by hand is asked about only for what is not there, so a read that finds it costs no
+ * more.
  */
 export const getRoomAsset = async (c: AssetContext) => {
   const roomKey = c.req.param('roomKey') as string;
@@ -129,6 +132,7 @@ export const getRoomAsset = async (c: AssetContext) => {
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
   const claims = await claimsOf(c, roomKey);
   if (claims instanceof Response) return claims;
+  if (await blockedNow(c, id)) return fail(c, 451, 'blocked');
   const { assets } = c.var.backend;
   const res = await (c.req.method === 'HEAD'
     ? assets.head(c.req.raw, roomKey, id)

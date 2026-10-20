@@ -57,6 +57,18 @@ const putIn = (roomKey: string, id: string, file: Uint8Array) =>
     })
   );
 
+/** Reads a room asset with a guest's token for that room. */
+const readIn = (roomKey: string, id: string) =>
+  harness.fetch(
+    new Request(`${ROOMS}/${roomKey}/assets/${id}`, {
+      headers: {
+        Origin: ORIGIN,
+        'CF-Connecting-IP': freshIp(),
+        Authorization: `Bearer ${assetTokenFor('guest', roomKey)}`,
+      },
+    })
+  );
+
 /** Every asset in the store, page after page. */
 const inventory = async () => {
   const assets: StoredRoomAsset[] = [];
@@ -234,20 +246,24 @@ describe('what was uploaded', () => {
     await putIn(ROOM_KEY, id, file);
     await putIn(OTHER_ROOM_KEY, id, file);
 
+    // The page missed the other room (a list read before it was put there).
     const taken = await callAdmin(`assets/${id}/block`, {
       method: 'POST',
-      body: { rooms: [ROOM_KEY, OTHER_ROOM_KEY] },
+      body: { rooms: [ROOM_KEY] },
     });
-    expect(await taken.json()).toEqual({ deleted: 2, failed: 0 });
+    expect(await taken.json()).toEqual({ deleted: 1, failed: 0 });
     expect(await harness.assetStored(ROOM_KEY, id)).toBeNull();
-    expect(await harness.assetStored(OTHER_ROOM_KEY, id)).toBeNull();
     expect((await putIn(ROOM_KEY, id, file)).status).toBe(451);
+    // Still kept in the room missed, it is not served from there either.
+    expect(await harness.assetStored(OTHER_ROOM_KEY, id)).not.toBeNull();
+    expect((await readIn(OTHER_ROOM_KEY, id)).status).toBe(451);
     expect((await jsonOf<{ ids: string[] }>(await callAdmin('blocked'))).ids).toContain(id);
     expect(await noted((entry) => entry.detail === `block asset ${id}`)).toHaveLength(1);
 
     expect((await callAdmin(`blocked/${id}`, { method: 'DELETE', cookie: await stale() })).status).toBe(403);
     expect((await callAdmin(`blocked/${id}`, { method: 'DELETE' })).status).toBe(204);
     expect((await putIn(ROOM_KEY, id, file)).status).toBe(201);
+    expect((await readIn(OTHER_ROOM_KEY, id)).status).toBe(200);
     expect((await jsonOf<{ ids: string[] }>(await callAdmin('blocked'))).ids).not.toContain(id);
   });
 

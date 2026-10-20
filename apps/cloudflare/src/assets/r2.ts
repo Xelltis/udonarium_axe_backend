@@ -3,7 +3,6 @@ import { privately } from '../core/assets/headers';
 import { ASSET_ID, ROOMS_PREFIX, blockedKeyOf, roomAssetKey, roomAssetPrefix } from '../core/assets/keys';
 import type { AssetBackend, LimitKind, StoredRoomAsset } from '../core/http/backend';
 import { failure } from '../core/http/errors';
-import { BAN_CACHE_MS } from '../core/moderation/bans';
 import { LOBBY_NAME } from '../rooms/lobby';
 import { objectHeaders, setContentRange } from './response';
 import { randomStart, sweepOrphans } from './sweep';
@@ -38,29 +37,6 @@ const listBlocked = async (bucket: R2Bucket): Promise<string[]> => {
     cursor = listed.cursor;
   }
   return ids;
-};
-
-/**
- * What is barred, as this isolate read it a short while ago (BAN_CACHE_MS, as for the bans). A read
- * answered from the Cache API never reaches R2, so a copy left in a data center is checked against
- * it: one taken down stops being served there too within that while. Taking down or letting back on
- * this isolate reads it afresh, and a read that fails is not kept.
- */
-let barred: { ids: Promise<Set<string>>; at: number } | null = null;
-
-const barredNow = (bucket: R2Bucket): Promise<Set<string>> => {
-  const now = Date.now();
-  if (!barred || now - barred.at >= BAN_CACHE_MS) {
-    const ids = listBlocked(bucket).then(
-      (listed) => new Set(listed),
-      (err: unknown) => {
-        barred = null;
-        throw err;
-      }
-    );
-    barred = { ids, at: now };
-  }
-  return barred.ids;
 };
 
 /** The assets kept for a room, up to MAX_LIST_PAGES pages of them. */
@@ -126,7 +102,6 @@ export const r2Assets = (
    * cache is answered from the cache (so that GET and HEAD do not give different answers).
    */
   head: async (request, roomKey, id) => {
-    if ((await barredNow(env.ASSETS)).has(id)) return failure(451, 'blocked');
     const cached = await caches.default.match(request.url);
     if (cached) return privately(new Response(null, { status: 200, headers: cached.headers }));
     if (!(await limit(request, 'read'))) return failure(429, 'rate-limited');
@@ -140,7 +115,6 @@ export const r2Assets = (
     // data center. The cache is looked up after the token is checked, so even what is left in the cache
     // does not go back to someone without a token.
     // cache.match answers conditional requests (304) and Range (206).
-    if ((await barredNow(env.ASSETS)).has(id)) return failure(451, 'blocked');
     const cache = caches.default;
     const cached = await cache.match(request);
     if (cached) return privately(cached);
@@ -216,12 +190,10 @@ export const r2Assets = (
 
   block: async (id) => {
     await env.ASSETS.put(blockedKeyOf(id), new Uint8Array());
-    barred = null;
   },
 
   unblock: async (id) => {
     await env.ASSETS.delete(blockedKeyOf(id));
-    barred = null;
   },
 
   blockedIds: () => listBlocked(env.ASSETS),

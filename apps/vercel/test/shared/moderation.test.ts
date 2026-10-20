@@ -33,7 +33,7 @@ import {
 import type { Ban, ModerationState } from '../../src/core/moderation/bans.js';
 
 /** What the store gives: these bans, and nothing stopped. */
-const stateOf = (bans: Ban[]): ModerationState => ({ bans, pause: NO_PAUSE, tighten: NO_TIGHTEN });
+const stateOf = (bans: Ban[]): ModerationState => ({ bans, pause: NO_PAUSE, tighten: NO_TIGHTEN, blocked: [] });
 import type { Seat } from '../../src/core/rooms/host.js';
 
 // The pieces the operator's bans are made of. They touch no room server.
@@ -319,15 +319,17 @@ describe('banCache', () => {
     expect(error).toHaveBeenCalledTimes(2);
   });
 
-  it('holds what is stopped along with the bans, and nothing stopped before the first read', async () => {
+  it('holds what is stopped and what is barred along with the bans, and nothing before the first read', async () => {
     const pause = { rooms: true, uploads: false, logins: true, since: 5 };
     const tighten = { upload: 4, read: 1, room: 2, auth: 1, since: 6 } as const;
-    const cache = banCache(async () => ({ bans: [], pause, tighten }));
+    const cache = banCache(async () => ({ bans: [], pause, tighten, blocked: ['a'.repeat(64)] }));
 
     expect(new BanList([]).pause).toEqual(NO_PAUSE);
     expect(new BanList([]).tighten).toEqual(NO_TIGHTEN);
+    expect(new BanList([]).blocked.size).toBe(0);
     expect((await cache.current()).pause).toEqual(pause);
     expect((await cache.current()).tighten).toEqual(tighten);
+    expect((await cache.current()).blocked.has('a'.repeat(64))).toBe(true);
   });
 
   it('does not count a failed read begun before forgetting as a read', async () => {
@@ -365,6 +367,7 @@ describe('moderationOf', () => {
     bans: async () => [banOf('discord', '42')],
     state: async () => stateOf([banOf('discord', '42')]),
     setPause: async () => undefined,
+    setBlocked: async () => undefined,
     setTighten: async () => undefined,
     putBan: async () => undefined,
     deleteBan: async () => true,

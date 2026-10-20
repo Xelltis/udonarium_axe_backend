@@ -245,8 +245,10 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
     if (!id) return fail(c, 400, 'invalid-id');
     const parsed = safeParse(takedownSchema, await c.req.json().catch(() => null));
     if (!parsed.success) return fail(c, 400, 'invalid-request');
-    const { assets } = c.var.backend;
+    const { assets, moderation } = c.var.backend;
     await assets.block(id);
+    // Held with the bans too, so that no room serves it any more, nor a copy in a cache.
+    await moderation.setBlocked(id, true);
     const deleting = await Promise.allSettled(parsed.output.rooms.map((roomKey) => assets.discard(roomKey, id)));
     const failed = deleting.filter((result) => result.status === 'rejected');
     for (const result of failed)
@@ -262,6 +264,7 @@ export const adminToolRoutes = (admin: Hono<ServerEnv>): void => {
     const id = assetIdOf(c);
     if (!id) return fail(c, 400, 'invalid-id');
     await c.var.backend.assets.unblock(id);
+    await c.var.backend.moderation.setBlocked(id, false);
     noteAdmin(c, `unblock asset ${id}`);
     return c.body(null, 204);
   });

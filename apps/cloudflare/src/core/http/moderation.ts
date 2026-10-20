@@ -79,6 +79,13 @@ export const accountBanOf = async (
 };
 
 /**
+ * Whether the operator barred the asset from the dashboard, by the bans this instance read a short
+ * while ago (it reads nothing for it, and is asked of every read).
+ */
+export const blockedNow = async (c: ServerContext, id: string): Promise<boolean> =>
+  (await bansFor(c, false)).blocked.has(id);
+
+/**
  * Whether the operator has stopped that for now, by what is stopped as it stands (read with the
  * bans, so a request that checks both reads once). Asked only where the bans are read afresh too.
  */

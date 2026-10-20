@@ -162,6 +162,17 @@ describe('ModerationDurableObject', () => {
     expect(await store.takeChallenge('x', 60_000)).toBe(false);
   });
 
+  it('keeps what the operator barred with the bans, until it is let back', async () => {
+    const store = freshStore();
+    const id = 'a'.repeat(64);
+
+    await store.setBlocked(id, true);
+    await store.setBlocked(id, true);
+    expect((await store.state()).blocked).toEqual([id]);
+    await store.setBlocked(id, false);
+    expect((await store.state()).blocked).toEqual([]);
+  });
+
   it('keeps what the operator stopped, and when, until it is started again', async () => {
     const store = freshStore();
 

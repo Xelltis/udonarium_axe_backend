@@ -107,6 +107,8 @@ export class ModerationDurableObject extends DurableObject<Env> {
       name TEXT PRIMARY KEY,
       value INTEGER NOT NULL
     )`);
+    // The assets the operator barred from the dashboard, held with the bans by every instance.
+    sql.exec('CREATE TABLE IF NOT EXISTS blocked_assets (id TEXT PRIMARY KEY)');
     sql.exec(`CREATE TABLE IF NOT EXISTS challenges (
       challenge TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL
@@ -174,7 +176,17 @@ export class ModerationDurableObject extends DurableObject<Env> {
 
   /** The bans and what is stopped, read in one call. */
   state(): ModerationState {
-    return { bans: this.bans(), pause: this.pause(), tighten: this.tighten() };
+    const blocked = this.ctx.storage.sql
+      .exec<{ id: string }>('SELECT id FROM blocked_assets')
+      .toArray()
+      .map((row) => row.id);
+    return { bans: this.bans(), pause: this.pause(), tighten: this.tighten(), blocked };
+  }
+
+  setBlocked(id: string, blocked: boolean): void {
+    const sql = this.ctx.storage.sql;
+    if (blocked) sql.exec('INSERT OR IGNORE INTO blocked_assets (id) VALUES (?)', id);
+    else sql.exec('DELETE FROM blocked_assets WHERE id = ?', id);
   }
 
   /** What is stopped now. Kept in admin_state, one row for each kind, and when it began. */

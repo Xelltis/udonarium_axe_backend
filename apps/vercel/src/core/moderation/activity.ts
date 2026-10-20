@@ -72,6 +72,8 @@ export interface ModerationStore extends AdminStore {
   setPause(pause: Pause): Promise<void>;
   /** Tightens the rate limits as set in it, or lets them go back. */
   setTighten(tighten: Tighten): Promise<void>;
+  /** Bars an asset from being served (true), or lets it be again (false). */
+  setBlocked(id: string, blocked: boolean): Promise<void>;
   /** Adds a ban, or replaces the one on the same target. */
   putBan(ban: Ban): Promise<void>;
   /** Lifts a ban. False when there was none. */
@@ -115,6 +117,11 @@ export interface Moderation {
   unban(kind: BanKind, value: string): Promise<boolean>;
   /** Stops what is set in it, or starts it again. This instance reads it again at once. */
   setPause(pause: Pause): Promise<void>;
+  /**
+   * Bars an asset from being served (true), or lets it be again (false). This instance reads it again
+   * at once; the others within BAN_CACHE_MS.
+   */
+  setBlocked(id: string, blocked: boolean): Promise<void>;
   /**
    * Tightens the rate limits as set in it, or lets them go back. This instance reads it again at
    * once; the others within BAN_CACHE_MS.
@@ -165,6 +172,10 @@ export const moderationOf = (
     await store.setPause(pause);
     cache.forget();
   },
+  setBlocked: async (id, blocked) => {
+    await store.setBlocked(id, blocked);
+    cache.forget();
+  },
   setTighten: async (tighten) => {
     await store.setTighten(tighten);
     cache.forget();
@@ -198,6 +209,7 @@ export const noModeration: Moderation = {
   ban: async () => undefined,
   unban: async () => false,
   setPause: async () => undefined,
+  setBlocked: async () => undefined,
   setTighten: async () => undefined,
   note: () => undefined,
   activity: async () => [],

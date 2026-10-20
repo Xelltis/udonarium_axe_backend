@@ -69,6 +69,11 @@ export interface ModerationState {
   bans: Ban[];
   pause: Pause;
   tighten: Tighten;
+  /**
+   * The assets the operator barred from the dashboard (their SHA-256). Each instance holds them with
+   * the bans, so that a copy left in a data center's cache is not served either.
+   */
+  blocked: string[];
 }
 
 /** The body of a request to ban. */
@@ -107,11 +112,16 @@ export class BanList {
   private readonly ranges: { ban: Ban; range: AddressRange }[] = [];
   private readonly accounts = new Map<string, Ban>();
 
+  /** The assets barred from the dashboard. */
+  readonly blocked: ReadonlySet<string>;
+
   constructor(
     bans: Ban[],
     readonly pause: Pause = NO_PAUSE,
-    readonly tighten: Tighten = NO_TIGHTEN
+    readonly tighten: Tighten = NO_TIGHTEN,
+    blocked: string[] = []
   ) {
+    this.blocked = new Set(blocked);
     for (const ban of bans) {
       if (ban.kind === 'discord') {
         this.accounts.set(`${DISCORD_ACCOUNT}${ban.value}`, ban);
@@ -174,8 +184,8 @@ export const banCache = (load: () => Promise<ModerationState>, ttlMs = BAN_CACHE
   const read = async (): Promise<BanList> => {
     const number = ++begun;
     try {
-      const { bans, pause, tighten } = await load();
-      const list = new BanList(bans, pause, tighten);
+      const { bans, pause, tighten, blocked } = await load();
+      const list = new BanList(bans, pause, tighten, blocked);
       if (number > heldFrom) {
         held = list;
         heldFrom = number;
