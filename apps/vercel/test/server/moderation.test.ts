@@ -172,6 +172,16 @@ describe('a Redis store for the operator', () => {
     expect(await store.takeChallenge('x', 60_000)).toBe(false);
   });
 
+  it('remembers a session logged out of until it would have run out anyway', async () => {
+    const key = freshKey();
+    const store = redisModeration(connection.redis, key);
+
+    expect(await store.sessionEnded('a')).toBe(false);
+    await store.endSession('a', 60_000);
+    expect(await store.sessionEnded('a')).toBe(true);
+    expect(await connection.redis.pTTL(key('mod', 'ended', 'a'))).toBeGreaterThan(50_000);
+  });
+
   it('lets one instance send each kind of alert once in a while', async () => {
     const store = redisModeration(connection.redis, freshKey());
 

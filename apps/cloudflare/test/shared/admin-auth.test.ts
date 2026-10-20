@@ -462,6 +462,13 @@ describe('managing passkeys and sessions', () => {
     expect(out.status).toBe(204);
     expect(out.headers.getSetCookie().join()).toMatch(/__Host-axe-admin=;/);
 
+    // A call still on its way as the operator logs out answers with the cookie set again. The
+    // session does not come back with it.
+    const left = await sessionCookieOf();
+    expect((await callAdmin('rooms', { cookie: left })).status).toBe(200);
+    expect((await callAdmin('logout', { method: 'POST', cookie: left })).status).toBe(204);
+    expect((await callAdmin('rooms', { cookie: left })).status).toBe(401);
+
     const before = await harness.adminEpoch();
     const other = await sessionCookieOf();
     const ended = await callAdmin('sessions/revoke', { method: 'POST' });

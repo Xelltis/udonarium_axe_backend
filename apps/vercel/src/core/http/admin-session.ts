@@ -105,6 +105,21 @@ export const endSession = (c: AdminContext): void => {
   deleteCookie(c, sessionCookie(c), { path: '/', secure: overHttps(c) });
 };
 
+/**
+ * Logs out of this session: takes the cookie away, and has the store remember the session as over
+ * until it would have run out anyway. A call still on its way answers with the cookie set again, and
+ * the session must not come back with it.
+ */
+export const logOut = async (c: AdminContext): Promise<void> => {
+  const token = getCookie(c, sessionCookie(c));
+  const session = token ? readToken(token, 'admin', secretOf(c)) : null;
+  if (session) {
+    const ms = (session.start + SESSION_MAX_SECONDS) * 1000 - Date.now();
+    await c.var.backend.moderation.admin.endSession(session.sid, ms);
+  }
+  endSession(c);
+};
+
 /** The session each call came with, once it has been checked. */
 const sessions = new WeakMap<Request, AdminSession>();
 
@@ -130,11 +145,17 @@ export const sessionRequired: MiddlewareHandler<ServerEnv> = async (c, next) => 
   const { config, backend } = c.var;
   const token = getCookie(c, sessionCookie(c));
   const session = token ? readToken(token, 'admin', secretOf(c)) : null;
+  // Of the store's generation, and not logged out of.
+  const current = async ({ epoch, sid }: AdminSession) => {
+    const store = backend.moderation.admin;
+    const [now, ended] = await Promise.all([store.adminEpoch(), store.sessionEnded(sid)]);
+    return epoch === now && !ended;
+  };
   const good =
     session !== null &&
     // The dashboard is there only while there are operators (privately), so admin is set.
     (config.admin as AdminConfig).discordIds.includes(session.sub) &&
-    session.epoch === (await backend.moderation.admin.adminEpoch());
+    (await current(session));
   if (!good) {
     endSession(c);
     return fail(c, 401, 'login-required');

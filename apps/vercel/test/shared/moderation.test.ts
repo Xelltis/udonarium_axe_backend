@@ -634,6 +634,8 @@ describe('noModeration', () => {
     expect(await admin.adminEpoch()).toBe(0);
     expect(await admin.raiseAdminEpoch()).toBe(0);
     expect(await admin.takeChallenge('c', 1)).toBe(false);
+    await admin.endSession('s', 1);
+    expect(await admin.sessionEnded('s')).toBe(false);
   });
 });
 

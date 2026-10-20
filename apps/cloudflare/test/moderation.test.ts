@@ -233,6 +233,23 @@ describe('ModerationDurableObject', () => {
     expect(await store.takeChallenge('y', 0)).toBe(true);
   });
 
+  it('remembers a session logged out of until it would have run out anyway', async () => {
+    const store = freshStore();
+
+    expect(await store.sessionEnded('a')).toBe(false);
+    await store.endSession('a', 60_000);
+    await store.endSession('b', 0);
+    expect(await store.sessionEnded('a')).toBe(true);
+    expect(await store.sessionEnded('b')).toBe(false);
+    // The next one lets go of those past their time.
+    await store.endSession('c', 60_000);
+    expect(
+      await runInDurableObject(store, (_instance: ModerationDurableObject, state) =>
+        state.storage.sql.exec<{ sid: string }>('SELECT sid FROM ended_sessions ORDER BY sid').toArray()
+      )
+    ).toEqual([{ sid: 'a' }, { sid: 'c' }]);
+  });
+
   it('keeps the store’s size as last counted', async () => {
     const store = freshStore();
 

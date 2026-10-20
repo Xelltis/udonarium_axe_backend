@@ -216,6 +216,8 @@ export const noModeration: Moderation = {
     adminEpoch: async () => 0,
     raiseAdminEpoch: async () => 0,
     takeChallenge: async () => false,
+    endSession: async () => undefined,
+    sessionEnded: async () => false,
   },
 };
 

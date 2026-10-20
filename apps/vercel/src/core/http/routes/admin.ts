@@ -9,13 +9,7 @@ import type { Activity } from '../../moderation/activity.js';
 import { BAN_KINDS, banRequestSchema, banValueOf, discordIdOf } from '../../moderation/bans.js';
 import type { Ban } from '../../moderation/bans.js';
 import type { Seat } from '../../rooms/host.js';
-import {
-  endSession,
-  fromDashboard,
-  passkeyRequired,
-  recentPasskeyRequired,
-  sessionRequired,
-} from '../admin-session.js';
+import { fromDashboard, logOut, passkeyRequired, recentPasskeyRequired, sessionRequired } from '../admin-session.js';
 import type { AdminRoom, ServerEnv } from '../backend.js';
 import { fail } from '../errors.js';
 import { adminLoginRoutes, adminPasskeyRoutes, adminSecurityRoutes, noteAdmin } from './admin-auth.js';
@@ -113,8 +107,8 @@ export const adminRoutes = (): Hono<ServerEnv> => {
 
   admin.use('/api/*', fromDashboard, loginAvailable);
   /** Ends this session. It needs none that is still good, so that a page left open can always leave. */
-  admin.post('/api/logout', (c) => {
-    endSession(c);
+  admin.post('/api/logout', async (c) => {
+    await logOut(c);
     return c.body(null, 204);
   });
   admin.use('/api/*', sessionRequired);

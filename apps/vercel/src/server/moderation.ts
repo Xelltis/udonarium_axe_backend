@@ -34,6 +34,8 @@ import type { KeyOf, Redis } from './redis.js';
 //   mod:passkeys      HASH    credential id → JSON of an operator's passkey.
 //   mod:admin-epoch   STRING  The generation of the operators' sessions (raised to end them all).
 //   mod:challenge:<c> STRING  There once a passkey challenge has been answered, until it runs out.
+//   mod:ended:<sid>   STRING  There once an operator has logged out of that session, until it would
+//                             have run out anyway.
 //   mod:pause         HASH    What the operator has stopped for now: rooms, uploads, logins ("1"), and since.
 //   mod:storage       STRING  JSON of the store's size as last counted (once a day, by the sweep).
 //   mod:tighten       HASH    How tight each rate limit is: upload, read, room, auth (1, 2, 4 or 10), and since.
@@ -260,6 +262,14 @@ export const redisModeration = (redis: Redis, key: KeyOf): ModerationStore => {
         expiration: { type: 'PX', value: ms },
       });
       return taken !== null;
+    },
+
+    async endSession(sid, ms) {
+      await redis.set(key('mod', 'ended', sid), '1', { expiration: { type: 'PX', value: ms } });
+    },
+
+    async sessionEnded(sid) {
+      return (await redis.exists(key('mod', 'ended', sid))) > 0;
     },
   };
 };

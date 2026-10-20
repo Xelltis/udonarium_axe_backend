@@ -111,6 +111,11 @@ export class ModerationDurableObject extends DurableObject<Env> {
       challenge TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL
     )`);
+    // The sessions logged out of, until they would have run out anyway.
+    sql.exec(`CREATE TABLE IF NOT EXISTS ended_sessions (
+      sid TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    )`);
     // When each kind of alert was last sent, so that every instance together sends it once in a while.
     sql.exec(`CREATE TABLE IF NOT EXISTS alerts (
       kind TEXT PRIMARY KEY,
@@ -280,6 +285,22 @@ export class ModerationDurableObject extends DurableObject<Env> {
     return (
       sql.exec('INSERT OR IGNORE INTO challenges (challenge, expires_at) VALUES (?, ?)', challenge, now + ms)
         .rowsWritten > 0
+    );
+  }
+
+  /** Remembers a session logged out of. Those past their time are let go on the way. */
+  endSession(sid: string, ms: number): void {
+    const sql = this.ctx.storage.sql;
+    const now = Date.now();
+    sql.exec('DELETE FROM ended_sessions WHERE expires_at <= ?', now);
+    sql.exec('INSERT OR REPLACE INTO ended_sessions (sid, expires_at) VALUES (?, ?)', sid, now + ms);
+  }
+
+  sessionEnded(sid: string): boolean {
+    return (
+      this.ctx.storage.sql
+        .exec('SELECT 1 FROM ended_sessions WHERE sid = ? AND expires_at > ?', sid, Date.now())
+        .toArray().length > 0
     );
   }
 

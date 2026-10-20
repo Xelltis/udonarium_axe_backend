@@ -16,4 +16,8 @@ export interface AdminStore {
   raiseAdminEpoch(): Promise<number>;
   /** Takes a passkey challenge: true the first time, false once taken (it is kept for ms). */
   takeChallenge(challenge: string, ms: number): Promise<boolean>;
+  /** Remembers for ms that a session (by its sid) was logged out of, so that it is over. */
+  endSession(sid: string, ms: number): Promise<void>;
+  /** Whether a session was logged out of. */
+  sessionEnded(sid: string): Promise<boolean>;
 }
