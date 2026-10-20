@@ -114,6 +114,8 @@ describe('the dashboard page', () => {
     expect(policy).toContain("default-src 'none'");
     expect(policy).toContain("connect-src 'self'");
     expect(policy).toContain("frame-ancestors 'none'");
+    // A picture shown from a blob: URL would have the page's origin, and an SVG opened from it runs.
+    expect(policy).not.toMatch(/img-src [^;]*blob:/);
     expect(html).toContain(`<script nonce="${nonce}">`);
     expect(html).toContain(`<style nonce="${nonce}">`);
     expect(second.headers.get('Content-Security-Policy')).not.toBe(policy);

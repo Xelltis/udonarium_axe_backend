@@ -1894,10 +1894,22 @@ const SCRIPT = `
       return res.blob();
     }).then(function (blob) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      previewUrl = URL.createObjectURL(blob);
-      body.replaceChildren(asset.type.indexOf('audio/') === 0
-        ? h('audio', { controls: true, src: previewUrl })
-        : h('img', { className: 'preview', src: previewUrl, alt: assetLabel(asset) }));
+      previewUrl = null;
+      if (asset.type.indexOf('audio/') === 0) {
+        previewUrl = URL.createObjectURL(blob);
+        body.replaceChildren(h('audio', { controls: true, src: previewUrl }));
+        return;
+      }
+      // A picture is shown from a data: URL, never a blob: one. A blob: URL has this page's origin,
+      // so an SVG opened from it in a tab of its own would run its script with the operator's
+      // session. A data: URL has no origin of its own, and a tab cannot be opened on it.
+      var reader = new FileReader();
+      reader.onload = function () {
+        if (!$('asset-dialog').open) return;
+        body.replaceChildren(h('img', { className: 'preview', src: reader.result, alt: assetLabel(asset) }));
+      };
+      reader.onerror = function () { body.replaceChildren(h('p', { className: 'error' }, '中身を読めませんでした。')); };
+      reader.readAsDataURL(blob);
     }).catch(function (err) { body.replaceChildren(h('p', { className: 'error' }, messageOf(err))); });
   }
 
@@ -2702,7 +2714,7 @@ export const adminPagePolicy = (nonce: string): string =>
     `script-src 'nonce-${nonce}'`,
     `style-src 'nonce-${nonce}'`,
     "connect-src 'self'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data:",
     'media-src blob:',
     "base-uri 'none'",
     "form-action 'none'",
