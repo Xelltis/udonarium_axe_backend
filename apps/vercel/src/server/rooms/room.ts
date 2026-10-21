@@ -1,5 +1,7 @@
 import { COME_BACK_CODE } from '../../../contracts/protocol.js';
 import type { AssetUploadPolicy, PeerRole } from '../../../contracts/protocol.js';
+import { seatBarredBy } from '../../core/moderation/bans.js';
+import type { Ban, BanList } from '../../core/moderation/bans.js';
 import { RoomEngine } from '../../core/rooms/engine.js';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../../core/rooms/host.js';
 import type { TombstoneLimits } from '../../core/rooms/object-index.js';
@@ -50,6 +52,8 @@ export interface Conn {
   seat: Seat | null;
   /** The instance, for a WebSocket that landed on another instance. Not set for one on this instance. */
   readonly instance?: string;
+  /** The sender's IP address, for the operator's bans. */
+  readonly address?: string;
 }
 
 /** What came of trying to open a room. When another instance is the owner, that instance. */
@@ -70,6 +74,8 @@ export interface RoomDeps {
   assetUpload: AssetUploadPolicy | null;
   /** Deletes a room's assets when the room is deleted. */
   deleteAssets: (roomKey: string) => Promise<void>;
+  /** The operator's bans as they stand, read for each hello. Never fails (those read last, then). */
+  readBans: () => Promise<BanList>;
   /** Work that goes on to the end even after the response is sent. */
   defer: (work: Promise<unknown>) => void;
   tombstoneLimits?: TombstoneLimits;
@@ -217,6 +223,11 @@ export class VercelRoom implements RoomHost<Conn> {
     this.engine.accept(conn);
   }
 
+  /** Closes the connections the operator's ban covers. Returns how many it closed. */
+  expel(ban: Ban): number {
+    return this.engine.expel(seatBarredBy(ban));
+  }
+
   receive(conn: Conn, message: string | Uint8Array): void {
     this.engine.receive(conn, message);
   }
@@ -257,25 +268,27 @@ export class VercelRoom implements RoomHost<Conn> {
   // ---- Deleting ----
 
   /**
-   * Deletes the room. Only a GM of the room can delete it. Sends room-deleted to the people in it
-   * before closing them, takes the room off the list and deletes everything it kept.
+   * Deletes the room. Only a GM of the room can delete it, or the operator (userId null). Sends
+   * room-deleted to the people in it before closing them, takes the room off the list and deletes
+   * everything it kept.
    */
-  async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
+  async deleteRoom(userId: string | null): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     if (!this.meta || this.deleting) return 'not-found';
-    if (this.roleMap.get(userId) !== 'gm') return 'not-game-master';
-    this.record('delete', 'gm', this.engine.seats().length);
+    if (userId !== null && this.roleMap.get(userId) !== 'gm') return 'not-game-master';
+    this.record('delete', userId === null ? 'operator' : 'gm', this.engine.seats().length);
     this.engine.closeAll();
     await this.wipe();
     return 'deleted';
   }
 
   /**
-   * A GM of this room deleted it on another instance (that instance checked, and also marked it to
-   * be deleted). Sends room-deleted to the people in it before closing them, and deletes the rest.
+   * A GM of this room, or the operator, deleted it on another instance (that instance checked, and
+   * also marked it to be deleted). Sends room-deleted to the people in it before closing them, and
+   * deletes the rest.
    */
-  async deletedElsewhere(): Promise<void> {
+  async deletedElsewhere(byOperator = false): Promise<void> {
     if (!this.meta || this.deleting) return;
-    this.record('delete', 'gm', this.engine.seats().length);
+    this.record('delete', byOperator ? 'operator' : 'gm', this.engine.seats().length);
     this.engine.closeAll();
     await this.wipe();
   }
@@ -354,6 +367,10 @@ export class VercelRoom implements RoomHost<Conn> {
 
   seatOf(conn: Conn): Seat | null {
     return conn.seat;
+  }
+
+  addressOf(conn: Conn): string | undefined {
+    return conn.address;
   }
 
   setSeat(conn: Conn, seat: Seat): void {
@@ -458,6 +475,14 @@ export class VercelRoom implements RoomHost<Conn> {
         value,
       })
     );
+  }
+
+  listed(): Promise<void> {
+    return this.lobbyQueue;
+  }
+
+  bans(): Promise<BanList> {
+    return this.deps.readBans();
   }
 
   defer(work: Promise<unknown>): void {

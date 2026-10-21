@@ -38,7 +38,11 @@ const fakeUpgrade = (upgrades: Upgrades, request: Request) => {
 };
 
 describe('the Vercel backend', () => {
-  it('answers whether a user may upload from the seats its holder wrote, while the room is held elsewhere', async () => {
+  it('has nobody in a room that is not there', async () => {
+    expect(await vercelBackend(await depsOf(connection.redis)).rooms.seats('missing')).toEqual([]);
+  });
+
+  it('answers whether a user may upload or take out from the seats its holder wrote, while the room is held elsewhere', async () => {
     const deps = await depsOf(connection.redis);
     const backend = vercelBackend(deps);
     await backend.rooms.create(init('held'));
@@ -53,6 +57,9 @@ describe('the Vercel backend', () => {
     expect(await backend.rooms.canUpload('held', 'user-gm')).toBe('ok');
     expect(await backend.rooms.canUpload('held', 'user-guest')).toBe('not-a-player');
     expect(await backend.rooms.canUpload('missing', 'user-pl')).toBe('room-not-found');
+    expect(await backend.rooms.canDiscard('held', 'user-gm')).toBe('ok');
+    expect(await backend.rooms.canDiscard('held', 'user-pl')).toBe('not-game-master');
+    expect(await backend.rooms.canDiscard('missing', 'user-gm')).toBe('room-not-found');
   });
 
   it('lists and finds no room past its retention, or already gone', async () => {
@@ -109,6 +116,7 @@ describe('the backend without a store', () => {
     expect(await backend.lobby.find('r')).toBeNull();
     expect(await backend.rooms.remove('r', 'u')).toBe('not-found');
     expect(await backend.rooms.canUpload('r', 'u')).toBe('room-not-found');
+    expect(await backend.rooms.canDiscard('r', 'u')).toBe('room-not-found');
     expect((await backend.rooms.connect(upgradeRequest(), 'r')).status).toBe(426);
     expect(decodeFrame(socket.sent[0] as Uint8Array)).toMatchObject({ code: 'room-not-found' });
     expect(socket.closed).toEqual({ code: 4000, reason: 'room-not-found' });

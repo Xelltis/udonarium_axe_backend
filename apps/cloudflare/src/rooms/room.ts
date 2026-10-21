@@ -7,7 +7,10 @@ import { parseConfig } from '../config';
 import { hashPassword } from '../core/rooms/password';
 import { RoomEngine } from '../core/rooms/engine';
 import type { RoomInit } from '../core/http/backend';
+import { banCache, seatBarredBy } from '../core/moderation/bans';
+import type { Ban, BanList } from '../core/moderation/bans';
 import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../core/rooms/host';
+import { MODERATION_NAME } from '../moderation/store';
 import { LOBBY_NAME } from './lobby';
 import { RoomStore, migrate } from './store';
 
@@ -44,6 +47,8 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
    */
   private deleting = false;
   private readonly engine = new RoomEngine<WebSocket>(this);
+  /** The operator's bans, read afresh for each hello. */
+  private readonly banned = banCache(() => this.env.MODERATION.getByName(MODERATION_NAME).state());
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -87,27 +92,31 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     );
     // When nobody comes in, the room goes after the retention period, as when everyone in it has left.
     await this.ctx.storage.setAlarm(Date.now() + this.retentionMs());
-    await this.lobby().register({
-      roomKey: init.roomKey,
-      roomId: init.roomId,
-      name: init.name,
-      hasPassword: password !== null,
-      members: 0,
-    });
+    await this.lobby().register(
+      {
+        roomKey: init.roomKey,
+        roomId: init.roomId,
+        name: init.name,
+        hasPassword: password !== null,
+        members: 0,
+      },
+      init.creator
+    );
     await this.lobby().setGameMasters(init.roomKey, [init.creatorUserId]);
   }
 
   /**
    * Deletes the room. Called from the Worker's DELETE /v1/rooms/:roomKey. Only a GM of the room can
-   * delete it. The people in it are sent room-deleted and then closed, and as when the retention period
-   * has passed, the room is taken off the list and everything kept is deleted.
+   * delete it, or the operator (userId null) from the dashboard. The people in it are sent
+   * room-deleted and then closed, and as when the retention period has passed, the room is taken off
+   * the list and everything kept is deleted.
    */
-  async deleteRoom(userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
+  async deleteRoom(userId: string | null): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const room = this.roomRow();
     if (!room || this.deleting) return 'not-found';
-    if (this.roles.roleOf(userId) !== 'gm') return 'not-game-master';
+    if (userId !== null && this.roles.roleOf(userId) !== 'gm') return 'not-game-master';
 
-    this.record('delete', 'gm', this.engine.seats().length);
+    this.record('delete', userId === null ? 'operator' : 'gm', this.engine.seats().length);
     this.engine.closeAll();
     await this.wipe(room.room_key);
     return 'deleted';
@@ -122,13 +131,84 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.engine.canUpload(userId);
   }
 
+  /** Whether someone taking an asset out of this room is its GM now. Asked from the asset DELETE. */
+  canDiscard(userId: string): 'ok' | 'room-not-found' | 'not-game-master' {
+    return this.engine.canDiscard(userId);
+  }
+
+  // ---- What the room's assets take up ----
+  // Kept as they are stored and taken out, so that the room's limit (ROOM_STORAGE_LIMIT_MB) is
+  // checked without listing them in R2. Each asset's size is kept by its id, so that one stored or
+  // taken out twice (as by requests at the same moment) counts once. It is counted by listing once,
+  // the first time it is asked for, and goes with the rest of the room.
+
+  /** The bytes the room's assets take up, or null while not counted yet (or when the room is gone). */
+  assetBytes(): number | null {
+    if (!this.roomRow() || !this.assetBytesCounted()) return null;
+    return this.ctx.storage.sql.exec<{ bytes: number }>('SELECT bytes FROM asset_bytes').one().bytes;
+  }
+
+  /** Counts an asset stored, once the room has been counted, unless it is counted already. */
+  keepAsset(id: string, size: number): void {
+    if (!this.roomRow() || !this.assetBytesCounted()) return;
+    const sql = this.ctx.storage.sql;
+    if (sql.exec('INSERT OR IGNORE INTO asset_sizes (id, size) VALUES (?, ?)', id, size).rowsWritten > 0) {
+      sql.exec('UPDATE asset_bytes SET bytes = bytes + ?', size);
+    }
+  }
+
+  /** Takes an asset taken out off the count, when it is counted. */
+  dropAsset(id: string): void {
+    if (!this.roomRow() || !this.assetBytesCounted()) return;
+    const sql = this.ctx.storage.sql;
+    const [gone] = sql.exec<{ size: number }>('DELETE FROM asset_sizes WHERE id = ? RETURNING size', id).toArray();
+    if (gone) sql.exec('UPDATE asset_bytes SET bytes = bytes - ?', gone.size);
+  }
+
   /**
-   * Takes a WebSocket connection, which the Worker passes on after checking the Origin and the rate
-   * limit. Even when there is no room or it is full, it connects, sends the reason, and then closes.
+   * Keeps what listing found, unless the room has been counted meanwhile. Returns what the room
+   * stands at. Nothing is kept for a room that is gone.
    */
-  override async fetch(): Promise<Response> {
+  countAssetBytes(assets: { id: string; size: number }[]): number {
+    const listed = assets.reduce((sum, asset) => sum + asset.size, 0);
+    if (!this.roomRow()) return listed;
+    const sql = this.ctx.storage.sql;
+    sql.exec('CREATE TABLE IF NOT EXISTS asset_bytes (id INTEGER PRIMARY KEY CHECK (id = 1), bytes INTEGER NOT NULL)');
+    sql.exec('CREATE TABLE IF NOT EXISTS asset_sizes (id TEXT PRIMARY KEY, size INTEGER NOT NULL)');
+    if (sql.exec('INSERT OR IGNORE INTO asset_bytes (id, bytes) VALUES (1, ?)', listed).rowsWritten > 0) {
+      for (const { id, size } of assets)
+        sql.exec('INSERT OR IGNORE INTO asset_sizes (id, size) VALUES (?, ?)', id, size);
+    }
+    return sql.exec<{ bytes: number }>('SELECT bytes FROM asset_bytes').one().bytes;
+  }
+
+  private assetBytesCounted(): boolean {
+    return (
+      this.ctx.storage.sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'asset_bytes'").toArray()
+        .length > 0
+    );
+  }
+
+  /** Who is in the room now, for the operator's dashboard. */
+  seats(): Seat[] {
+    return this.engine.seats().map(({ seat }) => seat);
+  }
+
+  /** Closes the connections the operator's ban covers. Returns how many it closed. */
+  expel(ban: Ban): number {
+    return this.engine.expel(seatBarredBy(ban));
+  }
+
+  /**
+   * Takes a WebSocket connection, which the Worker passes on after checking the Origin, the bans and
+   * the rate limit. Even when there is no room or it is full, it connects, sends the reason, and then
+   * closes. Its hello is checked against the bans as they stand (bans).
+   */
+  override async fetch(request: Request): Promise<Response> {
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server);
+    // The sender's address goes in the socket's tags, which outlast the room sleeping before the hello.
+    const address = request.headers.get('CF-Connecting-IP');
+    this.ctx.acceptWebSocket(server, address === null ? [] : [address]);
     this.engine.accept(server);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -246,6 +326,10 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     ws.serializeAttachment(seat);
   }
 
+  addressOf(ws: WebSocket): string | undefined {
+    return this.ctx.getTags(ws)[0];
+  }
+
   send(ws: WebSocket, frame: Uint8Array): void {
     try {
       ws.send(frame);
@@ -354,6 +438,14 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       blobs: [room.host, event, detail],
       doubles: [value],
     });
+  }
+
+  listed(): Promise<void> {
+    return this.lobbyQueue;
+  }
+
+  bans(): Promise<BanList> {
+    return this.banned.fresh();
   }
 
   defer(work: Promise<unknown>): void {

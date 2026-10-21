@@ -4,3 +4,14 @@ DISCORD_CLIENT_ID=
 DISCORD_CLIENT_SECRET=
 # トークンに署名する鍵。32文字以上の乱数（例：openssl rand -base64 48）
 SESSION_SECRET=
+# 管理画面（/admin）に入れる運営する人のDiscordのユーザーID（カンマ区切り）。入れると、手元でも管理画面とBANを試せる
+# DiscordのアプリのRedirectsに http://localhost:8787/admin/login/callback も足す
+ADMIN_DISCORD_IDS=
+# 運営する人への知らせを送るDiscordのWebhookのURL（https://discord.com/api/webhooks/…）。入れなければ知らせは送らない
+ADMIN_WEBHOOK_URL=
+# 画像と音声の置き場所がこの量（GB）を超えたら知らせる。入れなければ数えない（手元では定期実行が動かない）
+ADMIN_STORAGE_ALERT_GB=
+# 1つの部屋に置ける画像と音声の合計（MB）。入れなければ合計の上限は無い
+ROOM_STORAGE_LIMIT_MB=
+# BANや緊急停止で断った人に見せる問い合わせ先（https:// のページか mailto:）。入れなければ出さない
+ADMIN_CONTACT_URL=

@@ -6,33 +6,40 @@
 
 ## エンドポイントの一覧
 
-| メソッド  | パス                                                 | 内容                                                           |
-| --------- | ---------------------------------------------------- | -------------------------------------------------------------- |
-| `POST`    | `/v1/rooms`                                          | 部屋を作る                                                     |
-| `GET`     | `/v1/rooms`                                          | 部屋の一覧                                                     |
-| `GET`     | `/v1/rooms/:roomKey`                                 | 部屋を鍵で1つ引く                                              |
-| `DELETE`  | `/v1/rooms/:roomKey`                                 | 部屋を削除する（その部屋のGMだけ）                             |
-| `GET`     | `/v1/rooms/:roomKey/ws`                              | 部屋に入る（WebSocketにつなぎ替える）                          |
-| `HEAD`    | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットが置かれているか                                 |
-| `GET`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットの中身                                           |
-| `PUT`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットを置く（その部屋のGMとPLだけ）                   |
-| `GET`     | `/v1/rooms/:roomKey/assets`                          | 部屋に置いてあるアセットの一覧                                 |
-| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads`          | 置き場所へ直接上げる先を受け取る（Vercel版だけ）               |
-| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads/complete` | 直接上げ終えたことを知らせる（Vercel版だけ）                   |
-| `GET`     | `/v1/auth/config`                                    | ログインに使える提供元（`{"providers":["discord"]}`）          |
-| `GET`     | `/v1/login/discord`                                  | ログインを始める（ページとして開く）                           |
-| `GET`     | `/v1/login/discord/callback`                         | Discordから戻ってくる（Discordのアプリに登録するURL）          |
-| `POST`    | `/v1/auth/token`                                     | ログインのコードかリフレッシュトークンを、トークンの組に替える |
-| `POST`    | `/v1/auth/logout`                                    | ログアウト。そのリフレッシュトークンの系統を無効にする         |
-| `GET`     | `/v1/account`                                        | ログインしている人                                             |
-| `DELETE`  | `/v1/account`                                        | アカウントを消す                                               |
-| `OPTIONS` | 上のパス                                             | ブラウザのプリフライトに答える                                 |
+| メソッド  | パス                                                 | 内容                                                                                |
+| --------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `POST`    | `/v1/rooms`                                          | 部屋を作る                                                                          |
+| `GET`     | `/v1/rooms`                                          | 部屋の一覧                                                                          |
+| `GET`     | `/v1/rooms/:roomKey`                                 | 部屋を鍵で1つ引く                                                                   |
+| `DELETE`  | `/v1/rooms/:roomKey`                                 | 部屋を削除する（その部屋のGMだけ）                                                  |
+| `GET`     | `/v1/rooms/:roomKey/ws`                              | 部屋に入る（WebSocketにつなぎ替える）                                               |
+| `HEAD`    | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットが置かれているか                                                      |
+| `GET`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットの中身                                                                |
+| `PUT`     | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットを置く（その部屋のGMとPLだけ）                                        |
+| `DELETE`  | `/v1/rooms/:roomKey/assets/:sha256`                  | 部屋のアセットを消す（その部屋のGMだけ）                                            |
+| `GET`     | `/v1/rooms/:roomKey/assets`                          | 部屋に置いてあるアセットの一覧                                                      |
+| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads`          | 置き場所へ直接上げる先を受け取る（Vercel版だけ）                                    |
+| `POST`    | `/v1/rooms/:roomKey/assets/:sha256/uploads/complete` | 直接上げ終えたことを知らせる（Vercel版だけ）                                        |
+| `POST`    | `/v1/rooms/:roomKey/reports`                         | 運営する人に通報する（部屋の席ならだれでも）                                        |
+| `GET`     | `/v1/auth/config`                                    | ログインに使える提供元（`{"providers":["discord"]}`）                               |
+| `GET`     | `/v1/login/discord`                                  | ログインを始める（ページとして開く）                                                |
+| `GET`     | `/v1/login/discord/callback`                         | Discordから戻ってくる（Discordのアプリに登録するURL）                               |
+| `POST`    | `/v1/auth/token`                                     | ログインのコードかリフレッシュトークンを、トークンの組に替える                      |
+| `POST`    | `/v1/auth/logout`                                    | ログアウト。そのリフレッシュトークンの系統を無効にする                              |
+| `GET`     | `/v1/account`                                        | ログインしている人                                                                  |
+| `DELETE`  | `/v1/account`                                        | アカウントを消す                                                                    |
+| `GET`     | `/v1/contact`                                        | 運営する人に断られたときの問い合わせ先（`{"contact":"https://…"}`、無ければ`null`） |
+| `OPTIONS` | 上のパス                                             | ブラウザのプリフライトに答える                                                      |
+| `GET`     | `/admin`                                             | 運営する人の管理画面（→ [管理画面のAPI](#管理画面のapi)）                           |
 
 ## 共通の決まり
 
 - ログインを始めるページ（`/v1/login/discord`）と、Discordから戻ってくるページ（`/v1/login/discord/callback`）のほかは、どれも`ACCESS_CONTROL_ALLOW_ORIGIN`に書いたOriginのページからしか受けません。ほかのOriginには`403 origin-not-allowed`を返します。この2つはブラウザがページとして開くもので、戻り先を許可したOriginに限ることで守ります。
 - 許可したOriginからのプリフライトには`204`で答え、`Access-Control-Allow-Headers`で`Content-Type`、`Authorization`、`X-Asset-Name`を許します。`Access-Control-Max-Age: 86400`（1日）を付けます。
 - `:roomKey`は部屋の鍵で、小文字の16進で書いた32文字です。`:sha256`は、中身のSHA-256を小文字の16進で書いた64文字です。どちらかの形が違えば`400 invalid-id`を返します。
+- 運営する人がBANした送信元には、どれにも`403 banned`を返します。ログインの2つのページは、Axeの戻り先に`login_error=banned`を付けて戻します（→ [管理画面とBAN](/operate/admin#banで止まるもの)）。
+- 運営する人が緊急停止しているあいだは、止めたもの（部屋を作る、部屋のアセットを置く）に`503 paused`を返します。新しいログインを止めているときは、Discordから戻ってくるページが、Axeの戻り先に`login_error=paused`を付けて戻します（→ [緊急停止](/operate/admin#緊急停止)）。
+- `ADMIN_CONTACT_URL`を入れていると、`403 banned`と`503 paused`の本文に問い合わせ先を足します（`{"error":"banned","contact":"https://…"}`）。ログインの戻り先にも、`login_error=banned`と`login_error=paused`のときは`login_contact=<問い合わせ先>`を足します。`GET /v1/contact`は、BANした送信元からも読めます。
 - エラーの本文は`{"error":"<コード>"}`の形です（→ [エラー](#エラー)）。
 - 設定が読めないときは、`/v1/`の下のすべてのリクエストに`500 config-invalid`を返します（→ [設定項目](/server/configuration)）。
 
@@ -69,6 +76,7 @@ Content-Type: application/json
 | ----- | ------------------------------- | ------------------------------------------------------ |
 | `400` | `{"error":"invalid-request"}`   | 本文がJSONでない、名前やパスワードの形が違う           |
 | `401` | `{"error":"login-required"}`    | アクセストークンが無いか、無効か、期限切れ             |
+| `403` | `{"error":"banned"}`            | 運営する人が、そのDiscordのアカウントか送信元をBANした |
 | `429` | `{"error":"rate-limited"}`      | 送信元から部屋を作る・入る・削除する回数が上限を超えた |
 | `503` | `{"error":"login-unavailable"}` | この部屋のサーバーにログインが置かれていない           |
 
@@ -167,6 +175,7 @@ PLをGMにしたときのように役割が変わったときも、サーバー�
 
 読む（HEAD・GET）のは、その部屋の席にいる人ならだれでも（GM・PL・見学）できます。
 置く（PUT）のはGMとPLだけで、見学のトークンには`403 not-a-player`を返します。
+消す（DELETE）のはGMだけです（→ [`DELETE`](#delete-v1-rooms-roomkey-assets-sha256)）。
 PUTのときは、部屋がまだあり、その人がいまGMかPLとして席にいるかを部屋のサーバーに尋ねます。トークンの期限が残っていても、部屋を削除したあとは`404 room-not-found`、見学に変えられた人や部屋から抜けた人には`403 not-a-player`を返します。Vercel版では、部屋を受け持つインスタンスが替わってから、その人が部屋に入り直すまでのあいだも、GMやPLに`403 not-a-player`を返します。入り直したあとに試し直せば置けます。
 トークンが無いとき、切れたとき、ほかの部屋のものだったときは、`401 asset-token-required`を返します。
 ハッシュや部屋の鍵を知っていても、トークンが無ければ読めません。
@@ -223,6 +232,7 @@ SVGのときだけ、`Content-Security-Policy: default-src 'none'; img-src data:
 
 `If-None-Match`は、弱いETag（`W/"…"`）、複数のETagの並び、`*`も受け付けます。
 置かれていないものには、条件にかかわらず`404`を返します。
+ただし、運営する人が置かせないようにしたもの（→ [管理画面とBAN](/operate/admin#アップロード)）には、`451 blocked`を返します。HEADも同じです。
 
 #### キャッシュ（Cloudflare版）
 
@@ -270,6 +280,25 @@ SVGは、BOM・XML宣言・コメント・DOCTYPEを読み飛ばしたあと、�
 これらの前置きは、先頭から4KiBに収まっている必要があります。
 MP4やMOVの動画は受け付けません。
 理由は[安全のしくみ](/operate/security#形式の判定)にあります。
+
+### `DELETE /v1/rooms/:roomKey/assets/:sha256`
+
+部屋に置いてある画像か音声を1つ、部屋から消します。消せるのは、その部屋のGMだけです。
+
+```http
+DELETE /v1/rooms/<部屋の鍵>/assets/<sha256>
+Origin: https://axe.example.com
+Authorization: Bearer <アセットのトークン>
+```
+
+`204`を返します。その部屋に置かれていなかったときも`204`です。
+
+- トークンに入っている役割は見ません。その人がいまGMとして席にいるかを、部屋のサーバーに尋ねます。PLと見学、GMでなくなった人、部屋から抜けた人には`403 not-game-master`を返します。Vercel版では、部屋を受け持つインスタンスが替わってから、その人が部屋に入り直すまでのあいだも同じです。
+- 部屋が無ければ`404 room-not-found`を返します。
+- 送信元ごとのアップロードの回数に数えます。超えると`429 rate-limited`を返します。
+- 運営する人が画像と音声を置くことを止めているあいだも、消せます。
+- 消したあとは、その部屋の席がHEADやGETで読んでも`404 not-found`です。ただしCloudflare版では、データセンターのキャッシュに残った写しを返すことがあります（→ [キャッシュ](/operate/#キャッシュ-cloudflare版)）。
+- 同じものを、また置くことは止めません。二度と置かせないようにできるのは、運営する人だけです（→ [アップロード](/operate/admin#アップロード)）。
 
 ### `GET /v1/rooms/:roomKey/assets`
 
@@ -320,10 +349,39 @@ MP4やMOVの動画は受け付けません。
 5. 部屋のサーバーが中身の形式・大きさ・SHA-256を確かめ、置けたら`201`（`"status":"stored"`）を返します。
 
 - 確かめる順とコードは`PUT`と同じです。数を絞るのは、1で尋ねたときだけです。
+- 部屋の画像と音声の合計（`ROOM_STORAGE_LIMIT_MB`）は、1で尋ねたときと、4で知らせたときの両方で確かめます。続けて受け取った`ticket`は、どれも互いを数えずに通るためです。
 - `ticket`は、部屋・アセット・その人・大きさの約束で、15分で切れます。ほかの部屋やアセット、ほかの人のものは`400 invalid-request`になります。
 - `upload`の先が使えるのは`expiresAt`（Unixミリ秒）までです。置き場所が、大きさと期限と上書きしないことを確かめます。
 - 上げていないうちに知らせると`404 not-found`です。上げたものは、確かめたあと（置けても置けなくても）消します。
+- 1つの`ticket`で知らせられるのは1回だけです。上げていないうちに知らせた（`404 not-found`）ときだけは、上げてからもう一度知らせられます。置けたあとに知らせ直すと`200`（`"status":"exists"`）、置けなかったあとは`400 invalid-request`です。置けなかったときは、1からやり直します。
 - 直接上げる流れの無い部屋のサーバーでは、どちらのパスも`404 not-found`です。
+
+## 通報
+
+### `POST /v1/rooms/:roomKey/reports`
+
+部屋にいる人が、部屋の画像か音声、または部屋そのものを、運営する人に知らせます。
+部屋のアセットのトークン（→ [部屋のアセットのトークン](#部屋のアセットのトークン)）で呼び、GM・PL・見学のだれでも通報できます。
+
+```json
+{ "target": "asset", "assetId": "0f0f…（SHA-256）", "reason": "他人の描いた絵を、作者に断らずに置いています" }
+```
+
+| フィールド | 型     | 内容                                       |
+| ---------- | ------ | ------------------------------------------ |
+| `target`   | 文字列 | `asset`（画像か音声）か`room`（部屋）      |
+| `assetId`  | 文字列 | `asset`のときだけ。その画像か音声のSHA-256 |
+| `reason`   | 文字列 | 理由。前後の空白を除いて1〜500文字         |
+
+`201`で`{"id":"…"}`を返します。
+部屋のサーバーは、通報した人（送信元のIPアドレス、ログインしていればDiscordのユーザーID、部屋のユーザーIDと役割）も一緒に残します。虚偽の通報をくり返す人を見分けて、BANできるようにするためです（→ [管理画面とBAN](/operate/admin#通報)）。
+
+- 形が違えば`400 invalid-request`、トークンが無いか違う部屋のものなら`401 asset-token-required`を返します。
+- 送信元ごとに、部屋を作る・入ると同じ回数の上限（1分に30回）に数えます。超えると`429 rate-limited`です。
+- 同じ人（ログインしていればDiscordのアカウント、していなければ送信元。IPv6は/64ごと）の通報は、24時間に20件まで預かります。超えると`429 rate-limited`を返し、預かりません。
+- 預かる通報は1000件までです。超えたときは、ログインしている人の通報としていない人の通報のうち、半分を超えているほうから消します。その中で、いちばん多く預けている人（同じ数なら、いちばん古い通報のある人）の、いちばん古い通報から消します。ログインしていない人は、送信元をIPv6なら/48、IPv4なら/24でまとめて1人と数えます。
+- こうすると、片方から通報を送り続けても、もう一方の通報は半分まで残ります。同じ側の中では、多く送った人の通報から消えます。
+- BANされたアカウントのトークンには`403 banned`を返します。
 
 ## ログインとアカウント
 
@@ -361,12 +419,12 @@ MP4やMOVの動画は受け付けません。
 部屋の`hello`の`userId`にはこれを使います。
 手札やインベントリが、端末やタブをまたいでも同じ人のものになります。
 
-| 状態  | コード              | 起きるとき                                               |
-| ----- | ------------------- | -------------------------------------------------------- |
-| `400` | `invalid-request`   | 本文の形が違う                                           |
-| `400` | `invalid-grant`     | コードかリフレッシュトークンが、無効・使用済み・期限切れ |
-| `429` | `rate-limited`      | 送信元から1分に60回を超えた                              |
-| `503` | `login-unavailable` | ログインが置かれていない                                 |
+| 状態  | コード              | 起きるとき                                                                                             |
+| ----- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `400` | `invalid-request`   | 本文の形が違う                                                                                         |
+| `400` | `invalid-grant`     | コードかリフレッシュトークンが、無効・使用済み・期限切れ。運営する人がそのDiscordのアカウントをBANした |
+| `429` | `rate-limited`      | 送信元から1分に60回を超えた                                                                            |
+| `503` | `login-unavailable` | ログインが置かれていない                                                                               |
 
 ### アカウントを消す
 
@@ -384,43 +442,134 @@ Axeはログインした人のカーソルにアカウントの名前とアバ�
 
 戻り先のフラグメントに、`login_error`が付きます。
 
-| `login_error`     | 起きるとき                              |
-| ----------------- | --------------------------------------- |
-| `denied`          | Discordの同意の画面で断った             |
-| `provider-failed` | Discordとのやりとりに失敗した           |
-| `rate-limited`    | 送信元からのログインが1分に60回を超えた |
+| `login_error`     | 起きるとき                                                   |
+| ----------------- | ------------------------------------------------------------ |
+| `denied`          | Discordの同意の画面で断った                                  |
+| `provider-failed` | Discordとのやりとりに失敗した                                |
+| `rate-limited`    | 送信元からのログインが1分に60回を超えた                      |
+| `banned`          | 運営する人が、送信元かDiscordのアカウントをBANした           |
+| `paused`          | 運営する人が、新しくログインすることを止めている（緊急停止） |
 
 ログインを始めてから10分のうちにDiscordから戻らなかったとき（Discordのアカウントを作っていた、など）は、戻り先がわからないので、Axeには戻りません。
 部屋のサーバーの`400`（`invalid-request`）の画面で止まるので、Axeからログインをやり直してください。
 `SESSION_SECRET`をそのあいだに替えたときも同じです。
 
+## 管理画面のAPI
+
+管理画面（`/admin`）が呼ぶAPIです。
+`ADMIN_DISCORD_IDS`を入れたときだけあり、画面の使いかたは[管理画面とBAN](/operate/admin)にあります。
+管理画面のページから使うためのもので、スクリプトから呼ぶ鍵はありません。
+
+- 入るには、`GET /admin/login`からDiscordでログインし（戻り先は`/admin/login/callback`）、そのあとパスキーで確かめます（下の表）。ログインは、HttpOnlyの`__Host-axe-admin` Cookie（HTTPSでないときは`axe-admin`）に置きます。
+- どれも、`X-Admin-Request: 1`のヘッダーが要ります。無いか、Originが管理画面のものでないときは`403 forbidden`を返します。CORSのヘッダーは付けないので、ほかのサイトのページからは呼べません。
+- ログインが無いか、切れたか、`ADMIN_DISCORD_IDS`から外されたか、すべての人をログアウトさせたあとのものは、`401 login-required`を返します。
+- パスキーで確かめる前のログインは、`session`とパスキーの4つのほかは`403 passkey-required`です。
+- 部屋の削除、画像と音声の削除、二度と置かせないことと、その解除、アカウントの削除、パスキーの追加と削除、すべての人をログアウトさせることは、パスキーで確かめてから5分を過ぎていると`403 reauth-required`を返します。パスキーで確かめ直してから、もう一度呼びます。
+- BANの対象になりません。
+- ログインの3つが入っていないときは、`503 login-unavailable`を返します。
+- どの答えにも`Cache-Control: no-store`を付けます。
+
+| メソッド | パス                                               | 内容                                                                                                                          |
+| -------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/admin/api/rooms`                                 | 部屋の一覧。新しいものから2000件まで。作った人のDiscordのIDとIPアドレス付き                                                   |
+| `GET`    | `/admin/api/rooms/:roomKey/seats`                  | その部屋にいま入っている人                                                                                                    |
+| `GET`    | `/admin/api/rooms/:roomKey/assets`                 | その部屋に置いてある画像と音声（ID、種類、大きさ、名前）                                                                      |
+| `DELETE` | `/admin/api/rooms/:roomKey`                        | 部屋を削除する（GMでなくても）。`204`、無ければ`404 room-not-found`                                                           |
+| `GET`    | `/admin/api/bans`                                  | BANの一覧                                                                                                                     |
+| `POST`   | `/admin/api/bans`                                  | BANする。`201`で、足したBANを返す                                                                                             |
+| `DELETE` | `/admin/api/bans?kind=…&value=…`                   | BANを解く。`204`、無ければ`404 not-found`                                                                                     |
+| `GET`    | `/admin/api/activity`                              | 記録。新しいものから                                                                                                          |
+| `GET`    | `/admin/api/assets?cursor=…`                       | 置き場所にあるすべての部屋のアセット（部屋の鍵、ID、種類、大きさ、名前、置いた時刻）を1ページずつ。続きがあれば`cursor`を返す |
+| `GET`    | `/admin/api/rooms/:roomKey/assets/:sha256/content` | そのアセットの中身。`Content-Security-Policy: default-src 'none'; sandbox`を付ける。見たことを記録に残す                      |
+| `DELETE` | `/admin/api/rooms/:roomKey/assets/:sha256`         | その部屋からアセットを消す。`204`                                                                                             |
+| `POST`   | `/admin/api/assets/:sha256/block`                  | 二度と置かせないようにし、本文の`rooms`（部屋の鍵の配列、2000件まで）から消す。消せた数と消せなかった数を返す                 |
+| `GET`    | `/admin/api/blocked`                               | 二度と置かせないもののIDの一覧                                                                                                |
+| `DELETE` | `/admin/api/blocked/:sha256`                       | また置けるようにする。`204`                                                                                                   |
+| `GET`    | `/admin/api/reports`                               | 参加者からの通報。新しいものから。通報した人も含む                                                                            |
+| `PUT`    | `/admin/api/reports/:id`                           | 通報の状態を変える。本文は`{"status":"done"}`の形（`open`・`done`・`dismissed`）                                              |
+| `GET`    | `/admin/api/pause`                                 | 緊急停止で止めているもの                                                                                                      |
+| `PUT`    | `/admin/api/pause`                                 | 緊急停止で止めるものを決める。本文は`{"rooms":true,"uploads":false,"logins":false}`の形                                       |
+| `GET`    | `/admin/api/tighten`                               | 回数の上限をどれだけ締めているか                                                                                              |
+| `PUT`    | `/admin/api/tighten`                               | 回数の上限を締める。本文は`{"upload":4,"read":1,"room":2,"auth":1}`の形（それぞれ1・2・4・10）                                |
+| `GET`    | `/admin/api/accounts/:discordId`                   | そのDiscordのユーザーIDのアカウント。無ければ`404 not-found`                                                                  |
+| `DELETE` | `/admin/api/accounts/:discordId`                   | そのアカウントを削除する。`204`、無ければ`404 not-found`                                                                      |
+| `GET`    | `/admin/api/settings`                              | いまの設定。秘密の値は、入っているかどうかだけ                                                                                |
+| `GET`    | `/admin/api/storage`                               | 置き場所の使用量（最後に数えたときの大きさ・件数・時刻）と、知らせる量（`ADMIN_STORAGE_ALERT_GB`）                            |
+
+ログインとパスキーのためのものです。
+
+| メソッド | パス                            | 内容                                                            |
+| -------- | ------------------------------- | --------------------------------------------------------------- |
+| `GET`    | `/admin/login`                  | Discordへ送る（ページとして開く）                               |
+| `GET`    | `/admin/login/callback`         | Discordから戻る。入れないときは、`/admin#denied=<理由>`へ戻す   |
+| `POST`   | `/admin/api/logout`             | このログインを終える。`204`                                     |
+| `GET`    | `/admin/api/session`            | だれが、どこまで確かめたか（`stage`は`discord`か`passkey`）     |
+| `POST`   | `/admin/api/passkeys/options`   | パスキーを作るための値（`navigator.credentials.create`に渡す）  |
+| `POST`   | `/admin/api/passkeys`           | 作ったパスキーを登録する。ログインも確かめたことになる。`201`   |
+| `POST`   | `/admin/api/passkeys/challenge` | パスキーで確かめるための値（`navigator.credentials.get`に渡す） |
+| `POST`   | `/admin/api/passkeys/verify`    | パスキーの署名で確かめる。`204`                                 |
+| `GET`    | `/admin/api/passkeys`           | 自分のパスキーの一覧                                            |
+| `DELETE` | `/admin/api/passkeys/:id`       | 自分のパスキーを消す。最後の1つは`409 last-passkey`             |
+| `POST`   | `/admin/api/sessions/revoke`    | すべての運営する人のログインを終える。`204`                     |
+
+`POST /admin/api/bans`の本文は、次の形です。
+
+```json
+{ "kind": "ip", "value": "203.0.113.0/24", "reason": "部屋を作り続けた", "hours": 24 }
+```
+
+| フィールド | 型     | 内容                                                                               |
+| ---------- | ------ | ---------------------------------------------------------------------------------- |
+| `kind`     | 文字列 | `ip`か`discord`                                                                    |
+| `value`    | 文字列 | IPアドレスか範囲（→ [BANする](/operate/admin#banする)）、またはDiscordのユーザーID |
+| `reason`   | 文字列 | 省けば空。200文字まで                                                              |
+| `hours`    | 整数   | BANが続く時間（1以上）。省けば、解くまで続く                                       |
+
+`value`は、置くときの形に直して返します（`203.0.113.9/24`は`203.0.113.0/24`、IPv6のアドレスは先頭の/64）。
+解くときの`value`には、返ってきた形を使います。
+形が違うときは`400 invalid-request`を返します。
+
 ## エラー
 
 本文は`{"error":"<コード>"}`の形です。
 
-| 状態 | コード                 | 起きるとき                                                                                         |
-| ---- | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| 400  | `invalid-id`           | 名前が64文字の小文字16進でない、部屋の鍵の形が違う                                                 |
-| 400  | `invalid-request`      | 本文がJSONでない、名前やパスワードの形が違う。ログインの戻り先が許されていない                     |
-| 400  | `invalid-grant`        | ログインのコードやリフレッシュトークンが、無効・使用済み・期限切れ                                 |
-| 400  | `hash-mismatch`        | 本文のハッシュが名前と合わない                                                                     |
-| 401  | `login-required`       | 部屋を作る・削除する、アカウントを見る・消すのに、アクセストークンが無いか無効                     |
-| 401  | `asset-token-required` | 部屋のアセットのトークンが無い・無効・期限切れ・ほかの部屋のもの                                   |
-| 403  | `origin-not-allowed`   | Originが`ACCESS_CONTROL_ALLOW_ORIGIN`にない                                                        |
-| 403  | `not-game-master`      | 部屋を削除しようとしたが、その部屋のGMでない                                                       |
+| 状態 | コード                 | 起きるとき                                                                                                                                               |
+| ---- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400  | `invalid-id`           | 名前が64文字の小文字16進でない、部屋の鍵の形が違う                                                                                                       |
+| 400  | `invalid-request`      | 本文がJSONでない、名前やパスワードの形が違う。ログインの戻り先が許されていない                                                                           |
+| 400  | `invalid-grant`        | ログインのコードやリフレッシュトークンが、無効・使用済み・期限切れ                                                                                       |
+| 400  | `hash-mismatch`        | 本文のハッシュが名前と合わない                                                                                                                           |
+| 400  | `invalid-challenge`    | 管理画面のパスキーの確かめで、値が古いか、使用済みか、ほかのログインのもの                                                                               |
+| 400  | `passkey-refused`      | 管理画面で、作ったパスキーを受け付けられなかった                                                                                                         |
+| 401  | `login-required`       | 部屋を作る・削除する、アカウントを見る・消すのに、アクセストークンが無いか無効。管理画面のAPIに、ログインが無いか切れている                              |
+| 401  | `asset-token-required` | 部屋のアセットのトークンが無い・無効・期限切れ・ほかの部屋のもの                                                                                         |
+| 401  | `passkey-refused`      | 管理画面で、パスキーの署名で確かめられなかった                                                                                                           |
+| 403  | `origin-not-allowed`   | Originが`ACCESS_CONTROL_ALLOW_ORIGIN`にない                                                                                                              |
+| 403  | `banned`               | 運営する人が、送信元かDiscordのアカウントをBANした（→ [管理画面とBAN](/operate/admin)）                                                                  |
+| 403  | `forbidden`            | 管理画面のAPIを、`X-Admin-Request`のヘッダー無しか、ほかのOriginから呼んだ                                                                               |
+| 403  | `passkey-required`     | 管理画面で、パスキーで確かめる前のログインで呼んだ。すでにパスキーがあるのに、確かめずに登録しようとした                                                 |
+| 403  | `reauth-required`      | 管理画面の戻せない操作の前に、パスキーで確かめてから5分を過ぎている                                                                                      |
+| 403  | `not-game-master`      | 部屋を削除しようとしたが、その部屋のGMでない。部屋のアセットを消そうとしたが、いまGMとして席にいない                                                     |
 | 403  | `not-a-player`         | 見学のトークンで部屋のアセットを置こうとした。置くときに見学に変えられていたか、部屋から抜けていた。Vercel版で受け持ちが替わってから入り直すまでのあいだ |
-| 404  | `not-found`            | その部屋にアセットが置かれていない（部屋と一緒に消えたときも）。アカウントがもう無い               |
-| 404  | `room-not-found`       | 部屋が無い（作られていないか、消えた）                                                             |
-| 411  | `length-required`      | `PUT`に`Content-Length`がない                                                                      |
-| 412  | `precondition-failed`  | `GET`の`If-Match`か`If-Unmodified-Since`に合わない                                                 |
-| 413  | `too-large`            | 種類ごとの上限か、`maxPutBytes`を超えている                                                        |
-| 415  | `unsupported-type`     | 受け付ける画像でも音声でもない                                                                     |
-| 426  | `upgrade-required`     | 部屋に入るURLを、WebSocketでなく開いた                                                             |
-| 429  | `rate-limited`         | 送信元からの、アップロード、読み出し、部屋を作る・削除する・入る、ログインのどれかが上限を超えた   |
-| 451  | `blocked`              | 運営する人が、その名前のものを置かせないようにした                                                 |
-| 500  | `config-invalid`       | 設定が足りないか、形が違う（→ [設定項目](/server/configuration)）                                  |
-| 500  | `internal-error`       | それ以外の失敗（本文が`Content-Length`と合わないなど）                                             |
-| 503  | `login-unavailable`    | ログインの3つが入っていない                                                                        |
+| 404  | `not-found`            | その部屋にアセットが置かれていない（部屋と一緒に消えたときも）。アカウントがもう無い                                                                     |
+| 404  | `room-not-found`       | 部屋が無い（作られていないか、消えた）                                                                                                                   |
+| 409  | `passkey-exists`       | 管理画面で、もう登録してあるパスキーを登録しようとした                                                                                                   |
+| 409  | `no-passkeys`          | 管理画面で、パスキーが無いのに確かめようとした                                                                                                           |
+| 409  | `last-passkey`         | 管理画面で、最後のパスキーを消そうとした                                                                                                                 |
+| 409  | `too-many-passkeys`    | 管理画面で、11個目のパスキーを登録しようとした                                                                                                           |
+| 411  | `length-required`      | `PUT`に`Content-Length`がない                                                                                                                            |
+| 412  | `precondition-failed`  | `GET`の`If-Match`か`If-Unmodified-Since`に合わない                                                                                                       |
+| 413  | `too-large`            | 種類ごとの上限か、`maxPutBytes`を超えている                                                                                                              |
+| 413  | `room-storage-full`    | 置くと、部屋の画像と音声の合計が`ROOM_STORAGE_LIMIT_MB`を超える（→ [設定項目](/server/configuration#room-storage-limit-mb)）                             |
+| 415  | `unsupported-type`     | 受け付ける画像でも音声でもない                                                                                                                           |
+| 426  | `upgrade-required`     | 部屋に入るURLを、WebSocketでなく開いた                                                                                                                   |
+| 429  | `rate-limited`         | 送信元からの、アップロード、読み出し、部屋を作る・削除する・入る、ログインのどれかが上限を超えた                                                         |
+| 451  | `blocked`              | 運営する人が、その名前のものを置かせないようにした                                                                                                       |
+| 500  | `config-invalid`       | 設定が足りないか、形が違う（→ [設定項目](/server/configuration)）                                                                                        |
+| 500  | `internal-error`       | それ以外の失敗（本文が`Content-Length`と合わないなど）                                                                                                   |
+| 503  | `login-unavailable`    | ログインの3つが入っていない                                                                                                                              |
+| 503  | `paused`               | 運営する人が、部屋を作ることか部屋のアセットを置くことを止めている（→ [緊急停止](/operate/admin#緊急停止)）                                              |
 
 `config-invalid`のときは、足りない設定の名前がログに出ます。
+`ADMIN_DISCORD_IDS`を入れていないときは、管理画面と管理画面のAPIに`404 not-found`を返します。
 WebSocketでつないだあとに接続を閉じる理由は、[サーバー版で困ったとき](/server/troubleshooting#部屋に入れない・切れる)にあります。

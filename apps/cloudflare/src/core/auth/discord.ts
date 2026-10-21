@@ -1,4 +1,4 @@
-import { nullish, object, safeParse, string } from 'valibot';
+import { boolean, nullish, object, safeParse, string } from 'valibot';
 
 import type { LoginConfig } from '../config/login.js';
 import type { Profile } from './secrets.js';
@@ -15,6 +15,7 @@ const userSchema = object({
   username: string(),
   global_name: nullish(string()),
   avatar: nullish(string()),
+  mfa_enabled: nullish(boolean()),
 });
 
 /** Discord's consent screen. It asks only for identify, not for the email address or the list of servers. */
@@ -46,7 +47,11 @@ const turnedDown = async (step: string, response?: Response): Promise<null> => {
  *
  * The Discord access token is used only to read the person's details once, and is kept nowhere.
  */
-export const fetchProfile = async (login: LoginConfig, code: string, redirectUri: string): Promise<Profile | null> => {
+export const fetchProfile = async (
+  login: LoginConfig,
+  code: string,
+  redirectUri: string
+): Promise<(Profile & { mfaEnabled: boolean }) | null> => {
   const tokenResponse = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -70,10 +75,12 @@ export const fetchProfile = async (login: LoginConfig, code: string, redirectUri
   const user = safeParse(userSchema, await userResponse.json());
   if (!user.success) return turnedDown('the user answer, which was not a user');
 
-  const { id, username, global_name: globalName, avatar } = user.output;
+  const { id, username, global_name: globalName, avatar, mfa_enabled: mfaEnabled } = user.output;
   return {
     accountKey: `discord:${id}`,
     name: globalName ?? username,
     avatarUrl: avatar ? `${AVATAR_URL}/${id}/${avatar}.png` : null,
+    // Whether the person has turned on Discord's two-step login. The dashboard asks for it.
+    mfaEnabled: mfaEnabled === true,
   };
 };

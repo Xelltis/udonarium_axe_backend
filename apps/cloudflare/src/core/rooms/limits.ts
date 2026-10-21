@@ -35,6 +35,12 @@ export const MAX_SOCKETS = MAX_MEMBERS * 2;
  */
 export const HELLO_TIMEOUT_MS = 10_000;
 
+/**
+ * How many frames may come behind a hello while the operator's bans are read for it. Axe sends
+ * nothing more until it is let in.
+ */
+export const MAX_WAITING_FRAMES = 8;
+
 /** How many events one connection may send in RATE_WINDOW_MS. They count even when many are packed in one frame. */
 export const MAX_EVENTS_PER_WINDOW = 20_000;
 

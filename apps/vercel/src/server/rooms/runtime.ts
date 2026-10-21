@@ -1,8 +1,9 @@
 import type { WebSocket } from 'ws';
 
 import { COME_BACK_CODE, PING, PONG } from '../../../contracts/protocol.js';
+import type { Ban } from '../../core/moderation/bans.js';
 import { expiryKeyOf, readRoomMeta, roomKeysOf } from './keys.js';
-import type { Control, Inbound, Outbound, OwnerControl, Relay } from './relay.js';
+import type { BanControl, Control, Inbound, Outbound, OwnerControl, Relay } from './relay.js';
 import { LEASE_MS, VercelRoom } from './room.js';
 import type { Claim, Conn, ConnSocket, RoomDeps } from './room.js';
 
@@ -194,10 +195,10 @@ export class RoomRuntime {
 
   /**
    * Deletes a room. When this instance is the owner, or nobody is in, deletes it here. When another
-   * instance is the owner, checks here that the person is GM, then has the owner delete it (taking
-   * it off the list right away).
+   * instance is the owner, checks here that the person is GM (the operator, userId null, need not
+   * be), then has the owner delete it (taking it off the list right away).
    */
-  async deleteRoom(roomKey: string, userId: string): Promise<'deleted' | 'not-found' | 'not-game-master'> {
+  async deleteRoom(roomKey: string, userId: string | null): Promise<'deleted' | 'not-found' | 'not-game-master'> {
     const claim = await this.claim(roomKey);
     if ('room' in claim) {
       const { room } = claim;
@@ -207,11 +208,11 @@ export class RoomRuntime {
     }
     const { redis, key, lobby } = this.deps;
     if (!(await readRoomMeta(redis, key, roomKey))) return 'not-found';
-    if ((await redis.hGet(roomKeysOf(key, roomKey).roles, userId)) !== 'gm') {
+    if (userId !== null && (await redis.hGet(roomKeysOf(key, roomKey).roles, userId)) !== 'gm') {
       return 'not-game-master';
     }
     const relay = this.relay as Relay;
-    const control: OwnerControl = { t: 'delete' };
+    const control: OwnerControl = userId === null ? { t: 'delete', operator: true } : { t: 'delete' };
     if ((await relay.publish(relay.ownerControlOf(roomKey), control)) === 0) {
       // The owner had gone down. Marks the room to be deleted and leaves the rest to the sweep.
       await redis
@@ -224,9 +225,28 @@ export class RoomRuntime {
     return 'deleted';
   }
 
-  /** Takes a WebSocket that connected to a room. */
-  attach(ws: WebSocket, roomKey: string): void {
-    const conn: Conn = { id: crypto.randomUUID(), socket: socketOf(ws), seat: null };
+  /**
+   * Closes the connections in the room that the operator's ban covers: here when this instance is
+   * the owner, or else by asking the owner. With no owner, nobody is connected.
+   */
+  async expel(roomKey: string, ban: Ban): Promise<void> {
+    const open = await this.openRoom(roomKey);
+    if (open && !open.isReleased) {
+      open.expel(ban);
+      return;
+    }
+    const relay = this.relay as Relay;
+    await relay.publish(relay.banControlOf(roomKey), { t: 'ban', ban });
+  }
+
+  /** Takes a WebSocket that connected to a room. address is the sender's IP address. */
+  attach(ws: WebSocket, roomKey: string, address?: string): void {
+    const conn: Conn = {
+      id: crypto.randomUUID(),
+      socket: socketOf(ws),
+      seat: null,
+      ...(address === undefined ? {} : { address }),
+    };
     const link: Link = {
       waiting: [],
       route: null,
@@ -307,7 +327,12 @@ export class RoomRuntime {
     const relay = this.relay as Relay;
     const inbound = relay.inboundOf(roomKey);
     await this.watch(roomKey, conn.socket);
-    const open: Inbound = { t: 'open', c: conn.id, i: relay.instance };
+    const open: Inbound = {
+      t: 'open',
+      c: conn.id,
+      i: relay.instance,
+      ...(conn.address === undefined ? {} : { a: conn.address }),
+    };
     if ((await relay.publish(inbound, open)) === 0) {
       this.unwatch(roomKey, conn.socket);
       return false;
@@ -403,6 +428,7 @@ export class RoomRuntime {
         const conn: Conn = {
           id: message.c,
           instance: message.i,
+          ...(message.a === undefined ? {} : { address: message.a }),
           seat: null,
           socket: {
             send: (frame) => tell({ t: 'frame', c: message.c, d: frame }),
@@ -424,11 +450,14 @@ export class RoomRuntime {
       if (message.d !== PING) return room.receive(conn, message.d);
       if (room.takeRelayedPing(conn)) conn.socket.send(PONG);
     });
-    await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), () =>
+    await relay.subscribe<OwnerControl>(relay.ownerControlOf(room.roomKey), (control) => {
       this.deps.defer(
-        room.deletedElsewhere().catch((err: unknown) => console.error('Could not delete the room asked for:', err))
-      )
-    );
+        room
+          .deletedElsewhere(control.operator === true)
+          .catch((err: unknown) => console.error('Could not delete the room asked for:', err))
+      );
+    });
+    await relay.subscribe<BanControl>(relay.banControlOf(room.roomKey), ({ ban }) => room.expel(ban));
   }
 
   /** Stepped down as owner. Has the WebSockets that landed on other instances reconnect. */
@@ -437,6 +466,7 @@ export class RoomRuntime {
     if (!relay || !this.served.has(room)) return;
     await relay.unsubscribe(relay.inboundOf(room.roomKey));
     await relay.unsubscribe(relay.ownerControlOf(room.roomKey));
+    await relay.unsubscribe(relay.banControlOf(room.roomKey));
     if (room.remotes.length > 0) await relay.publish(relay.controlOf(room.roomKey), { t: 'moved' });
   }
 }

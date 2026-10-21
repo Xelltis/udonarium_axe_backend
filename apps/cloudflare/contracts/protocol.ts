@@ -315,7 +315,10 @@ export interface AssetTokenMessage {
  *   Also when, after connecting, no new token (auth) arrives within a minute after the token runs out.
  *   Also when someone claims the user id of someone logged in (one that begins with
  *   ACCOUNT_USER_ID_PREFIX) without a token
- * - room-deleted: a GM deleted the room. The room is gone, so do not reconnect
+ * - banned: the operator of the room server banned the sender or the account, at the hello or
+ *   while in the room. Do not reconnect
+ * - room-deleted: the room's GM, or the operator of the room server, deleted the room. The room is
+ *   gone, so do not reconnect
  * - idle: no active came for IDLE_SECONDS (the page was left alone), or the hello's idleMs was that
  *   long. Do not reconnect on your own; reconnect once the person asks to
  */
@@ -329,6 +332,7 @@ export const ERROR_CODES = [
   'too-many-messages',
   'replaced',
   'unauthorized',
+  'banned',
   'room-deleted',
   'idle',
 ] as const;
@@ -433,6 +437,32 @@ export interface RoomAsset {
  */
 export interface RoomAssetListResponse {
   assets: RoomAsset[];
+}
+
+/** What a report to the room server's operator is about: a picture or sound in the room, or the room. */
+export const REPORT_TARGETS = ['asset', 'room'] as const;
+export type ReportTarget = (typeof REPORT_TARGETS)[number];
+
+/** The longest reason a report may give, in characters. */
+export const MAX_REPORT_REASON_LENGTH = 500;
+
+/**
+ * The body of POST /v1/rooms/:roomKey/reports: a seat of the room (any role) tells the room server's
+ * operator of something in it, with the room's asset token. The server keeps who reported along
+ * with it, so that false reports can be told apart. 201 with ReportResponse; 400 invalid-request for
+ * a body in the wrong form.
+ */
+export interface ReportRequest {
+  target: ReportTarget;
+  /** The SHA-256 of the picture or sound (lowercase hex), for target asset. */
+  assetId?: string;
+  /** Why, in the reporter's words: 1 to MAX_REPORT_REASON_LENGTH characters. */
+  reason: string;
+}
+
+export interface ReportResponse {
+  /** The report's id, to quote when asking about it. */
+  id: string;
 }
 
 /**
@@ -727,6 +757,15 @@ export const CHAT_TAB_ALIAS = 'chat-tab';
  * clean up by themselves on leave). No tombstone is left either.
  */
 export const PEER_CURSOR_ALIAS = 'PeerCursor';
+
+/**
+ * The kind of object that says the GM took a picture or sound out of the room, and the start of its
+ * identifier (asset-removal_<SHA-256>). Every seat hides what it names, so only a GM may make, change
+ * or delete one. No one else may take an identifier with that start either, nor delete one before it
+ * is there: either would keep the GM from writing it.
+ */
+export const ASSET_REMOVAL_ALIAS = 'asset-removal';
+export const ASSET_REMOVAL_PREFIX = 'asset-removal_';
 
 /**
  * The data of UPDATE_GAME_OBJECT. Apart from certain fields, the server does not read syncData, and

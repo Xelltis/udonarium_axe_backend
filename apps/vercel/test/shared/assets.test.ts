@@ -507,6 +507,16 @@ describe('GET /v1/rooms/:roomKey/assets/:id', () => {
     const badRoom = await harness.fetch(new Request(urlIn('not-a-room', id), { headers: { Origin: ORIGIN } }));
     expect(badRoom.status).toBe(400);
   });
+
+  it('answers 451 for what the operator took down, so that it is asked of nobody in the room either', async () => {
+    const { id } = await freshFile();
+    await harness.block(id);
+
+    const res = await call(id);
+
+    expect(res.status).toBe(451);
+    expect(await res.json()).toEqual({ error: 'blocked' });
+  });
 });
 
 describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
@@ -530,6 +540,13 @@ describe('HEAD /v1/rooms/:roomKey/assets/:id', () => {
     const { id } = await freshFile();
     const res = await call(id, { method: 'HEAD', headers: { 'If-None-Match': `"${id}"` } });
     expect(res.status).toBe(404);
+  });
+
+  it('answers 451 for what the operator took down, before anything is sent to be stored', async () => {
+    const { id } = await freshFile();
+    await harness.block(id);
+
+    expect((await call(id, { method: 'HEAD' })).status).toBe(451);
   });
 
   it('stops one address once it has asked R2 its share', async () => {
@@ -667,5 +684,74 @@ describe('configuration', () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'config-invalid' });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('ACCESS_CONTROL_ALLOW_ORIGIN'));
+  });
+});
+
+describe('the most one room may keep (ROOM_STORAGE_LIMIT_MB)', () => {
+  const putWith = (id: string, file: Uint8Array, env: Record<string, string>) =>
+    harness.fetchWith(
+      new Request(urlIn(ROOM_KEY, id), {
+        method: 'PUT',
+        body: file as Uint8Array<ArrayBuffer>,
+        headers: {
+          Origin: ORIGIN,
+          'CF-Connecting-IP': freshIp(),
+          'Content-Length': String(file.byteLength),
+          Authorization: `Bearer ${assetTokenFor('pl')}`,
+        },
+      }),
+      env
+    );
+
+  it('turns away what would take the room past it, and stores what fits', async () => {
+    const listed = await jsonOf<{ assets: { size: number }[] }>(
+      await harness.fetch(
+        new Request(BASE, {
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: `Bearer ${assetTokenFor('pl')}` },
+        })
+      )
+    );
+    const kept = listed.assets.reduce((sum, asset) => sum + asset.size, 0);
+    const small = await freshFile(PNG_HEAD, 1024);
+    const big = await freshFile(PNG_HEAD, 1_500_000);
+    // Room for the small one, and less than a whole MB more.
+    const env = { ROOM_STORAGE_LIMIT_MB: String(Math.ceil((kept + 1024) / 1_000_000)) };
+
+    expect((await putWith(small.id, small.file, env)).status).toBe(201);
+    const refused = await putWith(big.id, big.file, env);
+
+    expect(refused.status).toBe(413);
+    expect(await refused.json()).toEqual({ error: 'room-storage-full' });
+    expect(await harness.assetStored(ROOM_KEY, big.id)).toBeNull();
+  });
+
+  it('counts what the room keeps as assets come and go, so that taking one out makes room', async () => {
+    const listed = await jsonOf<{ assets: { size: number }[] }>(
+      await harness.fetch(
+        new Request(BASE, {
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: `Bearer ${assetTokenFor('pl')}` },
+        })
+      )
+    );
+    const kept = listed.assets.reduce((sum, asset) => sum + asset.size, 0);
+    // A limit with between 4000 and a little over a million bytes to spare.
+    const limitMb = Math.ceil((kept + 4000) / 1_000_000);
+    const env = { ROOM_STORAGE_LIMIT_MB: String(limitMb) };
+    const first = await freshFile(PNG_HEAD, limitMb * 1_000_000 - kept - 1000);
+    const second = await freshFile(PNG_HEAD, 2000);
+    const takeOut = (id: string) =>
+      harness.fetchWith(
+        new Request(urlIn(ROOM_KEY, id), {
+          method: 'DELETE',
+          headers: { Origin: ORIGIN, 'CF-Connecting-IP': freshIp(), Authorization: `Bearer ${assetTokenFor('gm')}` },
+        }),
+        env
+      );
+
+    expect((await putWith(first.id, first.file, env)).status).toBe(201);
+    expect((await putWith(second.id, second.file, env)).status).toBe(413);
+    expect((await takeOut(first.id)).status).toBe(204);
+    expect((await putWith(second.id, second.file, env)).status).toBe(201);
+    await takeOut(second.id);
   });
 });

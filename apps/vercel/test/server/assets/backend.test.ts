@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { roomAssetKey } from '../../../src/core/assets/keys.js';
-import { MAX_PUT_BYTES, assetIndexOf, vercelAssets } from '../../../src/server/assets/backend.js';
+import { MAX_PUT_BYTES, assetBytesOf, assetIndexOf, vercelAssets } from '../../../src/server/assets/backend.js';
 import { memoryBucket } from '../../../src/server/assets/bucket.js';
 import type { AssetBucket } from '../../../src/server/assets/bucket.js';
 import { localBucket } from '../../../src/server/assets/local-bucket.js';
@@ -49,6 +49,27 @@ const stored = async (options: { bucket?: AssetBucket; allowed?: boolean; afterS
 const get = (headers: Record<string, string> = {}) => new Request('https://backend.example/asset', { headers });
 
 describe('room assets on Vercel', () => {
+  it('counts what a room keeps from its index once, then as assets come and go', async () => {
+    // One stored before the room was ever counted: counting takes it in.
+    const { assets, key, bytes, id } = await stored();
+    const other = new Uint8Array([1, 2, 3]);
+    const otherId = await hexOf(other);
+
+    expect(await connection.redis.get(assetBytesOf(key, ROOM))).toBeNull();
+    expect(await assets.usage(ROOM)).toBe(10);
+    // The same stored again, as two at once may: counted once.
+    await assets.store(ROOM, id, streamOf([bytes]), 10, 'image/png', '');
+    await assets.store(ROOM, otherId, streamOf([other]), 3, 'image/png', '');
+    expect(await assets.usage(ROOM)).toBe(13);
+    await assets.discard(ROOM, id);
+    // What is not there takes nothing off.
+    await assets.discard(ROOM, id);
+    expect(await assets.usage(ROOM)).toBe(3);
+
+    await assets.deleteRoom(ROOM);
+    expect(await connection.redis.get(assetBytesOf(key, ROOM))).toBeNull();
+  });
+
   it('turns away bytes whose hash or length is not what was named', async () => {
     const { assets, bytes, id } = await stored();
 
@@ -174,6 +195,17 @@ describe('room assets on Vercel', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it('takes the word that an upload is done once, until it is given back', async () => {
+    const { assets } = await stored();
+    const direct = assets.direct as NonNullable<typeof assets.direct>;
+    const path = `uploads/r/a/${crypto.randomUUID()}`;
+
+    expect(await direct.claim(path)).toBe(true);
+    expect(await direct.claim(path)).toBe(false);
+    await direct.release(path);
+    expect(await direct.claim(path)).toBe(true);
+  });
+
   it('does what it was given to do after storing', async () => {
     const afterStore = vi.fn();
     const { assets } = await stored({ afterStore });
@@ -220,5 +252,50 @@ describe('the buckets', () => {
     const bucket = memoryBucket();
     await bucket.put('x', new Uint8Array(), '');
     expect(bucket.paths()).toEqual(['x']);
+  });
+});
+
+describe('the operator’s view of the store', () => {
+  it('lists every room’s assets page by page, however many rooms there are', async () => {
+    const key = freshKey();
+    const assets = vercelAssets(
+      connection.redis,
+      key,
+      memoryBucket(),
+      async () => true,
+      () => undefined
+    );
+    const rooms = Array.from({ length: 250 }, (_, i) => `r${i}`);
+    const writing = connection.redis.multi();
+    for (const room of rooms) {
+      writing.hSet(
+        assetIndexOf(key, room),
+        'a'.repeat(64),
+        JSON.stringify({ type: 'image/png', size: 1, name: '', uploadedAt: 1 })
+      );
+    }
+    // A room counted for its limit too, whose total is not an index.
+    writing.set(assetBytesOf(key, rooms[0] as string), '1');
+    await writing.exec();
+
+    const seen: string[] = [];
+    let pages = 0;
+    let cursor: string | null = null;
+    do {
+      const page = await assets.inventory(cursor);
+      seen.push(...page.assets.map((asset) => asset.roomKey));
+      cursor = page.cursor;
+      pages++;
+    } while (cursor !== null);
+
+    expect(new Set(seen)).toEqual(new Set(rooms));
+    expect(pages).toBeGreaterThan(1);
+  });
+
+  it('gives nothing to look at for an asset whose contents are gone from the store', async () => {
+    const { assets, bucket, id } = await stored();
+    await bucket.delete([roomAssetKey(ROOM, id)]);
+
+    expect(await assets.content(ROOM, id)).toBeNull();
   });
 });

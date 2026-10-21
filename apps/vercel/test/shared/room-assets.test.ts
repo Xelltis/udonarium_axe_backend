@@ -2,7 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ASSET_TOKEN_SECONDS, readToken } from '../../src/core/auth/tokens.js';
 import { harness } from '../harness.js';
-import { ORIGIN, PNG_HEAD, SESSION_SECRET, accessTokenFor, freshFile, freshIp } from './helpers.js';
+import {
+  ORIGIN,
+  OTHER_ROOM_KEY,
+  PNG_HEAD,
+  SESSION_SECRET,
+  accessTokenFor,
+  assetTokenFor,
+  freshFile,
+  freshIp,
+} from './helpers.js';
 import { ROOMS, createRoom, eventually, join } from './room-helpers.js';
 
 // The asset tokens a room hands its seats, and the assets when a room goes.
@@ -131,6 +140,110 @@ describe('the asset token a room hands its seats', () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'room-not-found' });
     expect(await harness.assetStored(roomKey, id)).toBeNull();
+  });
+});
+
+describe('taking an asset out of a room', () => {
+  /** Asks to take the asset out of the room, with the given token or none. */
+  const tryDelete = (roomKey: string, id: string, token: string | null) =>
+    harness.fetch(
+      new Request(`${ROOMS}/${roomKey}/assets/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Origin: ORIGIN,
+          'CF-Connecting-IP': freshIp(),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+    );
+
+  it('lets the room’s GM take out what a player put up, and answers the same when it is not there', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    const pl = await join(roomKey, 'pl');
+    const id = await putIn(roomKey, pl.welcome.assetToken);
+
+    const res = await tryDelete(roomKey, id, gm.welcome.assetToken);
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+    expect(await harness.assetStored(roomKey, id)).toBeNull();
+    expect((await tryDelete(roomKey, id, gm.welcome.assetToken)).status).toBe(204);
+  });
+
+  it('takes nothing out for a player, whatever its token says', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    await join(roomKey, 'gm');
+    const pl = await join(roomKey, 'pl');
+    const id = await putIn(roomKey, pl.welcome.assetToken);
+
+    for (const token of [
+      pl.welcome.assetToken,
+      assetTokenFor('gm', roomKey, ASSET_TOKEN_SECONDS, 'user-pl'),
+      // A guest's token, even under the GM's user id.
+      assetTokenFor('guest', roomKey, ASSET_TOKEN_SECONDS, 'user-gm'),
+    ]) {
+      const res = await tryDelete(roomKey, id, token);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'not-game-master' });
+    }
+    expect(await harness.assetStored(roomKey, id)).not.toBeNull();
+  });
+
+  it('takes nothing out for a GM who has left the room, though the token has time to run', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const gm = await join(roomKey, 'gm');
+    const pl = await join(roomKey, 'pl');
+    const id = await putIn(roomKey, pl.welcome.assetToken);
+    gm.client.close();
+    await eventually(
+      () => harness.canUpload(roomKey, 'user-gm'),
+      (answer) => answer === 'not-a-player'
+    );
+
+    const res = await tryDelete(roomKey, id, gm.welcome.assetToken);
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'not-game-master' });
+  });
+
+  it('answers room-not-found once the room is gone', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const { welcome } = await join(roomKey, 'gm');
+    await harness.fetch(
+      new Request(`${ROOMS}/${roomKey}`, {
+        method: 'DELETE',
+        headers: {
+          Origin: ORIGIN,
+          'CF-Connecting-IP': freshIp(),
+          Authorization: `Bearer ${accessTokenFor('user-gm')}`,
+        },
+      })
+    );
+
+    const res = await tryDelete(roomKey, 'a'.repeat(64), welcome.assetToken);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'room-not-found' });
+  });
+
+  it('turns away a request without the room’s token, or for an id that is not one', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    const { welcome } = await join(roomKey, 'gm');
+
+    const answers = [
+      await tryDelete(roomKey, 'a'.repeat(64), null),
+      await tryDelete(roomKey, 'a'.repeat(64), assetTokenFor('gm', OTHER_ROOM_KEY, ASSET_TOKEN_SECONDS, 'user-gm')),
+      await tryDelete(roomKey, 'not-an-id', welcome.assetToken),
+      await tryDelete('not-a-room', 'a'.repeat(64), welcome.assetToken),
+    ];
+
+    expect(await Promise.all(answers.map(async (res) => [res.status, await res.json()]))).toEqual([
+      [401, { error: 'asset-token-required' }],
+      [401, { error: 'asset-token-required' }],
+      [400, { error: 'invalid-id' }],
+      [400, { error: 'invalid-id' }],
+    ]);
   });
 });
 

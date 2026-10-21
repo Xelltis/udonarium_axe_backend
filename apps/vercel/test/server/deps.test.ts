@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { MAX_PUT_BYTES } from '../../src/server/assets/backend.js';
 import { memoryBucket } from '../../src/server/assets/bucket.js';
+import type { ServerDeps } from '../../src/server/backend.js';
 import { localBucket } from '../../src/server/assets/local-bucket.js';
 import {
   ORPHAN_SWEEP_EVERY,
@@ -74,6 +75,19 @@ describe('the server dependencies', () => {
     expect(toDirectory).toBeNull();
   });
 
+  it('send the operator alerts when a webhook is set', async () => {
+    const url = 'https://discord.example/api/webhooks/1/token';
+    const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const work: Promise<unknown>[] = [];
+    const deps = await depsOf(connection.redis, { defer: (each) => void work.push(each) }, { ADMIN_WEBHOOK_URL: url });
+
+    deps.moderation.note({ at: Date.now(), kind: 'limited', address: '192.0.2.1', detail: 'read' });
+    await Promise.all(work);
+
+    expect(sent).toHaveBeenCalledWith(url, expect.objectContaining({ method: 'POST' }));
+    sent.mockRestore();
+  });
+
   it('sign nothing in rooms of a server without login', async () => {
     const deps = await depsOf(
       connection.redis,
@@ -106,8 +120,8 @@ describe('the server dependencies', () => {
     await provider.backendFor(config);
 
     expect(await storeless.lobby.list()).toEqual([]);
-    expect(await provider.sweep(withoutStore, false)).toEqual({ rooms: 0, assets: 0 });
-    expect(await provider.sweep(config, true)).toEqual({ rooms: 0, assets: 0 });
+    expect(await provider.sweep(withoutStore, false)).toEqual({ rooms: 0, assets: 0, storage: null });
+    expect(await provider.sweep(config, true)).toEqual({ rooms: 0, assets: 0, storage: null });
     expect(provider.depsFor(broken)).toBeUndefined();
     (await provider.depsFor(config))?.redis.destroy();
   });
@@ -120,9 +134,26 @@ describe('the server dependencies', () => {
     const again = await provider.sweep(config, false);
     const keyed = await provider.sweep(config, true);
 
-    expect([first, again, keyed]).toEqual([{ rooms: 0, assets: 0 }, null, { rooms: 0, assets: 0 }]);
+    const none = { rooms: 0, assets: 0, storage: null };
+    expect([first, again, keyed]).toEqual([none, null, none]);
     const deps = await provider.depsFor(config);
     expect(await deps?.redis.pTTL(deps.key('sweep', 'unkeyed'))).toBeGreaterThan(UNKEYED_SWEEP_EVERY_MS - 60_000);
     deps?.redis.destroy();
+  });
+
+  it('count the store after sweeping when an amount is set, and log a count that fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const provider = backendProvider({ bucketOf: () => memoryBucket() });
+    const config = configOf({ ADMIN_STORAGE_ALERT_GB: '1' });
+
+    const swept = await provider.sweep(config, true);
+    expect(swept?.storage).toEqual({ bytes: 0, assets: 0, at: expect.any(Number), complete: true });
+    const deps = (await provider.depsFor(config)) as ServerDeps;
+    expect(await deps.moderation.storageUsage()).toEqual(swept?.storage);
+
+    vi.spyOn(deps.moderation, 'putStorageUsage').mockRejectedValueOnce(new Error('down'));
+    expect((await provider.sweep(config, true))?.storage).toBeNull();
+    expect(error).toHaveBeenCalledWith('Could not count the store:', expect.any(Error));
+    deps.redis.destroy();
   });
 });

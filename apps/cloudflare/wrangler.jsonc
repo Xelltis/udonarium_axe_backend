@@ -6,16 +6,21 @@
   // Rooms gzip their frames with node:zlib.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Once a day at 03:00 in Japan (18:00 UTC): counts the store of the rooms' pictures and sounds when
+  // ADMIN_STORAGE_ALERT_GB is set, and tells the operator when it is past that.
+  "triggers": { "crons": ["0 18 * * *"] },
   // Keeps each room's pictures and sounds under their SHA-256 names, and deletes them with the room.
   // No bucket name is written, so that the first deploy creates `<Worker name>-assets`. However many
   // are put on one account, each Worker gets a bucket of its own.
   "r2_buckets": [{ "binding": "ASSETS" }],
-  // One Durable Object for each room, and one that holds the room list. Both keep their data in SQLite.
+  // One Durable Object for each room, one that holds the room list, one for each account, and one that
+  // keeps the operator's bans and what happened. All keep their data in SQLite.
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "RoomDurableObject" },
       { "name": "LOBBY", "class_name": "LobbyDurableObject" },
       { "name": "ACCOUNTS", "class_name": "AccountDurableObject" },
+      { "name": "MODERATION", "class_name": "ModerationDurableObject" },
     ],
   },
   // Where what happens in rooms is written. The dataset is created by the first write. Workers on the
@@ -25,6 +30,7 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "LobbyDurableObject"] },
     { "tag": "v2", "new_sqlite_classes": ["AccountDurableObject"] },
+    { "tag": "v3", "new_sqlite_classes": ["ModerationDurableObject"] },
   ],
   // Workers on the same account share a namespace_id, but the key carries the host name the request
   // came to, so each Worker counts on its own.
@@ -63,7 +69,10 @@
     // How long after the last person leaves a room it is deleted.
     "ROOM_RETENTION_HOURS": "24",
     // DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and SESSION_SECRET are set as secrets (see
-    // https://xelltis.github.io/udonarium_axe_backend/server/configuration).
+    // https://xelltis.github.io/udonarium_axe_backend/server/configuration), and so are ADMIN_DISCORD_IDS,
+    // the Discord users let into the operator's dashboard, and ADMIN_WEBHOOK_URL, the Discord webhook its
+    // alerts go to, with ADMIN_STORAGE_ALERT_GB, the store's size past which it tells
+    // (see https://xelltis.github.io/udonarium_axe_backend/operate/admin).
     // Locally, they go in .dev.vars.
   },
 }

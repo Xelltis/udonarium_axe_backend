@@ -16,7 +16,7 @@ import {
   navigate,
   signInWithDiscord,
 } from './auth-helpers.js';
-import { ORIGIN, SESSION_SECRET, accessTokenFor, freshIp, jsonOf, withinOneWindow } from './helpers.js';
+import { ORIGIN, SESSION_SECRET, accessTokenFor, jsonOf, withinOneWindow } from './helpers.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -166,13 +166,16 @@ describe('GET /v1/login/discord/callback', () => {
       `/v1/login/discord?redirect_uri=${encodeURIComponent(APP)}&code_challenge=${await challengeOf(VERIFIER)}`
     );
     const state = new URL(start.headers.get('Location') as string).searchParams.get('state');
-    const ip = freshIp();
 
-    const errors: (string | null)[] = [];
-    for (let i = 0; i < 6; i++) {
-      const back = await navigate(`/v1/login/discord/callback?code=c&state=${state}`, ip);
-      errors.push(fragmentOf(new URL(back.headers.get('Location') as string)).get('login_error'));
-    }
+    // The six count in one window of the limit, or they are tried again from a new address.
+    const errors = await withinOneWindow(async (ip) => {
+      const each: (string | null)[] = [];
+      for (let i = 0; i < 6; i++) {
+        const back = await navigate(`/v1/login/discord/callback?code=c&state=${state}`, ip);
+        each.push(fragmentOf(new URL(back.headers.get('Location') as string)).get('login_error'));
+      }
+      return each;
+    });
 
     expect(errors).toEqual([null, null, null, null, null, 'rate-limited']);
   });

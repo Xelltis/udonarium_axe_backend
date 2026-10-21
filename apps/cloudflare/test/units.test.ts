@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { r2Assets } from '../src/assets/r2';
 import { setContentRange } from '../src/assets/response';
 import { ORPHAN_GRACE_MS, deleteRoomAssets, randomStart, sweepOrphans } from '../src/assets/sweep';
 import { ConfigError, parseConfig } from '../src/config';
@@ -126,7 +127,47 @@ describe('parseConfig', () => {
       allowedOrigins: ['https://a.example', 'https://b.example'],
       roomRetentionSeconds: 24 * 60 * 60,
       login: null,
+      admin: null,
+      adminWebhook: null,
+      storageAlertBytes: null,
+      roomStorageLimitBytes: null,
+      contactUrl: null,
     });
+  });
+
+  it('reads where someone turned away can ask: a page or a mail address', () => {
+    expect(parseConfig({ ...valid, ADMIN_CONTACT_URL: 'https://a.example/ask' }).contactUrl).toBe(
+      'https://a.example/ask'
+    );
+    expect(parseConfig({ ...valid, ADMIN_CONTACT_URL: 'mailto:op@a.example' }).contactUrl).toBe('mailto:op@a.example');
+    expect(parseConfig({ ...valid, ADMIN_CONTACT_URL: '' }).contactUrl).toBeNull();
+  });
+
+  it('reads how much one room may keep, in MB', () => {
+    expect(parseConfig({ ...valid, ROOM_STORAGE_LIMIT_MB: '500' }).roomStorageLimitBytes).toBe(500_000_000);
+    expect(parseConfig({ ...valid, ROOM_STORAGE_LIMIT_MB: '' }).roomStorageLimitBytes).toBeNull();
+  });
+
+  it('reads the store’s size to tell the operator past, in GB', () => {
+    expect(parseConfig({ ...valid, ADMIN_STORAGE_ALERT_GB: '10' }).storageAlertBytes).toBe(10_000_000_000);
+    expect(parseConfig({ ...valid, ADMIN_STORAGE_ALERT_GB: '0.5' }).storageAlertBytes).toBe(500_000_000);
+    expect(parseConfig({ ...valid, ADMIN_STORAGE_ALERT_GB: '' }).storageAlertBytes).toBeNull();
+    expect(parseConfig(valid).storageAlertBytes).toBeNull();
+  });
+
+  it('reads the webhook for alerts', () => {
+    const url = 'https://discord.com/api/webhooks/1/token';
+    expect(parseConfig({ ...valid, ADMIN_WEBHOOK_URL: url }).adminWebhook).toBe(url);
+    expect(parseConfig({ ...valid, ADMIN_WEBHOOK_URL: '' }).adminWebhook).toBeNull();
+  });
+
+  it('reads who may open the dashboard', () => {
+    expect(parseConfig({ ...valid, ADMIN_DISCORD_IDS: ' 1, 22 ,', ADMIN_PASSKEY_RESET: '22' }).admin).toEqual({
+      discordIds: ['1', '22'],
+      passkeyReset: ['22'],
+    });
+    expect(parseConfig({ ...valid, ADMIN_DISCORD_IDS: '1' }).admin).toEqual({ discordIds: ['1'], passkeyReset: [] });
+    expect(parseConfig({ ...valid, ADMIN_DISCORD_IDS: ' , ' }).admin).toBeNull();
   });
 
   it('reads the login settings when all three are there', () => {
@@ -153,7 +194,65 @@ describe('parseConfig', () => {
       'a session secret that is too short',
       { DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 'c', SESSION_SECRET: 'short' },
     ],
+    ['an operator that is not a Discord user id', { ADMIN_DISCORD_IDS: '1,someone' }],
+    ['a reset for one that is not a Discord user id', { ADMIN_DISCORD_IDS: '1', ADMIN_PASSKEY_RESET: 'x' }],
+    ['a webhook that is not https', { ADMIN_WEBHOOK_URL: 'http://discord.com/api/webhooks/1/token' }],
+    ['a webhook that is not a URL', { ADMIN_WEBHOOK_URL: 'discord' }],
+    ['a store size of nothing', { ADMIN_STORAGE_ALERT_GB: '0' }],
+    ['a store size that is not a number of GB', { ADMIN_STORAGE_ALERT_GB: '10GB' }],
+    ['a store size below nothing', { ADMIN_STORAGE_ALERT_GB: '-1' }],
+    ['a room limit of nothing', { ROOM_STORAGE_LIMIT_MB: '0' }],
+    ['a contact that is not https', { ADMIN_CONTACT_URL: 'http://a.example/ask' }],
+    ['a contact that is not a URL', { ADMIN_CONTACT_URL: 'ask the GM' }],
+    ['a room limit that is not a whole number of MB', { ROOM_STORAGE_LIMIT_MB: '1.5' }],
   ])('turns away %s', (_name, change) => {
     expect(() => parseConfig({ ...valid, ...change })).toThrow(ConfigError);
+  });
+});
+
+describe('r2Assets', () => {
+  it('takes an asset off the room’s total before it takes it out of R2', async () => {
+    const dropAsset = vi.fn(async () => undefined);
+    const del = vi.fn(async () => undefined);
+    const fakeEnv = {
+      ASSETS: { delete: del },
+      ROOMS: { getByName: () => ({ dropAsset }) },
+    } as unknown as Env;
+
+    await r2Assets(
+      fakeEnv,
+      () => undefined,
+      async () => true
+    ).discard('r'.repeat(32), 'a'.repeat(64));
+
+    expect(dropAsset).toHaveBeenCalledWith('a'.repeat(64));
+    expect(dropAsset.mock.invocationCallOrder[0]).toBeLessThan(del.mock.invocationCallOrder[0] as number);
+  });
+
+  it('holds storing and taking out with waitUntil, so that a client going away does not stop them halfway', async () => {
+    const held: Promise<unknown>[] = [];
+    const keepAsset = vi.fn(async () => undefined);
+    const fakeEnv = {
+      ASSETS: {
+        put: vi.fn(async () => null),
+        delete: vi.fn().mockRejectedValueOnce(new Error('down')),
+      },
+      ROOMS: { getByName: () => ({ keepAsset, dropAsset: async () => undefined }) },
+    } as unknown as Env;
+    const assets = r2Assets(
+      fakeEnv,
+      (work) => void held.push(work),
+      async () => true
+    );
+
+    const stored = await assets.store('r'.repeat(32), 'a'.repeat(64), new Blob([]).stream(), 0, 'image/png', '');
+    const discarded = assets.discard('r'.repeat(32), 'a'.repeat(64));
+
+    expect(stored).toBe('stored');
+    expect(keepAsset).toHaveBeenCalledWith('a'.repeat(64), 0);
+    await expect(discarded).rejects.toThrow('down');
+    // What waitUntil holds does not fail with it.
+    await expect(Promise.all(held)).resolves.toBeDefined();
+    expect(held).toHaveLength(2);
   });
 });

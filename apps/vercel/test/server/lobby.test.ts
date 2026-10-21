@@ -112,6 +112,36 @@ describe('a Redis lobby', () => {
     expect(await lobby.known([])).toEqual([]);
   });
 
+  it('lists the rooms for the operator with who made them, newest first and by key at the same moment', async () => {
+    const lobby = redisLobby(connection.redis, freshKey());
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(1000);
+    await lobby.register(room('b'), { accountKey: 'discord:42', address: '192.0.2.1' });
+    await lobby.register(room('a'));
+    now.mockReturnValue(2000);
+    await lobby.register(room('c', 2), { accountKey: 'discord:43', address: '2001:db8::1' });
+
+    expect(await lobby.all()).toEqual([
+      { ...room('c', 2), createdAt: 2000, creator: { accountKey: 'discord:43', address: '2001:db8::1' } },
+      { ...room('a'), createdAt: 1000, creator: null },
+      { ...room('b'), createdAt: 1000, creator: { accountKey: 'discord:42', address: '192.0.2.1' } },
+    ]);
+    expect(await lobby.occupied()).toEqual(['c']);
+  });
+
+  it('lists nothing for the operator while no room is open, and lets go of who made a removed room', async () => {
+    const key = freshKey();
+    const lobby = redisLobby(connection.redis, key);
+    expect(await lobby.all()).toEqual([]);
+
+    await lobby.register(room('gone', 1), { accountKey: 'discord:42', address: '192.0.2.1' });
+    await lobby.remove('gone');
+
+    expect(await lobby.all()).toEqual([]);
+    expect(await lobby.occupied()).toEqual([]);
+    expect(await connection.redis.exists(key('lobby', 'creators'))).toBe(0);
+  });
+
   it('leaves out a listed key whose summary has gone', async () => {
     const key = freshKey();
     const lobby = redisLobby(connection.redis, key);

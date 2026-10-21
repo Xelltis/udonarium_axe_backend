@@ -1,5 +1,17 @@
 import { integer, minValue, number, object, optional, pipe, safeParse, string, summarize, transform } from 'valibot';
 
+import {
+  adminContactOf,
+  adminContactValid,
+  adminEntries,
+  adminIdsValid,
+  adminOf,
+  adminStorageAlertOf,
+  adminStorageAlertValid,
+  adminWebhookOf,
+  adminWebhookValid,
+} from '../core/config/admin.js';
+import { roomStorageEntries, roomStorageLimitOf, roomStorageValid } from '../core/config/rooms.js';
 import { ConfigError, loginComplete, loginEntries, loginOf, sessionSecretLongEnough } from '../core/config/login.js';
 import type { LoginConfig } from '../core/config/login.js';
 import type { ServerConfig } from '../core/http/backend.js';
@@ -37,9 +49,16 @@ const serverSchema = pipe(
     CRON_SECRET: optional(string()),
     VERCEL: optional(string()),
     ...loginEntries,
+    ...adminEntries,
+    ...roomStorageEntries,
   }),
   loginComplete(),
-  sessionSecretLongEnough()
+  sessionSecretLongEnough(),
+  adminIdsValid(),
+  adminWebhookValid(),
+  adminStorageAlertValid(),
+  roomStorageValid(),
+  adminContactValid()
 );
 
 /** The store for the rooms' assets. */
@@ -57,6 +76,8 @@ export interface VercelServerConfig extends ServerConfig {
   blob: BlobConfig | null;
   /** The secret Vercel Cron sends when it calls the sweep. When it is not set, it is not checked. */
   cronSecret: string | null;
+  /** The Discord webhook the operator's alerts go to. Null when there are no alerts. */
+  adminWebhook: string | null;
 }
 
 /** An empty string counts as not set. */
@@ -99,6 +120,11 @@ export const parseServerConfig = (env: unknown): VercelServerConfig => {
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),
     login,
+    admin: adminOf(parsed),
+    adminWebhook: adminWebhookOf(parsed),
+    storageAlertBytes: adminStorageAlertOf(parsed),
+    roomStorageLimitBytes: roomStorageLimitOf(parsed),
+    contactUrl: adminContactOf(parsed),
     roomRetentionSeconds: parsed.ROOM_RETENTION_HOURS * HOUR_SECONDS,
     roomSocketSeconds: parsed.ROOM_SOCKET_SECONDS,
     redisUrl,

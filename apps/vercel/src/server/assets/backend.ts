@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import type { RoomAsset } from '../../../contracts/protocol.js';
 import { assetHeaders, privately } from '../../core/assets/headers.js';
 import { blockedKeyOf, roomAssetKey } from '../../core/assets/keys.js';
-import type { AssetBackend, LimitKind } from '../../core/http/backend.js';
+import { UPLOAD_TICKET_SECONDS } from '../../core/auth/tokens.js';
+import type { AssetBackend, LimitKind, StoredRoomAsset } from '../../core/http/backend.js';
 import { failure } from '../../core/http/errors.js';
 import type { KeyOf, Redis } from '../redis.js';
 import type { AssetBucket } from './bucket.js';
@@ -31,6 +32,20 @@ export const MAX_PUT_BYTES = 4_000_000;
 
 /** The key of a room's asset index. */
 export const assetIndexOf = (key: KeyOf, roomKey: string): string => key('a', roomKey);
+
+/**
+ * The key of the bytes a room's assets take up, for ROOM_STORAGE_LIMIT_MB. It is there once the room
+ * has been counted (the first time it is asked for), and kept as assets are stored and taken out.
+ * It is kept out of the indexes' a: so that the inventory, which scans a:, meets indexes alone.
+ */
+export const assetBytesOf = (key: KeyOf, roomKey: string): string => key('asset-bytes', roomKey);
+
+/** Adds to what a room's assets take up, only once it has been counted. */
+const ADD_IF_COUNTED = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+redis.call('INCRBY', KEYS[1], ARGV[1])
+return 1
+`;
 
 /** The ETag. The name is the SHA-256 of the contents, so it is made from the name. */
 const etagOf = (id: string) => `"${id}"`;
@@ -87,6 +102,15 @@ export const vercelAssets = (
   const headersOf = (id: string, asset: Indexed) =>
     assetHeaders({ type: asset.type, size: asset.size, etag: etagOf(id), name: asset.name });
 
+  const listRoom = async (roomKey: string): Promise<RoomAsset[]> =>
+    Object.entries(await redis.hGetAll(assetIndexOf(key, roomKey))).map(([id, value]) => {
+      const { type, size, name } = JSON.parse(value) as Indexed;
+      return { id, type, size, name };
+    });
+
+  const addBytes = (roomKey: string, bytes: number) =>
+    redis.eval(ADD_IF_COUNTED, { keys: [assetBytesOf(key, roomKey)], arguments: [String(bytes)] });
+
   return {
     blocked: (id) => bucket.exists(blockedKeyOf(id)),
 
@@ -109,13 +133,27 @@ export const vercelAssets = (
       if (size !== length || hash.digest('hex') !== id) return 'hash-mismatch';
       await bucket.put(roomAssetKey(roomKey, id), Buffer.concat(chunks), type);
       const asset: Indexed = { type, size, name, uploadedAt: Date.now() };
-      await redis.hSet(assetIndexOf(key, roomKey), id, JSON.stringify(asset));
+      // Only the one that puts it in the index adds its bytes (two at once may store the same).
+      if ((await redis.hSet(assetIndexOf(key, roomKey), id, JSON.stringify(asset))) === 1)
+        await addBytes(roomKey, size);
       return 'stored';
     },
 
     discard: async (roomKey, id) => {
+      const was = await indexed(roomKey, id);
       await bucket.delete([roomAssetKey(roomKey, id)]);
-      await redis.hDel(assetIndexOf(key, roomKey), id);
+      // Only the one that takes it out of the index takes its bytes off.
+      if (was && (await redis.hDel(assetIndexOf(key, roomKey), id)) === 1) await addBytes(roomKey, -was.size);
+    },
+
+    /** What the room's assets take up: counted from the index the first time, and kept from then on. */
+    usage: async (roomKey) => {
+      const bytes = assetBytesOf(key, roomKey);
+      const kept = await redis.get(bytes);
+      if (kept !== null) return Number(kept);
+      const listed = (await listRoom(roomKey)).reduce((sum, asset) => sum + asset.size, 0);
+      await redis.set(bytes, String(listed), { condition: 'NX' });
+      return Number(await redis.get(bytes));
     },
 
     head: async (request, roomKey, id) => {
@@ -160,13 +198,46 @@ export const vercelAssets = (
       return privately(new Response(slice(body, range.start, range.end), { status: 206, headers }));
     },
 
-    list: async (roomKey): Promise<RoomAsset[]> =>
-      Object.entries(await redis.hGetAll(assetIndexOf(key, roomKey))).map(([id, value]) => {
-        const { type, size, name } = JSON.parse(value) as Indexed;
-        return { id, type, size, name };
-      }),
+    list: listRoom,
 
     afterStore,
+
+    /** One page of the rooms' indexes (SCAN), with every asset in each. */
+    inventory: async (cursor) => {
+      const indexPrefix = assetIndexOf(key, '');
+      const page = await redis.scan(cursor ?? '0', { MATCH: `${indexPrefix}*`, COUNT: 100 });
+      const assets: StoredRoomAsset[] = [];
+      for (const indexKey of page.keys) {
+        const roomKey = indexKey.slice(indexPrefix.length);
+        for (const [id, value] of Object.entries(await redis.hGetAll(indexKey))) {
+          const { type, size, name, uploadedAt } = JSON.parse(value) as Indexed;
+          assets.push({ roomKey, id, type, size, name, uploadedAt });
+        }
+      }
+      return { assets, cursor: page.cursor === '0' ? null : page.cursor };
+    },
+
+    content: async (roomKey, id) => {
+      const asset = await indexed(roomKey, id);
+      const body = asset && (await bucket.get(roomAssetKey(roomKey, id)));
+      return body ? { body, type: (asset as Indexed).type } : null;
+    },
+
+    block: (id) => bucket.put(blockedKeyOf(id), new Uint8Array(), 'application/octet-stream'),
+
+    unblock: (id) => bucket.delete([blockedKeyOf(id)]),
+
+    blockedIds: async () => {
+      const prefix = blockedKeyOf('');
+      const ids: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await bucket.list(prefix, cursor);
+        ids.push(...page.items.map((item) => item.path.slice(prefix.length)));
+        cursor = page.cursor;
+      } while (cursor !== null);
+      return ids;
+    },
 
     // When the store can make a direct upload target (Blob), big assets are uploaded there instead.
     ...(bucket.target && {
@@ -175,6 +246,13 @@ export const vercelAssets = (
         target: bucket.target,
         open: (path: string) => bucket.get(path),
         discard: (path: string) => bucket.delete([path]),
+        // The word that an upload is done, taken once while its ticket lasts.
+        claim: async (path: string) =>
+          (await redis.set(key('upload', path), '1', {
+            condition: 'NX',
+            expiration: { type: 'EX', value: UPLOAD_TICKET_SECONDS },
+          })) !== null,
+        release: async (path: string) => void (await redis.del(key('upload', path))),
       },
     }),
 
@@ -182,7 +260,7 @@ export const vercelAssets = (
     deleteRoom: async (roomKey) => {
       const ids = await redis.hKeys(assetIndexOf(key, roomKey));
       if (ids.length > 0) await bucket.delete(ids.map((id) => roomAssetKey(roomKey, id)));
-      await redis.del(assetIndexOf(key, roomKey));
+      await redis.del([assetIndexOf(key, roomKey), assetBytesOf(key, roomKey)]);
     },
   };
 };

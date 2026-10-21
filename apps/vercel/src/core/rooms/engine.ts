@@ -1,7 +1,10 @@
 import { safeParse } from 'valibot';
+import type { InferOutput } from 'valibot';
 
 import {
   ACCOUNT_USER_ID_PREFIX,
+  ASSET_REMOVAL_ALIAS,
+  ASSET_REMOVAL_PREFIX,
   AUTHORITY_ONLY_EVENTS,
   AUTHORITY_PEER_ID,
   AuthorityEvent,
@@ -32,7 +35,9 @@ import type {
 } from '../../../contracts/protocol.js';
 import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../auth/tokens.js';
 import { rollLine } from '../dice/roll.js';
+import { BanList, barredBy } from '../moderation/bans.js';
 import { decodeFrame, encodeFrame } from './codec.js';
+import { UPLOADER_ROLES, seatedAs } from './host.js';
 import type { RoomHost, RoomStore, Seat } from './host.js';
 import {
   FLUSH_DELAY_MS,
@@ -46,6 +51,7 @@ import {
   MAX_OBJECTS,
   MAX_PENDING_ROLLS,
   MAX_SOCKETS,
+  MAX_WAITING_FRAMES,
   OCCUPIED_CHECK_MS,
   RATE_WINDOW_MS,
   TOKEN_GRACE_MS,
@@ -90,6 +96,13 @@ type Reply = (eventName: string, data: unknown) => void;
 /** The alias of a deck, whose cards keep their faces from everyone. */
 const CARD_STACK_ALIAS = 'card-stack';
 
+/**
+ * Whether something of another kind would take an identifier kept for what takes a picture or sound
+ * out of the room (asset-removal_<SHA-256>), which would keep the GM from writing it.
+ */
+const takesRemovalIdentifier = (identifier: string, aliasName: string): boolean =>
+  aliasName !== ASSET_REMOVAL_ALIAS && identifier.startsWith(ASSET_REMOVAL_PREFIX);
+
 /** What the deck check reads of an index row: what the object is, where it sits and how it is seen. */
 type DeckRow = Pick<StoredEntry, 'alias' | 'parent' | 'view'>;
 
@@ -125,6 +138,11 @@ export class RoomEngine<C extends object> {
   private readonly refused = new WeakSet<C>();
   /** When a connection before its hello was taken in. One with no time here counts as having waited too long. */
   private readonly connectedAt = new WeakMap<C, number>();
+  /**
+   * The connections whose hello waits for the operator's bans to be read, and the frames that came
+   * on each meanwhile. Those are taken in after the hello, in the order they came.
+   */
+  private readonly waiting = new WeakMap<C, (ArrayBuffer | Uint8Array)[]>();
   /** How many dice are waiting to be rolled. */
   private pendingRolls = 0;
   /**
@@ -257,6 +275,17 @@ export class RoomEngine<C extends object> {
   }
 
   /**
+   * Closes the seats the operator's ban covers, with banned, which Axe does not reconnect on: a
+   * banned person cannot get a new token, and a banned sender cannot connect again. Returns how many
+   * it closed.
+   */
+  expel(barred: (seat: Seat) => boolean): number {
+    const seats = this.seats().filter(({ seat }) => barred(seat));
+    for (const { conn } of seats) this.refuse(conn, 'banned');
+    return seats.length;
+  }
+
+  /**
    * Whether someone putting an asset still has a role in this room that may put one (GM or player).
    * The asset PUT asks it. A token lasts 15 minutes, so it is refused if the room has gone or the
    * seat has been made a guest in that time.
@@ -264,10 +293,21 @@ export class RoomEngine<C extends object> {
   canUpload(userId: string): 'ok' | 'room-not-found' | 'not-a-player' {
     if (this.host.wiping() || !this.host.room()) return 'room-not-found';
     // Only while seated. Someone who has left cannot put one, even with a token still left.
-    const seated = this.seats().some(
-      ({ seat }) => seat.account && seat.userId === userId && (seat.role === 'gm' || seat.role === 'pl')
-    );
-    return seated ? 'ok' : 'not-a-player';
+    return this.seatedAs(userId, UPLOADER_ROLES) ? 'ok' : 'not-a-player';
+  }
+
+  /**
+   * Whether someone taking an asset out of this room is its GM now. The asset DELETE asks it, for
+   * the role in a token may be 15 minutes old.
+   */
+  canDiscard(userId: string): 'ok' | 'room-not-found' | 'not-game-master' {
+    if (this.host.wiping() || !this.host.room()) return 'room-not-found';
+    return this.seatedAs(userId, ['gm']) ? 'ok' : 'not-game-master';
+  }
+
+  /** Whether that account is seated in the room now, with one of the roles. */
+  private seatedAs(userId: string, roles: readonly PeerRole[]): boolean {
+    return this.seats().some(({ seat }) => seatedAs(seat, userId, roles));
   }
 
   /**
@@ -320,6 +360,13 @@ export class RoomEngine<C extends object> {
     this.expireSeats();
     const seat = this.host.seatOf(conn);
     if (seat?.closed || this.refused.has(conn)) return;
+    const waiting = this.waiting.get(conn);
+    if (waiting) {
+      // Axe sends nothing more until it is let in, so only a few may wait behind the hello.
+      if (waiting.length >= MAX_WAITING_FRAMES) return this.refuse(conn, 'too-many-messages');
+      waiting.push(message);
+      return;
+    }
     // Nothing that comes while the room is being deleted is taken in (no seat is made, and no token
     // is handed out again).
     if (this.host.wiping()) return this.refuse(conn, seat ? 'room-deleted' : 'room-not-found');
@@ -366,6 +413,57 @@ export class RoomEngine<C extends object> {
     if (!parsed.success) return this.refuse(conn, 'bad-message');
     const hello = parsed.output;
 
+    const bans = this.host.bans();
+    if (bans instanceof BanList) {
+      this.admit(conn, hello, bans);
+      return;
+    }
+    // The bans are read afresh for each hello, so that someone banned a moment ago, on whatever
+    // instance, is not let in on bans read a while before, even with an access token still good.
+    this.waiting.set(conn, []);
+    this.host.defer(
+      bans.then((read) => {
+        const frames = this.waiting.get(conn) as (ArrayBuffer | Uint8Array)[];
+        this.waiting.delete(conn);
+        // It may have gone or been refused meanwhile.
+        if (this.gone.has(conn) || this.refused.has(conn)) return;
+        this.admit(conn, hello, read);
+        this.checkAgain(conn);
+        for (const frame of frames) this.receive(conn, frame);
+      })
+    );
+  }
+
+  /**
+   * Checks a seat just let in against the bans once more, once the room list has been told it is in.
+   * A ban made while the hello waited is not in the bans it was let in on, and closing the seats a
+   * ban covers goes by the room list (only the rooms with someone in them). Read again after the list
+   * has been told, the bans have it, or else the list had the room by the time the ban closed seats.
+   */
+  private checkAgain(conn: C): void {
+    if (!this.host.seatOf(conn)) return;
+    this.host.defer(
+      this.host
+        .listed()
+        .then(() => this.host.bans())
+        .then((bans) => {
+          const seat = this.host.seatOf(conn);
+          // A seat closed meanwhile (refused, replaced, the room deleted) is marked refused.
+          if (!seat || this.refused.has(conn) || this.gone.has(conn)) return;
+          if (barredBy(bans)(seat)) this.refuse(conn, 'banned');
+        })
+    );
+  }
+
+  /**
+   * Lets a hello in, or refuses it, against the bans as they stand. The operator's bans are refused
+   * as banned, so that Axe says why and does not try again.
+   */
+  private admit(conn: C, hello: InferOutput<typeof helloSchema>, bans: BanList): void {
+    // A banned sender is turned away before anything about the room is checked (such as its password).
+    const address = this.host.addressOf(conn);
+    if (address !== undefined && bans.addressBan(address)) return this.refuse(conn, 'banned');
+
     const room = this.host.room();
     if (!room) return this.refuse(conn, 'room-not-found');
     if (room.password && !verifyPassword(hello.password ?? '', room.password)) {
@@ -383,6 +481,7 @@ export class RoomEngine<C extends object> {
       roomKey: room.roomKey,
       role: 'guest',
       account: false,
+      ...(address === undefined ? {} : { address }),
       joinedAt: Date.now(),
       activeAt: Date.now() - idleMs,
     };
@@ -406,9 +505,11 @@ export class RoomEngine<C extends object> {
       const secret = this.host.sessionSecret();
       const claims = secret ? readToken(hello.accessToken, 'access', secret) : null;
       if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(conn, 'unauthorized');
+      if (bans.accountBan(claims.sub)) return this.refuse(conn, 'banned');
       const { role, known } = this.roleOf(hello.userId, hello.invite ?? null, room.roomKey, secret);
       seat.role = role;
       seat.account = true;
+      seat.accountKey = claims.sub;
       seat.expiresAt = claims.exp * 1000;
       // The role is remembered only when the seat is taken. The invite of someone refused still works
       // the next time they come in.
@@ -463,8 +564,15 @@ export class RoomEngine<C extends object> {
     // On a room server running without login, the asset routes take no token either, so it is left
     // empty.
     if (!secret) return { assetToken: '', [expiresAt]: 0 } as { assetToken: string } & Record<K, number>;
+    // The account goes in too, so that the asset routes turn a banned account away at once.
     const assetToken = signToken<'asset'>(
-      { aud: 'asset', room: seat.roomKey, role: seat.role, uid: seat.userId },
+      {
+        aud: 'asset',
+        room: seat.roomKey,
+        role: seat.role,
+        uid: seat.userId,
+        ...(seat.accountKey === undefined ? {} : { sub: seat.accountKey }),
+      },
       ASSET_TOKEN_SECONDS,
       secret
     );
@@ -798,6 +906,10 @@ export class RoomEngine<C extends object> {
     // it off as a cursor.
     const existing = this.store.entryOf(identifier);
     if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
+    // What takes a picture or sound out of the room is the GM's to write, and its identifiers are
+    // kept for it.
+    if ((aliasName === ASSET_REMOVAL_ALIAS && seat.role !== 'gm') || takesRemovalIdentifier(identifier, aliasName))
+      return this.refuseWrite(identifier, seat, reply);
     // A view hint that is too big fits neither in the index nor in one row of the store. New objects
     // are limited in number too. A version may not jump far at once.
     if (
@@ -1157,6 +1269,7 @@ export class RoomEngine<C extends object> {
     if (this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier)) return;
     if (
       message.aliasName !== CHAT_MESSAGE_ALIAS ||
+      takesRemovalIdentifier(message.identifier, message.aliasName) ||
       !fitsIndex(message) ||
       message.majorVersion > MAX_VERSION_STEP ||
       this.store.size >= MAX_OBJECTS ||
@@ -1269,6 +1382,13 @@ export class RoomEngine<C extends object> {
     // Already deleted as a descendant.
     if (!entry && this.store.isDeleted(identifier)) return;
     if (this.kindOf(identifier, seat) === 'hidden') return;
+    // What takes a picture or sound out of the room is the GM's to delete, and so is its identifier
+    // before it is there (a tombstone would keep the GM from writing it).
+    const removal =
+      entry?.alias === ASSET_REMOVAL_ALIAS ||
+      aliasName === ASSET_REMOVAL_ALIAS ||
+      identifier.startsWith(ASSET_REMOVAL_PREFIX);
+    if (removal && seat.role !== 'gm') return this.refuseWrite(identifier, seat, reply);
     const owner = entry?.owner ?? null;
     // What is kept only while its person is there (a cursor) can be deleted only by that person.
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)

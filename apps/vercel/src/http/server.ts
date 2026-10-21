@@ -8,6 +8,7 @@ import { sameText } from '../core/auth/secrets.js';
 import type { ServerBackend, ServerEnv } from '../core/http/backend.js';
 import type { Swept } from '../server/deps.js';
 import { onError } from '../core/http/errors.js';
+import { adminRoutes } from '../core/http/routes/admin.js';
 import { serverRoutes } from '../core/http/routes/index.js';
 
 /** The room server's routes. Their settings and error shape are separate from the SkyWay routes'. */
@@ -18,7 +19,10 @@ export const SERVER_PATHS = [
   '/v1/account',
   '/v1/account/*',
   '/v1/login/*',
+  '/v1/contact',
   '/internal/sweep',
+  '/admin',
+  '/admin/*',
 ];
 
 export interface ServerAppOptions {
@@ -53,6 +57,8 @@ export const serverApp = (options: ServerAppOptions): Hono<ServerAppEnv> => {
   app.onError(onError);
   for (const path of SERVER_PATHS) app.use(path, loader);
   app.route('/v1', serverRoutes());
+  // The operator's dashboard. Only when ADMIN_DISCORD_IDS is set.
+  app.route('/admin', adminRoutes());
   // The sweep Vercel Cron calls. When CRON_SECRET is set, checks the Authorization Vercel adds.
   // Without it anyone can call, so the sweep runs only once in a while.
   app.get('/internal/sweep', async (c) => {

@@ -2,14 +2,21 @@ import type { WebSocket } from 'ws';
 
 import type { VercelServerConfig } from '../config/server.js';
 import type { LimitKind, ServerBackend } from '../core/http/backend.js';
+import { notingLimits } from '../core/http/moderation.js';
+import { moderationOf } from '../core/moderation/activity.js';
+import { webhookAlerts } from '../core/moderation/alerts.js';
+import { banCache } from '../core/moderation/bans.js';
+import { checkStorage } from '../core/moderation/storage.js';
+import type { StorageUsage } from '../core/moderation/storage.js';
 import { vercelAssets } from './assets/backend.js';
 import { bucketFor } from './assets/blob-bucket.js';
 import type { AssetBucket } from './assets/bucket.js';
 import { orphanSweeper } from './assets/sweep.js';
 import { storelessBackend, vercelBackend } from './backend.js';
 import type { ServerDeps, Upgrades } from './backend.js';
-import { LIMITS, redisLimiter } from './limits.js';
+import { LIMITS, clientIpOf, redisLimiter } from './limits.js';
 import { redisLobby } from './lobby.js';
+import { redisModeration } from './moderation.js';
 import { connectRedis, keyOf } from './redis.js';
 import type { Redis } from './redis.js';
 import { Relay } from './rooms/relay.js';
@@ -34,10 +41,11 @@ export const ORPHAN_SWEEP_EVERY = 20;
  */
 export const UNKEYED_SWEEP_EVERY_MS = 12 * 60 * 60 * 1000;
 
-/** What a sweep deleted. */
+/** What a sweep deleted, and the store's size when ADMIN_STORAGE_ALERT_GB has it counted. */
 export interface Swept {
   rooms: number;
   assets: number;
+  storage: StorageUsage | null;
 }
 
 /** What can be swapped in from outside when the room server is put together (for tests and local trials). */
@@ -65,7 +73,6 @@ export const createServerDeps = async (
 ): Promise<ServerDeps> => {
   const connection = redis ?? (await connectRedis(config.redisUrl as string));
   const key = keyOf(config.redisKeyPrefix);
-  const limit = redisLimiter(connection, key, options.limits ?? LIMITS);
   const lobby = redisLobby(connection, key);
   // Work after the response does not bring the process down when it fails. Each piece of work logs
   // its own failure.
@@ -73,6 +80,20 @@ export const createServerDeps = async (
     const settled = work.catch(() => undefined);
     options.defer?.(settled);
   };
+  // The bans are kept on this instance for a while, so that each request does not read them.
+  const moderationStore = redisModeration(connection, key);
+  const moderation = moderationOf(
+    moderationStore,
+    banCache(() => moderationStore.state()),
+    defer,
+    config.adminWebhook
+      ? webhookAlerts(config.adminWebhook, (kind, ms) => moderationStore.claimAlert(kind, ms))
+      : undefined
+  );
+  const limit = notingLimits(redisLimiter(connection, key, options.limits ?? LIMITS), {
+    addressOf: clientIpOf,
+    moderation,
+  });
   const bucket = (options.bucketOf ?? bucketFor)(config);
   const orphans = orphanSweeper(connection, key, bucket);
   let stored = 0;
@@ -96,6 +117,7 @@ export const createServerDeps = async (
       // local directory there is no limit).
       assetUpload: assets.direct ? { maxPutBytes: assets.direct.maxPutBytes, directUpload: true } : null,
       deleteAssets,
+      readBans: () => moderation.fresh(),
       defer,
       timing: options.timing,
     },
@@ -112,6 +134,7 @@ export const createServerDeps = async (
     orphans,
     assets,
     limit,
+    moderation,
     upgrades,
     retentionSeconds: config.roomRetentionSeconds,
   };
@@ -144,7 +167,7 @@ export const backendProvider = (options: DepsOptions) => {
      * less than UNKEYED_SWEEP_EVERY_MS ago.
      */
     async sweep(config: VercelServerConfig, keyed: boolean): Promise<Swept | null> {
-      if (!config.redisUrl) return { rooms: 0, assets: 0 };
+      if (!config.redisUrl) return { rooms: 0, assets: 0, storage: null };
       const deps = await depsOf(config);
       if (!keyed) {
         const taken = await deps.redis.set(deps.key('sweep', 'unkeyed'), '1', {
@@ -153,7 +176,14 @@ export const backendProvider = (options: DepsOptions) => {
         });
         if (!taken) return null;
       }
-      return { rooms: await deps.sweeper.now(), assets: await deps.orphans() };
+      const rooms = await deps.sweeper.now();
+      const assets = await deps.orphans();
+      // Counted after the sweep, so that what it deleted is not counted. A failure goes to the log.
+      const storage = await checkStorage(config, vercelBackend(deps)).catch((err: unknown) => {
+        console.error('Could not count the store:', err);
+        return null;
+      });
+      return { rooms, assets, storage };
     },
     /** What was made (so the tests can reach inside). */
     depsFor: (config: VercelServerConfig) => made.get(`${config.redisUrl}|${config.redisKeyPrefix}`),

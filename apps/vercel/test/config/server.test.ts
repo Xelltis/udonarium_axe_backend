@@ -24,6 +24,11 @@ describe('parseServerConfig', () => {
       redisKeyPrefix: 'axe:',
       blob: null,
       cronSecret: null,
+      admin: null,
+      adminWebhook: null,
+      storageAlertBytes: null,
+      roomStorageLimitBytes: null,
+      contactUrl: null,
     });
   });
 
@@ -38,6 +43,8 @@ describe('parseServerConfig', () => {
         ROOM_RETENTION_HOURS: '2',
         ROOM_SOCKET_SECONDS: '120',
         CRON_SECRET: 'cron',
+        ADMIN_DISCORD_IDS: '1,2',
+        ADMIN_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/token',
       })
     ).toMatchObject({
       login: {
@@ -51,6 +58,8 @@ describe('parseServerConfig', () => {
       redisKeyPrefix: 'mine:',
       blob: { kind: 'vercel' },
       cronSecret: 'cron',
+      admin: { discordIds: ['1', '2'], passkeyReset: [] },
+      adminWebhook: 'https://discord.com/api/webhooks/1/token',
     });
   });
 
@@ -80,10 +89,34 @@ describe('parseServerConfig', () => {
     expect(() => parseServerConfig({ ...base, REDIS_URL: 'redis://r' })).toThrow(/BLOB/);
   });
 
+  it('reads where someone turned away can ask', () => {
+    expect(
+      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_CONTACT_URL: 'mailto:op@a.example' }).contactUrl
+    ).toBe('mailto:op@a.example');
+  });
+
+  it('reads the store’s size to tell the operator past, or none when it is left empty', () => {
+    expect(
+      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: '2.5' }).storageAlertBytes
+    ).toBe(2_500_000_000);
+    expect(
+      parseServerConfig({ ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: '' }).storageAlertBytes
+    ).toBeNull();
+  });
+
   it.each([
     ['no origins', {}],
     ['a socket that rotates too soon', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_SOCKET_SECONDS: '30' }],
     ['only part of the login', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', DISCORD_CLIENT_ID: 'id' }],
+    ['a webhook that is not https', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'http://discord.com/x' }],
+    ['a webhook that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_WEBHOOK_URL: 'discord' }],
+    ['a store size that is not a number of GB', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_STORAGE_ALERT_GB: 'ten' }],
+    ['a contact that is not a URL', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_CONTACT_URL: 'ask the GM' }],
+    [
+      'a room limit that is not a whole number of MB',
+      { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ROOM_STORAGE_LIMIT_MB: 'lots' },
+    ],
+    ['an operator that is not a Discord user id', { ACCESS_CONTROL_ALLOW_ORIGIN: '*', ADMIN_DISCORD_IDS: 'someone' }],
   ])('turns away %s', (_name, env) => {
     expect(() => parseServerConfig(env)).toThrow(ConfigError);
   });

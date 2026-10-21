@@ -1,6 +1,14 @@
 import type { AssetUploadPolicy, PeerRole } from '../../../contracts/protocol.js';
+import type { BanList } from '../moderation/bans.js';
 import type { ObjectIndex } from './object-index.js';
 import type { PasswordHash } from './password.js';
+
+/** The roles that may store an asset in a room. */
+export const UPLOADER_ROLES: readonly PeerRole[] = ['gm', 'pl'];
+
+/** Whether the seat is that account's, seated with one of the roles. */
+export const seatedAs = (seat: Seat, userId: string, roles: readonly PeerRole[]): boolean =>
+  seat.account && seat.userId === userId && roles.includes(seat.role);
 
 /**
  * What is kept for each connection, none until its hello is let in. The room server decides where it
@@ -15,6 +23,10 @@ export interface Seat {
   role: PeerRole;
   /** Came in logged in. Someone not logged in stays a guest, whose role cannot be changed. */
   account: boolean;
+  /** The account (`discord:<ID>`) of someone who came in logged in. The operator's bans go by it. */
+  accountKey?: string;
+  /** The sender's IP address, as the room server was told it when the connection was made. */
+  address?: string;
   /** When the seat came in (Unix milliseconds). */
   joinedAt: number;
   /** When the access token of someone who came in logged in runs out (Unix milliseconds). A new token extends it. */
@@ -68,6 +80,12 @@ export interface RoomHost<C extends object> {
   connections(): readonly C[];
   seatOf(conn: C): Seat | null;
   setSeat(conn: C, seat: Seat): void;
+  /**
+   * The sender's IP address, as the room server was told it when the connection was made, which goes
+   * on the seat so that the operator's bans can find it. Kept with the connection, where it outlasts
+   * the room sleeping before the hello comes.
+   */
+  addressOf(conn: C): string | undefined;
   /** Sends a frame. Does nothing when the connection is closing and cannot send. */
   send(conn: C, frame: Uint8Array): void;
   /** Closes the connection. Does nothing when it is already closed. */
@@ -88,6 +106,14 @@ export interface RoomHost<C extends object> {
   emptied(): void;
   /** Updates the head count and the GMs in the room list. */
   lobbyChanged(roomKey: string): void;
+  /** Settles once the room list has been told of every change so far (lobbyChanged). Never fails. */
+  listed(): Promise<void>;
+  /**
+   * The operator's bans as they stand, which a hello is checked against. A room server that asks its
+   * store for them gives a promise, which never fails: when they cannot be read, it gives those read
+   * last.
+   */
+  bans(): BanList | Promise<BanList>;
   record(event: RoomEvent, detail: string, value: number): void;
   /** Work that goes on until it is done, even after returning. */
   defer(work: Promise<unknown>): void;

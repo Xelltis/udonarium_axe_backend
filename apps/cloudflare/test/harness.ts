@@ -6,6 +6,7 @@ import app from '../src/index';
 import { blockedKeyOf, roomAssetKey } from '../src/core/assets/keys';
 import type { RoomEngine } from '../src/core/rooms/engine';
 import type { RoomHost } from '../src/core/rooms/host';
+import { MODERATION_NAME } from '../src/moderation/store';
 import type { RoomDurableObject } from '../src/rooms/room';
 import type { Harness, TestSocket } from './shared/harness-api';
 
@@ -75,6 +76,10 @@ export const harness: Harness = {
   block: async (id) => {
     await env.ASSETS.put(blockedKeyOf(id), new Uint8Array());
   },
+
+  banElsewhere: (ban) => env.MODERATION.getByName(MODERATION_NAME).putBan(ban),
+
+  adminEpoch: () => env.MODERATION.getByName(MODERATION_NAME).adminEpoch(),
 
   expireLoginCode: (accountKey, id) =>
     runInDurableObject(env.ACCOUNTS.getByName(accountKey), (_instance, state) => {

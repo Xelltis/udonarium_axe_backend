@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AUTHORITY_PEER_ID, AuthorityEvent, MAX_VERSION_STEP, SyncEvent } from '../../contracts/protocol.js';
+import {
+  ASSET_REMOVAL_PREFIX,
+  AUTHORITY_PEER_ID,
+  AuthorityEvent,
+  MAX_VERSION_STEP,
+  SyncEvent,
+} from '../../contracts/protocol.js';
 import { harness } from '../harness.js';
 import { chatTabList, contextOf, createRoom, eventually, join, listedTabOf } from './room-helpers.js';
 
@@ -199,6 +205,16 @@ describe('rolling on the server', () => {
     ]);
 
     expect((await alice.events()).map((event) => event.data)).toEqual([{ identifier: 'leapt', reason: 'invalid' }]);
+  });
+
+  it('rolls nothing into an identifier kept for what takes a picture or sound out of the room', async () => {
+    const { alice } = await room();
+
+    alice.emit([rollRequest(`${ASSET_REMOVAL_PREFIX}${'a'.repeat(64)}`, '1d6')]);
+
+    expect((await alice.events()).map((event) => event.data)).toEqual([
+      { identifier: `${ASSET_REMOVAL_PREFIX}${'a'.repeat(64)}`, reason: 'invalid' },
+    ]);
   });
 
   it('relays a roll request meant for another peer', async () => {

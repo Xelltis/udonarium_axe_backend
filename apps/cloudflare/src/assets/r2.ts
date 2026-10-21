@@ -1,7 +1,7 @@
 import type { RoomAsset } from '../../contracts/protocol';
 import { privately } from '../core/assets/headers';
-import { ASSET_ID, blockedKeyOf, roomAssetKey, roomAssetPrefix } from '../core/assets/keys';
-import type { AssetBackend, LimitKind } from '../core/http/backend';
+import { ASSET_ID, ROOMS_PREFIX, blockedKeyOf, roomAssetKey, roomAssetPrefix } from '../core/assets/keys';
+import type { AssetBackend, LimitKind, StoredRoomAsset } from '../core/http/backend';
 import { failure } from '../core/http/errors';
 import { LOBBY_NAME } from '../rooms/lobby';
 import { objectHeaders, setContentRange } from './response';
@@ -20,114 +20,207 @@ const SWEEP_CHANCE = 1 / 20;
 /** The limit on how many R2 pages a listing reads. A page holds 1000 objects. */
 const MAX_LIST_PAGES = 10;
 
+/** Where the marks that bar an asset are kept. */
+const BLOCKED_PREFIX = blockedKeyOf('');
+
+/** A room's key (as in the store's key of its assets). */
+const ROOM_KEY = /^[0-9a-f]{32}$/;
+
+/** The ids of what is barred from being stored, up to MAX_LIST_PAGES pages of them. */
+const listBlocked = async (bucket: R2Bucket): Promise<string[]> => {
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const listed = await bucket.list({ prefix: BLOCKED_PREFIX, ...(cursor ? { cursor } : {}) });
+    ids.push(...listed.objects.map((object) => object.key.slice(BLOCKED_PREFIX.length)));
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  return ids;
+};
+
+/** The assets kept for a room, up to MAX_LIST_PAGES pages of them. */
+const listRoom = async (bucket: R2Bucket, roomKey: string): Promise<RoomAsset[]> => {
+  const assets: RoomAsset[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const listed = await bucket.list({
+      prefix: roomAssetPrefix(roomKey),
+      include: ['httpMetadata', 'customMetadata'],
+      ...(cursor ? { cursor } : {}),
+    });
+    for (const object of listed.objects) {
+      const id = object.key.slice(roomAssetPrefix(roomKey).length);
+      if (!ASSET_ID.test(id)) continue;
+      assets.push({
+        id,
+        type: object.httpMetadata?.contentType ?? 'application/octet-stream',
+        size: object.size,
+        name: object.customMetadata?.name ?? '',
+      });
+    }
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  return assets;
+};
+
 /** Keeps a room's assets in R2 and serves them through the Cache API. */
 export const r2Assets = (
   env: Env,
   waitUntil: (work: Promise<unknown>) => void,
   limit: (request: Request, kind: LimitKind) => Promise<boolean>
-): AssetBackend => ({
-  blocked: async (id) => (await env.ASSETS.head(blockedKeyOf(id))) !== null,
+): AssetBackend => {
+  /** Runs work that must not stop halfway, held by waitUntil, and answers with it. */
+  const together = <T>(work: () => Promise<T>): Promise<T> => {
+    const running = work();
+    waitUntil(running.catch(() => undefined));
+    return running;
+  };
+  return {
+    blocked: async (id) => (await env.ASSETS.head(blockedKeyOf(id))) !== null,
 
-  exists: async (roomKey, id) => (await env.ASSETS.head(roomAssetKey(roomKey, id))) !== null,
+    exists: async (roomKey, id) => (await env.ASSETS.head(roomAssetKey(roomKey, id))) !== null,
 
-  store: async (roomKey, id, body, length, type, name) => {
-    // R2 checks the hash while it writes. When the length differs from Content-Length, it stops
-    // mid-stream.
-    try {
-      await env.ASSETS.put(roomAssetKey(roomKey, id), body.pipeThrough(new FixedLengthStream(length)), {
-        sha256: id,
-        httpMetadata: { contentType: type },
-        ...(name ? { customMetadata: { name } } : {}),
+    /**
+     * Puts it in R2 and counts it in the room's total. The two go on together under waitUntil, so that
+     * a client that goes away once it is in R2 does not leave it there uncounted (a request let go
+     * stops what it waits for, not what waitUntil holds).
+     */
+    store: (roomKey, id, body, length, type, name) =>
+      together(async () => {
+        // R2 checks the hash while it writes. When the length differs from Content-Length, it stops
+        // mid-stream.
+        try {
+          await env.ASSETS.put(roomAssetKey(roomKey, id), body.pipeThrough(new FixedLengthStream(length)), {
+            sha256: id,
+            httpMetadata: { contentType: type },
+            ...(name ? { customMetadata: { name } } : {}),
+          });
+        } catch (err) {
+          if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) return 'hash-mismatch';
+          throw err;
+        }
+        await env.ROOMS.getByName(roomKey).keepAsset(id, length);
+        return 'stored';
+      }),
+
+    /**
+     * Takes it off the room's total first, and then out of R2, the two together as for store. With a
+     * store of the same asset at the same moment, the total can then only count it when it is gone
+     * (which taking it out again puts right), never miss it while it is there.
+     */
+    discard: (roomKey, id) =>
+      together(async () => {
+        await env.ROOMS.getByName(roomKey).dropAsset(id);
+        await env.ASSETS.delete(roomAssetKey(roomKey, id));
+      }),
+
+    /**
+     * Answers HEAD with R2's head and does not open the body's stream. As with GET, what is left in the
+     * cache is answered from the cache (so that GET and HEAD do not give different answers).
+     */
+    head: async (request, roomKey, id) => {
+      const cached = await caches.default.match(request.url);
+      if (cached) return privately(new Response(null, { status: 200, headers: cached.headers }));
+      if (!(await limit(request, 'read'))) return failure(429, 'rate-limited');
+      const object = await env.ASSETS.head(roomAssetKey(roomKey, id));
+      if (!object) return failure(404, 'not-found');
+      return privately(new Response(null, { status: 200, headers: objectHeaders(object) }));
+    },
+
+    read: async (request, roomKey, id) => {
+      // A response a Worker makes does not stay in the CDN, so the Cache API takes the reads from the same
+      // data center. The cache is looked up after the token is checked, so even what is left in the cache
+      // does not go back to someone without a token.
+      // cache.match answers conditional requests (304) and Range (206).
+      const cache = caches.default;
+      const cached = await cache.match(request);
+      if (cached) return privately(cached);
+
+      if (!(await limit(request, 'read'))) return failure(429, 'rate-limited');
+      // Conditional requests and Range are left to R2. When the condition fails, R2 returns one without
+      // a body.
+      const headers = request.headers;
+      const object = await env.ASSETS.get(roomAssetKey(roomKey, id), {
+        onlyIf: headers,
+        range: headers,
       });
-    } catch (err) {
-      if (err instanceof Error && err.message.includes(R2_BAD_DIGEST)) return 'hash-mismatch';
-      throw err;
-    }
-    return 'stored';
-  },
+      if (!object) return failure(404, 'not-found');
 
-  discard: async (roomKey, id) => {
-    await env.ASSETS.delete(roomAssetKey(roomKey, id));
-  },
-
-  /**
-   * Answers HEAD with R2's head and does not open the body's stream. As with GET, what is left in the
-   * cache is answered from the cache (so that GET and HEAD do not give different answers).
-   */
-  head: async (request, roomKey, id) => {
-    const cached = await caches.default.match(request.url);
-    if (cached) return privately(new Response(null, { status: 200, headers: cached.headers }));
-    if (!(await limit(request, 'read'))) return failure(429, 'rate-limited');
-    const object = await env.ASSETS.head(roomAssetKey(roomKey, id));
-    if (!object) return failure(404, 'not-found');
-    return privately(new Response(null, { status: 200, headers: objectHeaders(object) }));
-  },
-
-  read: async (request, roomKey, id) => {
-    // A response a Worker makes does not stay in the CDN, so the Cache API takes the reads from the same
-    // data center. The cache is looked up after the token is checked, so even what is left in the cache
-    // does not go back to someone without a token.
-    // cache.match answers conditional requests (304) and Range (206).
-    const cache = caches.default;
-    const cached = await cache.match(request);
-    if (cached) return privately(cached);
-
-    if (!(await limit(request, 'read'))) return failure(429, 'rate-limited');
-    // Conditional requests and Range are left to R2. When the condition fails, R2 returns one without
-    // a body.
-    const headers = request.headers;
-    const object = await env.ASSETS.get(roomAssetKey(roomKey, id), {
-      onlyIf: headers,
-      range: headers,
-    });
-    if (!object) return failure(404, 'not-found');
-
-    const responseHeaders = objectHeaders(object);
-    if (!('body' in object)) {
-      if (headers.has('If-Match') || headers.has('If-Unmodified-Since')) {
-        return failure(412, 'precondition-failed');
+      const responseHeaders = objectHeaders(object);
+      if (!('body' in object)) {
+        if (headers.has('If-Match') || headers.has('If-Unmodified-Since')) {
+          return failure(412, 'precondition-failed');
+        }
+        responseHeaders.delete('Content-Length');
+        return privately(new Response(null, { status: 304, headers: responseHeaders }));
       }
-      responseHeaders.delete('Content-Length');
-      return privately(new Response(null, { status: 304, headers: responseHeaders }));
-    }
-    if (headers.has('Range') && object.range) {
-      setContentRange(responseHeaders, object.range, object.size);
-      return privately(new Response(object.body, { status: 206, headers: responseHeaders }));
-    }
+      if (headers.has('Range') && object.range) {
+        setContentRange(responseHeaders, object.range, object.size);
+        return privately(new Response(object.body, { status: 206, headers: responseHeaders }));
+      }
 
-    const response = new Response(object.body, { status: 200, headers: responseHeaders });
-    waitUntil(cache.put(request.url, response.clone()));
-    return privately(response);
-  },
+      const response = new Response(object.body, { status: 200, headers: responseHeaders });
+      waitUntil(cache.put(request.url, response.clone()));
+      return privately(response);
+    },
 
-  list: async (roomKey) => {
-    const assets: RoomAsset[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    list: (roomKey) => listRoom(env.ASSETS, roomKey),
+
+    /**
+     * What the room's assets take up, as the room keeps it. The first time, they are listed and
+     * counted, and the room keeps the count from then on.
+     */
+    usage: async (roomKey) => {
+      const room = env.ROOMS.getByName(roomKey);
+      const kept = await room.assetBytes();
+      if (kept !== null) return kept;
+      const listed = await listRoom(env.ASSETS, roomKey);
+      return room.countAssetBytes(listed.map(({ id, size }) => ({ id, size })));
+    },
+
+    inventory: async (cursor) => {
       const listed = await env.ASSETS.list({
-        prefix: roomAssetPrefix(roomKey),
+        prefix: ROOMS_PREFIX,
         include: ['httpMetadata', 'customMetadata'],
         ...(cursor ? { cursor } : {}),
       });
+      const assets: StoredRoomAsset[] = [];
       for (const object of listed.objects) {
-        const id = object.key.slice(roomAssetPrefix(roomKey).length);
-        if (!ASSET_ID.test(id)) continue;
+        const [roomKey, id, ...rest] = object.key.slice(ROOMS_PREFIX.length).split('/');
+        if (!ROOM_KEY.test(roomKey) || !ASSET_ID.test(id) || rest.length > 0) continue;
         assets.push({
+          roomKey,
           id,
           type: object.httpMetadata?.contentType ?? 'application/octet-stream',
           size: object.size,
           name: object.customMetadata?.name ?? '',
+          uploadedAt: object.uploaded.getTime(),
         });
       }
-      if (!listed.truncated) break;
-      cursor = listed.cursor;
-    }
-    return assets;
-  },
+      return { assets, cursor: listed.truncated ? listed.cursor : null };
+    },
 
-  afterStore: () => {
-    if (Math.random() >= SWEEP_CHANCE) return;
-    const lobby = env.LOBBY.getByName(LOBBY_NAME);
-    waitUntil(sweepOrphans(env.ASSETS, (roomKeys) => lobby.known(roomKeys), randomStart()));
-  },
-});
+    content: async (roomKey, id) => {
+      const object = await env.ASSETS.get(roomAssetKey(roomKey, id));
+      return object && { body: object.body, type: object.httpMetadata?.contentType ?? 'application/octet-stream' };
+    },
+
+    block: async (id) => {
+      await env.ASSETS.put(blockedKeyOf(id), new Uint8Array());
+    },
+
+    unblock: async (id) => {
+      await env.ASSETS.delete(blockedKeyOf(id));
+    },
+
+    blockedIds: () => listBlocked(env.ASSETS),
+
+    afterStore: () => {
+      if (Math.random() >= SWEEP_CHANCE) return;
+      const lobby = env.LOBBY.getByName(LOBBY_NAME);
+      waitUntil(sweepOrphans(env.ASSETS, (roomKeys) => lobby.known(roomKeys), randomStart()));
+    },
+  };
+};

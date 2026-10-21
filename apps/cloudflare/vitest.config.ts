@@ -11,6 +11,7 @@ export default defineConfig({
           DISCORD_CLIENT_ID: 'test-client',
           DISCORD_CLIENT_SECRET: 'test-client-secret',
           SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+          ADMIN_DISCORD_IDS: '100000000000000001',
         },
         // The tests use smaller limits, to see a 429 within a few requests.
         ratelimits: {
