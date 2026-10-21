@@ -1,3 +1,59 @@
+# [1.2.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.1.2...v1.2.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **admin:** hold the assets barred from the dashboard with the bans ([3eaa714](https://github.com/Xelltis/udonarium_axe_backend/commit/3eaa71411b86ab021a7a422b59138e42e8efd6bd))
+* **admin:** keep a session logged out of from coming back ([76406d5](https://github.com/Xelltis/udonarium_axe_backend/commit/76406d56863cbb8d8bb56235eda33165699edd86))
+* **admin:** keep one reporter from crowding out the others' reports ([535538c](https://github.com/Xelltis/udonarium_axe_backend/commit/535538cea97aa4379d8e58d19ce01b4ddcfc5086))
+* **admin:** let reports go from whichever side holds over half ([3187367](https://github.com/Xelltis/udonarium_axe_backend/commit/3187367e2a743020f4f969f99de42570d291301c))
+* **admin:** let the reports of senders not logged in go first past the cap ([8652f57](https://github.com/Xelltis/udonarium_axe_backend/commit/8652f572e67dc379c3041c327f17239bc3f4efdd))
+* **admin:** let the reports of whoever kept the most go past the cap ([8d8a3b9](https://github.com/Xelltis/udonarium_axe_backend/commit/8d8a3b902d5d36b15e859150ff546e3952bf430a))
+* **admin:** note a sender turned away once a minute for each /64 ([74a7bfb](https://github.com/Xelltis/udonarium_axe_backend/commit/74a7bfbda74e8130691a82115c3a30fde580cf9b))
+* **admin:** put senders not logged in first only while they hold most ([2bbb4f8](https://github.com/Xelltis/udonarium_axe_backend/commit/2bbb4f8cfd3623a1b9ce7f9bb17551a7196e519c))
+* **admin:** read the uploads before taking down a reported asset ([b872154](https://github.com/Xelltis/udonarium_axe_backend/commit/b8721548715909c31dd8af4875f3d142921b764d))
+* **admin:** show uploaded pictures from data: URLs, not blob: ones ([96d46e8](https://github.com/Xelltis/udonarium_axe_backend/commit/96d46e8b3210aa34c1e1c65c7286c187a077f449))
+* **cloudflare:** count each of a room's assets once in its total ([a8f4646](https://github.com/Xelltis/udonarium_axe_backend/commit/a8f4646fcd3a1a19af61d64eeb3229ab187faf41))
+* **cloudflare:** finish storing and taking out an asset under waitUntil ([1bd012c](https://github.com/Xelltis/udonarium_axe_backend/commit/1bd012cfff3e4ac96d7c90b9ebd8dc2f0d222650))
+* **cloudflare:** stop serving a taken-down asset from the data center cache ([da6f484](https://github.com/Xelltis/udonarium_axe_backend/commit/da6f48458d51667ff069f84490438093ddb9a0d1))
+* **cloudflare:** take an asset off a room's total before deleting it ([659c473](https://github.com/Xelltis/udonarium_axe_backend/commit/659c47341cb7f01f5c8defda97db214eb96c08c2))
+* **rooms:** keep a roll from taking an asset-removal identifier ([bc142a9](https://github.com/Xelltis/udonarium_axe_backend/commit/bc142a9b6c6a4b3682619dbbf68cc86d1656155c))
+* **rooms:** keep a sender's address while a room sleeps before the hello ([35a6fe0](https://github.com/Xelltis/udonarium_axe_backend/commit/35a6fe0d491ca9ca987caea314e88aa1e8ccecbb))
+* **rooms:** keep what each room's assets take up rather than list them ([6ce0a9f](https://github.com/Xelltis/udonarium_axe_backend/commit/6ce0a9fb9d2fdb588a48397b37df5b0e1e81367c))
+* **rooms:** let only a GM write what takes an asset out of the room ([e0c0401](https://github.com/Xelltis/udonarium_axe_backend/commit/e0c040144594a1b249adc8107660c58b7a917566))
+* **rooms:** recheck a room's storage limit as a direct upload completes ([981d166](https://github.com/Xelltis/udonarium_axe_backend/commit/981d166826ed9c75cf624c3ac5937b1ae1907f98))
+* **rooms:** take an asset out again when stores at once overfill a room ([d5f6400](https://github.com/Xelltis/udonarium_axe_backend/commit/d5f6400c7aef4c5154e3fefba9a0a5e4a9b9d8d9))
+* **rooms:** turn a guest's token away before asking the room to delete ([ec2ef15](https://github.com/Xelltis/udonarium_axe_backend/commit/ec2ef15f0e38d91f360bbe38b23bee2cbe9e8d62))
+* **vercel:** hold the report cap when reports come at the same moment ([2b96f7d](https://github.com/Xelltis/udonarium_axe_backend/commit/2b96f7df1e9e7ecadcd6b95b7c7a50f5839e0ac8))
+* **vercel:** keep a room's asset total out of the indexes' namespace ([767b73c](https://github.com/Xelltis/udonarium_axe_backend/commit/767b73c3ce7590e9e8c6afd7ca7de6788e4f697e))
+* **vercel:** let reports go past the cap one script step at a time ([a235360](https://github.com/Xelltis/udonarium_axe_backend/commit/a2353606493ab0b53af5315dacc3b14594b81bf1))
+* **vercel:** name the sender by its socket on the local server ([1dfaf8e](https://github.com/Xelltis/udonarium_axe_backend/commit/1dfaf8e4aba046f18e8c01e3d704bc7605d32351))
+* **vercel:** send bans to a room's owner on a channel of their own ([4ed94ba](https://github.com/Xelltis/udonarium_axe_backend/commit/4ed94ba2d93de41ccdb1638770203595800824e3))
+* **vercel:** take each report to drop in one step when trimming ([9bb9552](https://github.com/Xelltis/udonarium_axe_backend/commit/9bb95520828495e6f293096749f347fa404f8b27))
+* **vercel:** take each upload ticket once ([2fdb853](https://github.com/Xelltis/udonarium_axe_backend/commit/2fdb85363c9f01b9fb83868dc2a5ac91dc9d53c6))
+
+
+### Features
+
+* **admin:** add a dashboard for the operator, with bans that take hold at once ([53be292](https://github.com/Xelltis/udonarium_axe_backend/commit/53be2924fe3fc9b0651cf36294c7c973750900fa))
+* **admin:** count the store once a day and tell the operator past an amount ([dc895f8](https://github.com/Xelltis/udonarium_axe_backend/commit/dc895f85ed5ac811b6aec3ac5520120245fdd9fa))
+* **admin:** give each fact its own column, and show keys in full ([a084bef](https://github.com/Xelltis/udonarium_axe_backend/commit/a084befb8643d9309347e70edeb58148046d0708))
+* **admin:** keep the operators' own steps apart, for 90 days ([57f1541](https://github.com/Xelltis/udonarium_axe_backend/commit/57f1541aedf3e5e1c7a78c98fbe5f570be09e87e))
+* **admin:** let the operator tighten the rate limits for a while ([cae08ba](https://github.com/Xelltis/udonarium_axe_backend/commit/cae08ba5b0a850e74e29be9244ca458d13d9b295))
+* **admin:** show Axe's icon with a red gear in the dashboard's tab ([57491b0](https://github.com/Xelltis/udonarium_axe_backend/commit/57491b0a466dfcdb302cfd2d684f643c955524c5))
+* **admin:** take reports from a room's seats, keeping who made them ([a377fac](https://github.com/Xelltis/udonarium_axe_backend/commit/a377fac41d5b01e0690f8bc55c530dc3a6a989e7))
+* **admin:** write down each time an operator looks at an uploaded asset ([f527fce](https://github.com/Xelltis/udonarium_axe_backend/commit/f527fcef551050ebe38e2319aa7831049d081980))
+* **assets:** answer 451 for a taken-down asset when it is read ([f1a0550](https://github.com/Xelltis/udonarium_axe_backend/commit/f1a055040c9204b39b7583906bc642cba07fc94d))
+* **auth:** tell those turned away where to ask, with ADMIN_CONTACT_URL ([bafd40f](https://github.com/Xelltis/udonarium_axe_backend/commit/bafd40fb474ed2f13d22542184815731e26abb0f))
+* **rooms:** cap what one room may keep with ROOM_STORAGE_LIMIT_MB ([5a59bba](https://github.com/Xelltis/udonarium_axe_backend/commit/5a59bba8d0efb37c338a0af42467da11607801db))
+* **rooms:** close the seats a ban covers as banned ([c7b81b0](https://github.com/Xelltis/udonarium_axe_backend/commit/c7b81b0c1543a44246fc779f1d72536ac08e94a7))
+* **rooms:** let a room's GM take a picture or sound out of the room ([0ca4040](https://github.com/Xelltis/udonarium_axe_backend/commit/0ca404083bbcac2222c425e017516a7d2fc897c1))
+
+
+### Performance Improvements
+
+* **cloudflare:** let the operator's logs go without reading them all ([4e4d114](https://github.com/Xelltis/udonarium_axe_backend/commit/4e4d114cd2d1b704aba782f288eb44c30e479cc2))
+
 ## [1.1.2](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.1.1...v1.1.2) (2026-10-18)
 
 
