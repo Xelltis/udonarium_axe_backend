@@ -45,12 +45,25 @@ Environmentごとに、次のSecretを入れます。
 | `SESSION_SECRET`              | トークンに署名する鍵。32文字以上の乱数。Environmentごとに別のものにする                 |
 | `SKYWAY_APP_ID`               | SkyWayのアプリケーションID（SkyWay版のトークンを発行するとき）                          |
 | `SKYWAY_SECRET`               | 同じアプリのシークレットキー                                                            |
+| `ADMIN_DISCORD_IDS`           | 管理画面に入れる運営する人のDiscordのユーザーID。カンマ区切り（管理画面を使うとき）     |
+| `ADMIN_WEBHOOK_URL`           | 運営する人への知らせを送るDiscordのWebhookのURL（知らせを受けるとき）                   |
+| `ADMIN_CONTACT_URL`           | 断った人に見せる問い合わせ先。`https://`のページか`mailto:`（出すとき）                 |
+| `ROOM_STORAGE_LIMIT_MB`       | 1つの部屋に置ける画像と音声の合計（MB）（上限を置くとき）                               |
+| `ADMIN_STORAGE_ALERT_GB`      | 置き場所の合計がこの量（GB）を超えたら知らせる（数えるとき）                            |
 
 ログインの3つは、そろえて入れるか、どれも入れないかのどちらかにします。一部だけだと、デプロイのジョブが止まります。
 SkyWayの2つも同じです。ログインの3つだけを入れたEnvironmentは部屋のサーバーに、SkyWayの2つだけを入れたEnvironmentはSkyWay版のトークン発行サーバー（→ [Cloudflareに置く（SkyWay版）](/skyway/cloudflare)）になり、両方を入れると両方を受け持ちます。
 Discordのアプリの作りかたは[Discordのアプリを作る](/server/discord)にあります。
 
-`ACCESS_CONTROL_ALLOW_ORIGIN`、ログインの3つ、SkyWayの2つは、デプロイのたびにWorkerのシークレットとして入れ直します。
+運営する人の設定（`ADMIN_`で始まる4つと`ROOM_STORAGE_LIMIT_MB`）は、どれも入れなくてもかまいません（→ [管理画面とBAN](/operate/admin)、[設定項目](/server/configuration)）。
+入れたものは、デプロイの前に形を確かめ、合わなければジョブを止めます。
+形の合わない設定があると、Workerはすべてのリクエストに`500 config-invalid`を返すためです。
+デプロイは、Workerにあるシークレットへ足すだけです。
+Environmentから消しても、Workerには残ります。
+外すときは、Cloudflareのダッシュボードか`wrangler secret delete`で消します。
+`ADMIN_PASSKEY_RESET`は、パスキーをすべて失くしたときだけ入れて外すものなので、ここには入れず、ダッシュボードで扱います（→ [端末を失くしたとき](/operate/admin#端末を失くしたとき)）。
+
+`ACCESS_CONTROL_ALLOW_ORIGIN`、ログインの3つ、SkyWayの2つ、入れた運営する人の設定は、デプロイのたびにWorkerのシークレットとして入れ直します。
 `wrangler.jsonc`に書いた手元用の値（`http://localhost:4200`）は、このシークレットで置き換わります。
 
 `gh`コマンドを使うと、次のように入れられます。
