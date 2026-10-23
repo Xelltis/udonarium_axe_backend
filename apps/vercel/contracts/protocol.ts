@@ -759,13 +759,36 @@ export const CHAT_TAB_ALIAS = 'chat-tab';
 export const PEER_CURSOR_ALIAS = 'PeerCursor';
 
 /**
- * The kind of object that says the GM took a picture or sound out of the room, and the start of its
- * identifier (asset-removal_<SHA-256>). Every seat hides what it names, so only a GM may make, change
- * or delete one. No one else may take an identifier with that start either, nor delete one before it
- * is there: either would keep the GM from writing it.
+ * The kind of object that says a picture or sound was taken out of the room, and the start of its
+ * identifier (asset-removal_<SHA-256>). Every seat hides what it names, so a GM may make, change or
+ * delete one, and a player may only mark removed one of an asset the room's ASSET_OWNER_ALIAS record
+ * names them for. Putting one back and deleting one stay the GM's. No other kind may take an
+ * identifier with that start, nor may anyone but a GM delete one before it is there: either would keep
+ * it from being written.
  */
 export const ASSET_REMOVAL_ALIAS = 'asset-removal';
 export const ASSET_REMOVAL_PREFIX = 'asset-removal_';
+
+/**
+ * The kind of object that says who added a picture or sound to the room (the owner attribute, a user id),
+ * and the start of its identifier (asset-owner_<SHA-256>). Besides the GM, the one it names may take
+ * that asset out of the room. A player may make one naming themselves, or name themselves in one that
+ * names nobody; only a GM may change whom one names, or delete one. The identifier is kept for this
+ * kind as for ASSET_REMOVAL_ALIAS.
+ */
+export const ASSET_OWNER_ALIAS = 'asset-owner';
+export const ASSET_OWNER_PREFIX = 'asset-owner_';
+
+/**
+ * The kind of object that keeps a tag of pictures to the one who locked it (the owner attribute, a
+ * user id, while the locked attribute is '1'), and the start of its identifier (image-tag-lock_ and the tag, as
+ * encodeURIComponent writes it). Axe leaves the tag's pictures out of the lists of everyone but that
+ * person and the GM; the server sends them to all the same. A player may lock a tag nobody holds
+ * locked, naming themselves; a locked one may be changed only by the one it names and the GM, and only
+ * a GM may delete one. The identifier is kept for this kind as for ASSET_REMOVAL_ALIAS.
+ */
+export const IMAGE_TAG_LOCK_ALIAS = 'image-tag-lock';
+export const IMAGE_TAG_LOCK_PREFIX = 'image-tag-lock_';
 
 /**
  * The data of UPDATE_GAME_OBJECT. Apart from certain fields, the server does not read syncData, and

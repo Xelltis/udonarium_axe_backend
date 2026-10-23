@@ -63,6 +63,25 @@ export interface StoreKeys {
   tombstones: string;
 }
 
+/**
+ * One object as Redis keeps it, read without taking the room: for a room another instance holds, so
+ * what it has not written yet is not there. Null when there is none, it is of another kind, or its
+ * contents are split up, as no small object's are.
+ */
+export const readStoredObject = async (
+  redis: BinaryRedis,
+  keys: StoreKeys,
+  identifier: string,
+  alias: string
+): Promise<ObjectContext | null> => {
+  const value = await redis.hGet(keys.objects, identifier);
+  if (!value) return null;
+  const stored = decode(value) as Stored;
+  if (stored.alias !== alias || !stored.data) return null;
+  const syncData = decodeData(stored.data) as Record<string, unknown>;
+  return { aliasName: alias, identifier, majorVersion: stored.major, minorVersion: stored.minor, syncData };
+};
+
 export const storeKeysOf = (key: KeyOf, roomKey: string): StoreKeys => ({
   objects: key('r', roomKey, 'obj'),
   chunks: (identifier) => key('r', roomKey, 'chunk', identifier),

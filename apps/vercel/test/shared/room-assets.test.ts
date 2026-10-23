@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ASSET_OWNER_ALIAS, ASSET_OWNER_PREFIX, SyncEvent } from '../../contracts/protocol.js';
 import { ASSET_TOKEN_SECONDS, readToken } from '../../src/core/auth/tokens.js';
 import { harness } from '../harness.js';
 import {
@@ -12,7 +13,7 @@ import {
   freshFile,
   freshIp,
 } from './helpers.js';
-import { ROOMS, createRoom, eventually, join } from './room-helpers.js';
+import { ROOMS, contextOf, createRoom, eventually, join } from './room-helpers.js';
 
 // The asset tokens a room hands its seats, and the assets when a room goes.
 
@@ -171,7 +172,32 @@ describe('taking an asset out of a room', () => {
     expect((await tryDelete(roomKey, id, gm.welcome.assetToken)).status).toBe(204);
   });
 
-  it('takes nothing out for a player, whatever its token says', async () => {
+  it('lets a player take out what the room says they added, and nothing someone else did', async () => {
+    const roomKey = await createRoom({}, 'gm');
+    await join(roomKey, 'gm');
+    const pl = await join(roomKey, 'pl');
+    const other = await join(roomKey, 'other');
+    const id = await putIn(roomKey, pl.welcome.assetToken);
+    const record = contextOf(
+      `${ASSET_OWNER_PREFIX}${id}`,
+      1,
+      0.5,
+      { attributes: { assetIdentifier: id, kind: 'image', owner: 'user-pl' } },
+      ASSET_OWNER_ALIAS
+    );
+    pl.client.emit([{ eventName: SyncEvent.UPDATE, data: record }]);
+    expect((await other.client.events()).map((event) => event.data)).toEqual([record]);
+
+    const refused = await tryDelete(roomKey, id, other.welcome.assetToken);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: 'not-game-master' });
+    expect(await harness.assetStored(roomKey, id)).not.toBeNull();
+
+    expect((await tryDelete(roomKey, id, pl.welcome.assetToken)).status).toBe(204);
+    expect(await harness.assetStored(roomKey, id)).toBeNull();
+  });
+
+  it('takes nothing out for a player the room does not name as the one who added it, whatever its token says', async () => {
     const roomKey = await createRoom({}, 'gm');
     await join(roomKey, 'gm');
     const pl = await join(roomKey, 'pl');

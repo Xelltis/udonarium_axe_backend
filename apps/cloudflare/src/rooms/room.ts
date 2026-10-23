@@ -131,9 +131,12 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.engine.canUpload(userId);
   }
 
-  /** Whether someone taking an asset out of this room is its GM now. Asked from the asset DELETE. */
-  canDiscard(userId: string): 'ok' | 'room-not-found' | 'not-game-master' {
-    return this.engine.canDiscard(userId);
+  /**
+   * Whether someone taking an asset out of this room is its GM now, or a player who added it. Asked
+   * from the asset DELETE.
+   */
+  canDiscard(userId: string, assetId: string): 'ok' | 'room-not-found' | 'not-game-master' {
+    return this.engine.canDiscard(userId, assetId);
   }
 
   // ---- What the room's assets take up ----
