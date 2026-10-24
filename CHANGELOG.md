@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.2.0...v1.3.0) (2026-10-24)
+
+
+### Features
+
+* **rooms:** let a player take out what they added, and keep a tag of pictures to one person ([abb3fa1](https://github.com/Xelltis/udonarium_axe_backend/commit/abb3fa12b7bc8230a6aae661e9c51f2c71c971cb))
+
 # [1.2.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.1.2...v1.2.0) (2026-10-21)
 
 
