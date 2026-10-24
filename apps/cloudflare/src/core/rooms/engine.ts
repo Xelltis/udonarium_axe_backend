@@ -3,8 +3,8 @@ import type { InferOutput } from 'valibot';
 
 import {
   ACCOUNT_USER_ID_PREFIX,
-  ASSET_REMOVAL_ALIAS,
-  ASSET_REMOVAL_PREFIX,
+  ASSET_OWNER_ALIAS,
+  ASSET_OWNER_PREFIX,
   AUTHORITY_ONLY_EVENTS,
   AUTHORITY_PEER_ID,
   AuthorityEvent,
@@ -34,6 +34,13 @@ import type {
   ServerMessage,
 } from '../../../contracts/protocol.js';
 import { ASSET_TOKEN_SECONDS, INVITE_SECONDS, readToken, signToken } from '../auth/tokens.js';
+import {
+  deletesRecord,
+  isRecordKind,
+  ownerNamedIn,
+  playerMayWriteRecord,
+  takesRecordIdentifier,
+} from './asset-records.js';
 import { rollLine } from '../dice/roll.js';
 import { BanList, barredBy } from '../moderation/bans.js';
 import { decodeFrame, encodeFrame } from './codec.js';
@@ -95,13 +102,6 @@ type Reply = (eventName: string, data: unknown) => void;
 
 /** The alias of a deck, whose cards keep their faces from everyone. */
 const CARD_STACK_ALIAS = 'card-stack';
-
-/**
- * Whether something of another kind would take an identifier kept for what takes a picture or sound
- * out of the room (asset-removal_<SHA-256>), which would keep the GM from writing it.
- */
-const takesRemovalIdentifier = (identifier: string, aliasName: string): boolean =>
-  aliasName !== ASSET_REMOVAL_ALIAS && identifier.startsWith(ASSET_REMOVAL_PREFIX);
 
 /** What the deck check reads of an index row: what the object is, where it sits and how it is seen. */
 type DeckRow = Pick<StoredEntry, 'alias' | 'parent' | 'view'>;
@@ -297,12 +297,20 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * Whether someone taking an asset out of this room is its GM now. The asset DELETE asks it, for
-   * the role in a token may be 15 minutes old.
+   * Whether someone taking an asset out of this room may: its GM now, or a player seated now whom the
+   * room's record names as the one who added it. The asset DELETE asks it, for the role in a token may
+   * be 15 minutes old.
    */
-  canDiscard(userId: string): 'ok' | 'room-not-found' | 'not-game-master' {
+  canDiscard(userId: string, assetId: string): 'ok' | 'room-not-found' | 'not-game-master' {
     if (this.host.wiping() || !this.host.room()) return 'room-not-found';
-    return this.seatedAs(userId, ['gm']) ? 'ok' : 'not-game-master';
+    if (this.seatedAs(userId, ['gm'])) return 'ok';
+    return this.seatedAs(userId, UPLOADER_ROLES) && this.addedBy(assetId) === userId ? 'ok' : 'not-game-master';
+  }
+
+  /** Whom the room's record says added the asset, or null when it has none or it names nobody. */
+  private addedBy(assetId: string): string | null {
+    const record = this.store.get(`${ASSET_OWNER_PREFIX}${assetId}`);
+    return record?.aliasName === ASSET_OWNER_ALIAS ? ownerNamedIn(record) : null;
   }
 
   /** Whether that account is seated in the room now, with one of the roles. */
@@ -906,9 +914,14 @@ export class RoomEngine<C extends object> {
     // it off as a cursor.
     const existing = this.store.entryOf(identifier);
     if (existing && existing.alias !== aliasName) return this.refuseWrite(identifier, seat, reply);
-    // What takes a picture or sound out of the room is the GM's to write, and its identifiers are
-    // kept for it.
-    if ((aliasName === ASSET_REMOVAL_ALIAS && seat.role !== 'gm') || takesRemovalIdentifier(identifier, aliasName))
+    // The records of the room's pictures and sounds have their identifiers kept for them, and a player
+    // writes them only as their rules let (a guest writes none, as below).
+    if (
+      takesRecordIdentifier(identifier, aliasName) ||
+      (isRecordKind(aliasName) &&
+        seat.role !== 'gm' &&
+        !playerMayWriteRecord(context, this.store.get(identifier), seat.userId, (asset) => this.addedBy(asset)))
+    )
       return this.refuseWrite(identifier, seat, reply);
     // A view hint that is too big fits neither in the index nor in one row of the store. New objects
     // are limited in number too. A version may not jump far at once.
@@ -1269,7 +1282,7 @@ export class RoomEngine<C extends object> {
     if (this.store.entryOf(message.identifier) || this.store.isDeleted(message.identifier)) return;
     if (
       message.aliasName !== CHAT_MESSAGE_ALIAS ||
-      takesRemovalIdentifier(message.identifier, message.aliasName) ||
+      takesRecordIdentifier(message.identifier, message.aliasName) ||
       !fitsIndex(message) ||
       message.majorVersion > MAX_VERSION_STEP ||
       this.store.size >= MAX_OBJECTS ||
@@ -1382,13 +1395,10 @@ export class RoomEngine<C extends object> {
     // Already deleted as a descendant.
     if (!entry && this.store.isDeleted(identifier)) return;
     if (this.kindOf(identifier, seat) === 'hidden') return;
-    // What takes a picture or sound out of the room is the GM's to delete, and so is its identifier
-    // before it is there (a tombstone would keep the GM from writing it).
-    const removal =
-      entry?.alias === ASSET_REMOVAL_ALIAS ||
-      aliasName === ASSET_REMOVAL_ALIAS ||
-      identifier.startsWith(ASSET_REMOVAL_PREFIX);
-    if (removal && seat.role !== 'gm') return this.refuseWrite(identifier, seat, reply);
+    // The records of the room's pictures and sounds are the GM's to delete, and so are their
+    // identifiers before they are there.
+    if (deletesRecord(identifier, aliasName, entry?.alias) && seat.role !== 'gm')
+      return this.refuseWrite(identifier, seat, reply);
     const owner = entry?.owner ?? null;
     // What is kept only while its person is there (a cursor) can be deleted only by that person.
     if ((owner !== null || seat.role === 'guest') && owner !== seat.peerId)

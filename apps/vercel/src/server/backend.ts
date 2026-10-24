@@ -1,9 +1,11 @@
 import type { WebSocket } from 'ws';
 
+import { ASSET_OWNER_ALIAS, ASSET_OWNER_PREFIX } from '../../contracts/protocol.js';
 import type { PeerRole, RoomSummary } from '../../contracts/protocol.js';
 import type { AssetBackend, LimitKind, ServerBackend } from '../core/http/backend.js';
 import { failure } from '../core/http/errors.js';
 import { noModeration } from '../core/moderation/activity.js';
+import { ownerNamedIn } from '../core/rooms/asset-records.js';
 import type { Moderation } from '../core/moderation/activity.js';
 import { UPLOADER_ROLES, seatedAs } from '../core/rooms/host.js';
 import type { Seat } from '../core/rooms/host.js';
@@ -11,10 +13,12 @@ import { refusalFrame } from '../core/rooms/refusal.js';
 import { redisAccount } from './accounts.js';
 import { clientIpOf } from './limits.js';
 import type { RedisLobby } from './lobby.js';
+import { binaryOf } from './redis.js';
 import type { KeyOf, Redis } from './redis.js';
 import { createRoom, expiryKeyOf, readRoomMeta, roomKeysOf } from './rooms/keys.js';
 import type { Relay } from './rooms/relay.js';
 import type { RoomRuntime } from './rooms/runtime.js';
+import { readStoredObject } from './rooms/store.js';
 import type { RoomSweeper } from './rooms/sweep.js';
 
 /**
@@ -72,6 +76,14 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
     return seats.some((value) => seatedAs(JSON.parse(value) as Seat, userId, roles));
   };
 
+  /** Whom the room's record in Redis says added the asset, or null when it has none or names nobody. */
+  const addedInCopy = async (roomKey: string, assetId: string) => {
+    const keys = roomKeysOf(key, roomKey);
+    return ownerNamedIn(
+      await readStoredObject(binaryOf(redis), keys, `${ASSET_OWNER_PREFIX}${assetId}`, ASSET_OWNER_ALIAS)
+    );
+  };
+
   return {
     addressOf: clientIpOf,
     limit: deps.limit,
@@ -116,12 +128,19 @@ export const vercelBackend = (deps: ServerDeps): ServerBackend => {
         const seated = await seatedInCopy(roomKey, userId, UPLOADER_ROLES);
         return seated === null ? 'room-not-found' : seated ? 'ok' : 'not-a-player';
       },
-      /** Whether someone taking an asset out of this room is its GM now, answered as for canUpload. */
-      canDiscard: async (roomKey, userId) => {
+      /**
+       * Whether someone taking an asset out of this room is its GM now, or a player who added it,
+       * answered as for canUpload. Who added it is read from the copy of the room's objects in Redis.
+       */
+      canDiscard: async (roomKey, userId, assetId) => {
         const open = await runtime.openRoom(roomKey);
-        if (open && !open.isReleased) return open.engine.canDiscard(userId);
+        if (open && !open.isReleased) return open.engine.canDiscard(userId, assetId);
         const seated = await seatedInCopy(roomKey, userId, ['gm']);
-        return seated === null ? 'room-not-found' : seated ? 'ok' : 'not-game-master';
+        if (seated === null) return 'room-not-found';
+        if (seated) return 'ok';
+        const added =
+          (await seatedInCopy(roomKey, userId, UPLOADER_ROLES)) && (await addedInCopy(roomKey, assetId)) === userId;
+        return added ? 'ok' : 'not-game-master';
       },
       connect: async (request, roomKey) => {
         const accept = deps.upgrades.get(request);

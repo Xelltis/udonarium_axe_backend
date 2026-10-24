@@ -1,6 +1,8 @@
+import { encode } from '@msgpack/msgpack';
 import { describe, expect, it, vi } from 'vitest';
 
-import { decodeFrame } from '../../src/core/rooms/codec.js';
+import { ASSET_OWNER_ALIAS, ASSET_OWNER_PREFIX } from '../../contracts/protocol.js';
+import { decodeFrame, encodeData } from '../../src/core/rooms/codec.js';
 import { storelessBackend, vercelBackend } from '../../src/server/backend.js';
 import type { Upgrades } from '../../src/server/backend.js';
 import { expiryKeyOf, roomKeysOf } from '../../src/server/rooms/keys.js';
@@ -9,6 +11,9 @@ import { useRedis } from './redis-helpers.js';
 import { depsOf } from './server-helpers.js';
 
 const connection = useRedis();
+
+const SHA = 'a'.repeat(64);
+const OTHER = 'b'.repeat(64);
 
 const init = (roomKey: string) => ({
   roomKey,
@@ -57,9 +62,50 @@ describe('the Vercel backend', () => {
     expect(await backend.rooms.canUpload('held', 'user-gm')).toBe('ok');
     expect(await backend.rooms.canUpload('held', 'user-guest')).toBe('not-a-player');
     expect(await backend.rooms.canUpload('missing', 'user-pl')).toBe('room-not-found');
-    expect(await backend.rooms.canDiscard('held', 'user-gm')).toBe('ok');
-    expect(await backend.rooms.canDiscard('held', 'user-pl')).toBe('not-game-master');
-    expect(await backend.rooms.canDiscard('missing', 'user-gm')).toBe('room-not-found');
+    expect(await backend.rooms.canDiscard('held', 'user-gm', SHA)).toBe('ok');
+    expect(await backend.rooms.canDiscard('held', 'user-pl', SHA)).toBe('not-game-master');
+    expect(await backend.rooms.canDiscard('missing', 'user-gm', SHA)).toBe('room-not-found');
+  });
+
+  it('lets a player take out what the room’s objects in Redis say they added, while the room is held elsewhere', async () => {
+    const deps = await depsOf(connection.redis);
+    const backend = vercelBackend(deps);
+    await backend.rooms.create(init('held'));
+    const keys = roomKeysOf(deps.key, 'held');
+    await connection.redis.hSet(keys.seats, {
+      a: JSON.stringify({ userId: 'user-pl', account: true, role: 'pl' }),
+      b: JSON.stringify({ userId: 'user-guest', account: false, role: 'guest' }),
+    });
+    const row = (alias: string, owner: string, split = false) =>
+      Buffer.from(
+        encode({
+          alias,
+          major: 1,
+          minor: 0.5,
+          owner: null,
+          parent: '',
+          view: null,
+          chunks: split ? 1 : 0,
+          ...(split
+            ? { parts: 'p' }
+            : { data: new Uint8Array(encodeData({ attributes: { assetIdentifier: SHA, kind: 'image', owner } })) }),
+        })
+      );
+    await connection.redis.hSet(keys.objects, {
+      [`${ASSET_OWNER_PREFIX}${SHA}`]: row(ASSET_OWNER_ALIAS, 'user-pl'),
+      [`${ASSET_OWNER_PREFIX}${OTHER}`]: row(ASSET_OWNER_ALIAS, 'user-guest'),
+      [`${ASSET_OWNER_PREFIX}${'c'.repeat(64)}`]: row('character', 'user-pl'),
+      [`${ASSET_OWNER_PREFIX}${'d'.repeat(64)}`]: row(ASSET_OWNER_ALIAS, 'user-pl', true),
+    });
+
+    expect(await backend.rooms.canDiscard('held', 'user-pl', SHA)).toBe('ok');
+    expect(await backend.rooms.canDiscard('held', 'user-pl', OTHER)).toBe('not-game-master');
+    // Named, but a guest adds nothing.
+    expect(await backend.rooms.canDiscard('held', 'user-guest', OTHER)).toBe('not-game-master');
+    // Of another kind, split up, or not there at all.
+    for (const sha of ['c', 'd', 'e'].map((letter) => letter.repeat(64))) {
+      expect(await backend.rooms.canDiscard('held', 'user-pl', sha)).toBe('not-game-master');
+    }
   });
 
   it('lists and finds no room past its retention, or already gone', async () => {
@@ -116,7 +162,7 @@ describe('the backend without a store', () => {
     expect(await backend.lobby.find('r')).toBeNull();
     expect(await backend.rooms.remove('r', 'u')).toBe('not-found');
     expect(await backend.rooms.canUpload('r', 'u')).toBe('room-not-found');
-    expect(await backend.rooms.canDiscard('r', 'u')).toBe('room-not-found');
+    expect(await backend.rooms.canDiscard('r', 'u', SHA)).toBe('room-not-found');
     expect((await backend.rooms.connect(upgradeRequest(), 'r')).status).toBe(426);
     expect(decodeFrame(socket.sent[0] as Uint8Array)).toMatchObject({ code: 'room-not-found' });
     expect(socket.closed).toEqual({ code: 4000, reason: 'room-not-found' });

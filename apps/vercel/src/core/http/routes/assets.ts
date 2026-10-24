@@ -180,8 +180,9 @@ export const putRoomAsset = async (c: AssetContext) => {
 };
 
 /**
- * DELETE /v1/rooms/:roomKey/assets/:id. The room's GM takes a picture or a sound out of the room.
- * Answered 204 whether it was there or not, and not stopped while the operator has stopped storing.
+ * DELETE /v1/rooms/:roomKey/assets/:id. The room's GM, or the player who added it, takes a picture or
+ * a sound out of the room. Answered 204 whether it was there or not, and not stopped while the
+ * operator has stopped storing.
  */
 export const deleteRoomAsset = async (c: AssetContext) => {
   const { backend } = c.var;
@@ -190,12 +191,13 @@ export const deleteRoomAsset = async (c: AssetContext) => {
   if (!ASSET_ID.test(id)) return fail(c, 400, 'invalid-id');
   const claims = await claimsOf(c, roomKey);
   if (claims instanceof Response) return claims;
-  // A guest is never a GM (a guest's role cannot be changed), so the room need not be asked.
+  // A guest is never a GM nor adds anything (a guest's role cannot be changed), so the room need not
+  // be asked.
   if (claims.role === 'guest') return fail(c, 403, 'not-game-master');
 
   // The role in the token may be 15 minutes old, so the room is asked whether that person is
-  // seated as its GM now.
-  const allowed = await backend.rooms.canDiscard(roomKey, claims.uid);
+  // seated as its GM now, or as the player who added it.
+  const allowed = await backend.rooms.canDiscard(roomKey, claims.uid, id);
   if (allowed === 'room-not-found') return fail(c, 404, 'room-not-found');
   if (allowed === 'not-game-master') return fail(c, 403, 'not-game-master');
   // Counted with storing, which it undoes.
