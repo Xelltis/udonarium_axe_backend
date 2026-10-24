@@ -47,7 +47,7 @@
     "typescript-eslint": "^8.67.0",
     "vercel": "^59.3.0",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^5.0.4",
+    "vitest": "^5.0.5",
     "zx": "^8.8.5"
   },
   "overrides": {
