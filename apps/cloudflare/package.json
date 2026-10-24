@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.23.0",
-    "@cloudflare/workers-types": "5.20261015.1",
+    "@cloudflare/workers-types": "5.20261021.1",
     "@eslint/js": "^10.0.1",
     "@vitest/coverage-istanbul": "4.1.12",
     "@vitest/runner": "4.1.12",
