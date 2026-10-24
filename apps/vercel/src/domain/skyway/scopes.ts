@@ -1,4 +1,4 @@
-import type { ChannelScope } from '@skyway-sdk/token';
+import type { ChannelScope } from './types.js';
 
 /**
  * The start of a lobby channel name. The lobby scope does not allow sending or receiving data, so

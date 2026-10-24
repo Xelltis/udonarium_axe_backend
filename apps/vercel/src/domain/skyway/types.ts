@@ -1,6 +1,29 @@
-import type { AppScope, ChannelScope } from '@skyway-sdk/token';
-
 import type { SkywayConfig } from '../../config/types.js';
+
+/**
+ * The scope of a SkyWay token (version 2), as far as this server fills it in. The actions are the
+ * ones SkyWay names for each resource; it takes more than is written here (an id in place of a
+ * name, sfuBots, analytics), which this server does not give out.
+ */
+export interface AppScope {
+  id: string;
+  turn: boolean;
+  actions: 'read'[];
+  channels: ChannelScope[];
+}
+
+export interface ChannelScope {
+  name: string;
+  actions: ('write' | 'read' | 'create' | 'delete' | 'updateMetadata')[];
+  members: MemberScope[];
+}
+
+export interface MemberScope {
+  name: string;
+  actions: ('write' | 'create' | 'delete' | 'updateMetadata' | 'signal')[];
+  publication: { actions: ('write' | 'create' | 'delete' | 'updateMetadata' | 'enable' | 'disable')[] };
+  subscription: { actions: ('write' | 'create' | 'delete')[] };
+}
 
 export interface IssueTokenInput {
   channelName: string;
