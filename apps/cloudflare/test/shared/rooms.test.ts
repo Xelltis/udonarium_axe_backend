@@ -172,6 +172,7 @@ describe('joining a room', () => {
       peerId: 'alice-room-1',
       authorityPeerId: AUTHORITY_PEER_ID,
       role: 'pl',
+      keptRole: 'pl',
       members: [],
       serverTime: expect.any(Number),
       assetToken: expect.any(String),

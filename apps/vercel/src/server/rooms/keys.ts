@@ -11,6 +11,7 @@ import type { StoreKeys } from './store.js';
 //   r:<key>:meta   HASH  roomKey, roomId, name, salt, hash (of the password, base64), host, createdAt,
 //                        emptiedAt, deleting.
 //   r:<key>:roles  HASH  user id → role (for each person who has come in logged in).
+//   r:<key>:watching SET user ids of those logged in who watch as a guest, keeping their role.
 //   r:<key>:seats  HASH  connection id → JSON of the seat (who is in now, so that the server can ask
 //                        whether they may store assets).
 //   r:<key>:lease  STR   The room's owner (instance:epoch). The owner keeps extending it.
@@ -20,6 +21,7 @@ import type { StoreKeys } from './store.js';
 
 export interface RoomKeys extends StoreKeys, Fence {
   roles: string;
+  watching: string;
   seats: string;
   epoch: string;
 }
@@ -28,6 +30,7 @@ export const roomKeysOf = (key: KeyOf, roomKey: string): RoomKeys => ({
   ...storeKeysOf(key, roomKey),
   meta: key('r', roomKey, 'meta'),
   roles: key('r', roomKey, 'roles'),
+  watching: key('r', roomKey, 'watching'),
   seats: key('r', roomKey, 'seats'),
   lease: key('r', roomKey, 'lease'),
   epoch: key('r', roomKey, 'epoch'),

@@ -45,6 +45,12 @@ export const MAX_WAITING_FRAMES = 8;
 export const MAX_EVENTS_PER_WINDOW = 20_000;
 
 /**
+ * How many times one connection may switch its own role, to watch or back, in RATE_WINDOW_MS. Each
+ * switch looks the whole room over again for the seat and tells everyone, so more are passed over.
+ */
+export const MAX_OWN_ROLE_CHANGES_PER_WINDOW = 6;
+
+/**
  * How far before the server's time the time of a roll's result may be (milliseconds). A local clock
  * being off is allowed for.
  */

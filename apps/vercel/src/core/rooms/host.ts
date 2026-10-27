@@ -21,6 +21,11 @@ export interface Seat {
   roomKey: string;
   /** The role the server decided. */
   role: PeerRole;
+  /**
+   * The role the room keeps for someone logged in, which `role` differs from while they watch as a
+   * guest. Missing for someone not logged in.
+   */
+  keptRole?: PeerRole;
   /** Came in logged in. Someone not logged in stays a guest, whose role cannot be changed. */
   account: boolean;
   /** The account (`discord:<ID>`) of someone who came in logged in. The operator's bans go by it. */
@@ -59,10 +64,17 @@ export interface RoleBook {
   roleOf(userId: string): PeerRole | null;
   /** Remembers the role of someone taking a seat for the first time. */
   add(userId: string, role: PeerRole): void;
-  /** Changes a role. */
+  /** Changes a role, and ends any watching, as the change is the GM's say on it. */
   set(userId: string, role: PeerRole): void;
   /** How many GMs there are (counting those not in a seat now). */
   gameMasterCount(): number;
+  /**
+   * Whether someone has stepped out to watch as a guest. Their role stays as it was, for them to come
+   * back to, and counts as ever among the GMs.
+   */
+  isWatching(userId: string): boolean;
+  /** Starts or stops someone watching. */
+  setWatching(userId: string, watching: boolean): void;
 }
 
 /** The store for the room's objects. flush returns how many it wrote (used for the log). */

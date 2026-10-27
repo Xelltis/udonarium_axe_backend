@@ -12,7 +12,7 @@
  */
 
 /** Raised when an envelope changes shape. The server refuses a hello of another version with protocol-mismatch. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /**
  * The room server's own peer id. It has a shape that cannot clash with a client's id.
@@ -201,6 +201,12 @@ export interface WelcomeMessage {
   authorityPeerId: string;
   /** This client's role, as the server decided it. Its own PeerCursor's role is set to this. */
   role: PeerRole;
+  /**
+   * The role the room keeps for someone logged in, which `role` differs from while they watch as a
+   * guest: the role they come back to with a ROLE_REQUEST for themselves. Missing for someone not
+   * logged in, who has nothing to switch between.
+   */
+  keptRole?: PeerRole;
   /** Who is in the room now. Neither the one who connected nor the server is included. */
   members: Member[];
   /** The server's time (Unix milliseconds). */
@@ -215,7 +221,7 @@ export interface WelcomeMessage {
   /**
    * How assets are put. Without it, an asset can be put with a single PUT up to the limit for its kind
    * (2MiB for pictures and 10MiB for sounds, the same sizes Axe can load).
-   * Optional fields may still be added later. A client ignores fields it does not know.
+   * A client ignores fields it does not know.
    */
   assetUpload?: AssetUploadPolicy;
 }
@@ -294,6 +300,8 @@ export interface AssetTokenMessage {
    * sounds it has to the room).
    */
   role: PeerRole;
+  /** The role the room keeps for someone logged in, as in welcome. */
+  keptRole?: PeerRole;
 }
 
 /**
@@ -583,7 +591,9 @@ export const SyncEvent = {
  *   deleted mark. Used to have clients withdraw something made by someone without permission to
  *   write it
  * - ROLE_REQUEST (to the server): data is { peerId, role }. A GM changes the role of someone in the
- *   room
+ *   room. Anybody logged in may also ask it for themselves, to watch as a guest or to come back from
+ *   watching to the role the room keeps for them (keptRole); watching leaves that role as it was, and
+ *   lasts until they come back or a GM changes their role, however often they come in again
  * - ROLE_REJECTED (from the server): data is { peerId, role, reason }. The ROLE_REQUEST was refused
  * - ROLL_REQUEST (to the server): data is a RollRequest. The server rolls with BCDice and sends the
  *   result line to everyone
@@ -704,7 +714,7 @@ export const SERVER_ROLL_FIELD = 'serverRoll';
 /**
  * Why a ROLE_REQUEST was refused.
  *
- * - not-game-master: whoever asked is not a GM
+ * - not-game-master: whoever asked is not a GM, nor asking only to watch or to come back from it
  * - unknown-peer: nobody with that peerId is in the room
  * - not-logged-in: someone not logged in stays a guest
  * - last-game-master: the room would be left with no GM

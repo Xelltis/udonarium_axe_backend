@@ -114,6 +114,22 @@ describe('a room held on Vercel', () => {
     expect(await connection.redis.get(roomKeysOf(key, 'room').lease)).toBeNull();
   });
 
+  it('keeps who watches as a guest in Redis, for whichever instance opens the room next', async () => {
+    const { deps, key } = await roomDepsOf(connection.redis);
+    const first = await VercelRoom.open(deps, 'room');
+    first.roles.setWatching('user-pl', true);
+    first.roles.setWatching('user-pl', true);
+    first.roles.setWatching('user-gm', true);
+    first.roles.setWatching('user-gm', false);
+    await first.release();
+
+    expect(await connection.redis.sMembers(roomKeysOf(key, 'room').watching)).toEqual(['user-pl']);
+    const second = await VercelRoom.open(deps, 'room');
+    expect(second.roles.isWatching('user-pl')).toBe(true);
+    expect(second.roles.isWatching('user-gm')).toBe(false);
+    await second.release();
+  });
+
   it('waits for a live instance holding the room to let it go, to open the room itself', async () => {
     const { deps, key } = await roomDepsOf(connection.redis, {
       isAlive: () => Promise.resolve(true),
