@@ -6,6 +6,7 @@ import { defineConfig } from 'vitest/config';
 //   ROWS_SCALES=small,session,max  the rooms to try (max holds about 200,000 objects and is slow)
 //   ROWS_REPEAT=5                  how many times each flow is timed
 //   ROWS_ALARMS_PER_HOUR=1         how often the patrol alarm fires in the session worked out
+//   ROWS_PAGE_KIB=16               the size of the store's pages to try
 
 export default defineConfig({
   plugins: [cloudflareTest({ wrangler: { configPath: './wrangler.jsonc' } })],
@@ -14,6 +15,7 @@ export default defineConfig({
     __ROWS_REPEAT__: Number(process.env.ROWS_REPEAT ?? 3),
     // Measured in production on 2026-10-26: 21 alarms in 2 hours, with 3 people logged in.
     __ROWS_ALARMS_PER_HOUR__: Number(process.env.ROWS_ALARMS_PER_HOUR ?? 12),
+    __ROWS_PAGE_KIB__: Number(process.env.ROWS_PAGE_KIB ?? 0),
   },
   test: {
     include: ['test/rows/**/*.report.ts'],
