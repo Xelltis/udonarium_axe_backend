@@ -102,6 +102,11 @@ export interface RoomHost<C extends object> {
   assetUploadPolicy(): AssetUploadPolicy | null;
   /** Someone came in. A check comes by nextCheckAt. */
   occupied(nextCheckAt: number): void;
+  /**
+   * The next check moved, as when a seat's token was renewed. Without it, the check set for the old
+   * expiry comes anyway and finds nothing to do.
+   */
+  recheckAt(at: number): void;
   /** Nobody is left. The retention period counts from here. */
   emptied(): void;
   /** Updates the head count and the GMs in the room list. */

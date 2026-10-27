@@ -165,15 +165,20 @@ export class RoomStore extends ObjectIndex {
     }
   }
 
-  /** Returns how many rows it wrote. */
+  /**
+   * Returns how many rows it wrote. An object already there is updated in place: REPLACE would delete
+   * the row and put it back, writing the primary key's index row again too.
+   */
   private writeObject(context: ObjectContext, owner: string | null): number {
     const data = encodeData(context.syncData);
     const chunks = data.byteLength > CHUNK_BYTES ? Math.ceil(data.byteLength / CHUNK_BYTES) : 0;
     const { parent, view } = describe(context);
     let rows = this.run(
-      `INSERT OR REPLACE INTO objects
-         (identifier, alias, major, minor, owner, parent, view, chunks, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO objects (identifier, alias, major, minor, owner, parent, view, chunks, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (identifier) DO UPDATE SET
+         alias = excluded.alias, major = excluded.major, minor = excluded.minor, owner = excluded.owner,
+         parent = excluded.parent, view = excluded.view, chunks = excluded.chunks, data = excluded.data`,
       context.identifier,
       context.aliasName,
       context.majorVersion,

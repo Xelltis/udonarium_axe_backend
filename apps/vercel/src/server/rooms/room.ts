@@ -433,6 +433,10 @@ export class VercelRoom implements RoomHost<Conn> {
     this.persist([{ command: 'HDEL', key: this.keys.meta, args: ['emptiedAt'] }, this.expiry()]);
   }
 
+  recheckAt(): void {
+    // Nothing to move: the owner looks round every ROOM_TICK_MS whatever the tokens say.
+  }
+
   /** Nobody is left. The retention period is counted from here. */
   emptied(): void {
     this.persist([{ command: 'HSET', key: this.keys.meta, args: ['emptiedAt', String(Date.now())] }, this.expiry()]);

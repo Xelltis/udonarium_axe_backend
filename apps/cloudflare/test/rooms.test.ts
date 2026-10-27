@@ -4,10 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AUTHORITY_PEER_ID, SyncEvent } from '../contracts/protocol';
 import type { RoomDurableObject } from '../src/rooms/room';
 import { LOBBY_NAME } from '../src/rooms/lobby';
+import type { LobbyDurableObject } from '../src/rooms/lobby';
 import { ACCESS_TOKEN_SECONDS } from '../src/core/auth/tokens';
 import { IDLE_MS, OCCUPIED_CHECK_MS, TOKEN_GRACE_MS } from '../src/core/rooms/limits';
 import { CHUNK_BYTES } from '../src/rooms/store';
 import { connect, contextOf, createRoom, eventually, join, listRooms, refusalOf } from './shared/room-helpers';
+import { accessTokenFor } from './shared/helpers';
 import { stubOf } from './cf-helpers';
 
 afterEach(() => {
@@ -222,6 +224,24 @@ describe('closing the room', () => {
     expect(clock.alarm).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
   });
 
+  it('moves the check along when a seat hands over a fresh token, rather than coming for nothing', async () => {
+    const roomKey = await createRoom();
+    const { client } = await join(roomKey, 'alice');
+    // The token alice came in with runs out in a minute, and the check waits for it.
+    await runInDurableObject(stubOf(roomKey), async (_instance, state) => {
+      for (const ws of state.getWebSockets()) {
+        const seat = ws.deserializeAttachment() as Record<string, unknown>;
+        ws.serializeAttachment({ ...seat, expiresAt: Date.now() + 60_000 });
+      }
+      await state.storage.setAlarm(Date.now() + 60_000 + TOKEN_GRACE_MS + 1000);
+    });
+
+    client.send({ type: 'auth', accessToken: accessTokenFor('user-alice') });
+    await client.expectQuiet();
+
+    expect((await clockOf(roomKey)).alarm).toBeGreaterThan(Date.now() + ACCESS_TOKEN_SECONDS * 1000 - 60_000);
+  });
+
   it('checks around when a seat would be left alone for long enough, and lets it out then', async () => {
     const roomKey = await createRoom();
     const { client } = await join(roomKey, 'alice', { accessToken: null, idleMs: IDLE_MS - 10 * 60_000 });
@@ -293,6 +313,29 @@ describe('closing the room', () => {
 });
 
 describe('the lobby', () => {
+  it('writes nothing when the count and the GMs are the same as it has', async () => {
+    const roomKey = await createRoom();
+    const written = await runInDurableObject(env.LOBBY.getByName(LOBBY_NAME), (instance: LobbyDurableObject, state) => {
+      const sql = state.storage.sql;
+      const gameMasters = sql
+        .exec<{ user_id: string }>('SELECT user_id FROM game_masters WHERE room_key = ?', roomKey)
+        .toArray()
+        .map((row) => row.user_id);
+      const exec = sql.exec.bind(sql);
+      const cursors: SqlStorageCursor<Record<string, SqlStorageValue>>[] = [];
+      vi.spyOn(sql, 'exec').mockImplementation((query, ...bindings) => {
+        const cursor = exec(query, ...bindings);
+        cursors.push(cursor);
+        return cursor;
+      });
+      instance.setMembers(roomKey, 0);
+      instance.setGameMasters(roomKey, gameMasters);
+      return cursors.reduce((sum, cursor) => sum + cursor.rowsWritten, 0);
+    });
+
+    expect(written).toBe(0);
+  });
+
   it('goes on counting after a failed update', async () => {
     const roomKey = await createRoom();
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);

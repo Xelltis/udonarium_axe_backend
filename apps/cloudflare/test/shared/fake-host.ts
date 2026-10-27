@@ -84,6 +84,8 @@ export class FakeHost implements RoomHost<FakeConn> {
   readonly events: [RoomEvent, string, number][] = [];
   /** The notices that people are in, that everyone is gone, and that the list is to be updated. */
   readonly notices: string[] = [];
+  /** When the next check was moved to, each time it was moved. */
+  readonly rechecks: number[] = [];
   readonly deferred: Promise<unknown>[] = [];
   /**
    * How assets are stored, as told in welcome. Set as for a room server with a limit on the body, like
@@ -157,6 +159,10 @@ export class FakeHost implements RoomHost<FakeConn> {
     this.notices.push('occupied');
   }
 
+  recheckAt(at: number): void {
+    this.rechecks.push(at);
+  }
+
   emptied(): void {
     this.notices.push('emptied');
   }
@@ -197,6 +203,11 @@ export class FakeHost implements RoomHost<FakeConn> {
     return conn;
   }
 
+  /** Hands over a fresh access token for `user-<peerId>`, as a page does before the old one runs out. */
+  renew(conn: FakeConn, peerId: string): void {
+    this.engine.receive(conn, encode({ type: 'auth', accessToken: tokenOf(peerId) }));
+  }
+
   /** Sends hello as `user-<peerId>`, logged in. */
   hello(conn: FakeConn, peerId: string, role: PeerRole = 'pl'): void {
     const userId = `user-${peerId}`;
@@ -208,11 +219,7 @@ export class FakeHost implements RoomHost<FakeConn> {
         protocolVersion: PROTOCOL_VERSION,
         peerId,
         userId,
-        accessToken: signToken<'access'>(
-          { aud: 'access', sub: `discord:${peerId}`, uid: userId, name: peerId },
-          ACCESS_TOKEN_SECONDS,
-          SECRET
-        ),
+        accessToken: tokenOf(peerId),
       })
     );
   }
@@ -222,3 +229,11 @@ export class FakeHost implements RoomHost<FakeConn> {
     this.engine.receive(conn, encode({ type: 'send', ...(to === undefined ? {} : { to }), events }));
   }
 }
+
+/** An access token for `user-<peerId>`, good for ACCESS_TOKEN_SECONDS from now. */
+const tokenOf = (peerId: string) =>
+  signToken<'access'>(
+    { aud: 'access', sub: `discord:${peerId}`, uid: `user-${peerId}`, name: peerId },
+    ACCESS_TOKEN_SECONDS,
+    SECRET
+  );
