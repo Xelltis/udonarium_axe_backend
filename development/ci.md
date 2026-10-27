@@ -91,4 +91,4 @@ Vercel版とCloudflare版は1つの設定にまとめています。
 片方だけ上がると、CIの写しの確認で落ちるためです。
 ほかのパッケージは、アプリごとに別のPull Requestになります。
 
-Cloudflare版の`wrangler`は、`@cloudflare/vitest-pool-workers`が使う版に合わせて手で上げるので、Dependabotの対象から外しています。
+Cloudflare版の`wrangler`は、`@cloudflare/vitest-plugin`が使う版に合わせて手で上げるので、Dependabotの対象から外しています。
