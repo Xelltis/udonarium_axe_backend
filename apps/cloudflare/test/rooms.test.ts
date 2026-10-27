@@ -7,7 +7,8 @@ import { LOBBY_NAME } from '../src/rooms/lobby';
 import type { LobbyDurableObject } from '../src/rooms/lobby';
 import { ACCESS_TOKEN_SECONDS } from '../src/core/auth/tokens';
 import { IDLE_MS, OCCUPIED_CHECK_MS, TOKEN_GRACE_MS } from '../src/core/rooms/limits';
-import { CHUNK_BYTES } from '../src/rooms/store';
+import { CHUNK_BYTES, RoomStore } from '../src/rooms/store';
+import { writeLegacyRoom } from './rows/legacy';
 import { connect, contextOf, createRoom, eventually, join, listRooms, refusalOf } from './shared/room-helpers';
 import { accessTokenFor } from './shared/helpers';
 import { stubOf } from './cf-helpers';
@@ -91,16 +92,18 @@ describe('keeping the room', () => {
       client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', i, 0.5) }]);
     }
     await client.expectQuiet();
-    const before = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      countRows(state.storage.sql, 'objects')
-    );
+    // What is written, as a room that woke up would read it.
+    const written = () =>
+      runInDurableObject(
+        stubOf(roomKey),
+        (_instance, state) => new RoomStore(state.storage).entryOf('piece')?.majorVersion ?? null
+      );
+    const before = await written();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    const after = await runInDurableObject(stubOf(roomKey), (_instance, state) =>
-      state.storage.sql.exec<{ major: number }>('SELECT major FROM objects').toArray()
-    );
+    const after = await written();
 
-    expect(before).toBe(0);
-    expect(after).toEqual([{ major: 5 }]);
+    expect(before).toBeNull();
+    expect(after).toBe(5);
   });
 
   it('comes back from hibernation with its members and its state', async () => {
@@ -113,7 +116,7 @@ describe('keeping the room', () => {
       { eventName: SyncEvent.DELETE, data: { identifier: 'gone' } },
     ]);
     await alice.client.expectQuiet();
-    const chunks = await flushed(roomKey, (sql) => countRows(sql, 'object_chunks'));
+    const chunks = await flushed(roomKey, (sql) => countRows(sql, 'blobs'));
 
     await evictDurableObject(stubOf(roomKey));
     const bob = await join(roomKey, 'bob');
@@ -155,21 +158,44 @@ describe('keeping the room', () => {
 
     client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('board', 1, 0.5, big) }]);
     await client.expectQuiet();
-    const first = await flushed(roomKey, (sql) => countRows(sql, 'object_chunks'));
+    const first = await flushed(roomKey, (sql) => countRows(sql, 'blobs'));
     client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('board', 2, 0.5, { scene: '' }) }]);
     await client.expectQuiet();
-    const second = await flushed(roomKey, (sql) => countRows(sql, 'object_chunks'));
+    const second = await flushed(roomKey, (sql) => countRows(sql, 'blobs'));
     client.emit([
       { eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['board'] } },
       { eventName: SyncEvent.DELETE, data: { identifier: 'board' } },
     ]);
     await client.expectQuiet();
-    const third = await flushed(roomKey, (sql) => [countRows(sql, 'objects'), countRows(sql, 'tombstones')]);
+    const third = await flushed(roomKey, (sql) => [countRows(sql, 'pages'), countRows(sql, 'marks')]);
     client.emit([{ eventName: SyncEvent.FORGET_DELETED, data: { identifiers: ['board'] } }]);
     await client.expectQuiet();
-    const fourth = await flushed(roomKey, (sql) => countRows(sql, 'tombstones'));
+    const fourth = await flushed(roomKey, (sql) => countRows(sql, 'marks'));
 
     expect([first, second, third, fourth]).toEqual([3, 0, [0, 1], 0]);
+  });
+});
+
+describe('a room made before pages', () => {
+  it('keeps its objects in the rows it was made with, and goes on writing them there', async () => {
+    const roomKey = await createRoom();
+    await runInDurableObject(stubOf(roomKey), (_instance, state) => {
+      const sql = state.storage.sql;
+      for (const table of ['pages', 'blobs', 'marks']) sql.exec(`DROP TABLE ${table}`);
+      writeLegacyRoom(sql, [{ context: contextOf('piece', 1, 0.5) }], ['gone']);
+    });
+    await evictDurableObject(stubOf(roomKey));
+
+    const alice = await join(roomKey, 'alice');
+    alice.client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 2, 0.5) }]);
+    await alice.client.expectQuiet();
+    const written = await flushed(
+      roomKey,
+      (sql) => sql.exec<{ major: number }>("SELECT major FROM objects WHERE identifier = 'piece'").one().major
+    );
+
+    expect(alice.catalog[0].data).toEqual([{ identifier: 'piece', version: 1.5 }]);
+    expect(written).toBe(2);
   });
 });
 
