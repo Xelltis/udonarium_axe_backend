@@ -45,4 +45,4 @@ SkyWay版では、参加者全員がたがいに直接つながり（フルメ�
 
 - **SkyWay版**は、これまでどおり使えます。
 - **サーバー版**は、Cloudflare版かVercel版で置けます（→ [どれを置くか](https://xelltis.github.io/udonarium_axe_backend/guide/choose#サーバー版-cloudflare版かvercel版か)）。PHP版には部屋のサーバーはありません。
-- 費用の目安は[費用と上限](https://xelltis.github.io/udonarium_axe_backend/operate/costs)にあり、Phase 0の計測で実測値に置き換える予定です。
+- 費用の目安は[費用と上限](https://xelltis.github.io/udonarium_axe_backend/operate/costs)にあり、2026年10月26日に本番の卓で測った値をもとにしています。
