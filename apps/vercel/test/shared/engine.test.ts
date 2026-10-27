@@ -12,7 +12,8 @@ import {
   IMAGE_TAG_LOCK_PREFIX,
   SyncEvent,
 } from '../../contracts/protocol.js';
-import { FLUSH_DELAY_MS, MAX_FRAMES_PER_WINDOW } from '../../src/core/rooms/limits.js';
+import { ACCESS_TOKEN_SECONDS } from '../../src/core/auth/tokens.js';
+import { FLUSH_DELAY_MS, MAX_FRAMES_PER_WINDOW, TOKEN_GRACE_MS } from '../../src/core/rooms/limits.js';
 import { FakeHost } from './fake-host.js';
 import type { FakeConn } from './fake-host.js';
 
@@ -144,6 +145,30 @@ describe('leaving', () => {
       },
     ]);
     expect(host.objects.entryOf('cursor-ghost')).toBeNull();
+  });
+});
+
+describe('a login renewed while connected', () => {
+  it('moves the next check to when the new token runs out, rather than leaving it at the old one', () => {
+    vi.useFakeTimers({ now: new Date('2026-10-27T00:00:00Z') });
+    const host = new FakeHost();
+    const alice = host.join('alice');
+    vi.advanceTimersByTime(10 * 60 * 1000);
+
+    host.renew(alice, 'alice');
+
+    // The token alice came in with runs out in 5 minutes. Left there, the check would come then for nothing.
+    expect(host.rechecks).toEqual([Date.now() + ACCESS_TOKEN_SECONDS * 1000 + TOKEN_GRACE_MS + 1000]);
+  });
+
+  it('leaves the next check alone for a token that is refused', () => {
+    const host = new FakeHost();
+    const alice = host.join('alice');
+
+    host.renew(alice, 'somebody');
+
+    expect(host.rechecks).toEqual([]);
+    expect(alice.closed?.reason).toBe('unauthorized');
   });
 });
 

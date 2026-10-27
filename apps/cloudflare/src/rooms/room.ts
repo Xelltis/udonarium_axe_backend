@@ -394,10 +394,18 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return null;
   }
 
-  /** While people are in the room, it is checked on, not deleted. */
+  /**
+   * While people are in the room, it is checked on, not deleted. The row is written only when the
+   * room was empty, not each time someone more comes in.
+   */
   occupied(nextCheckAt: number): void {
-    this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');
+    this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL WHERE emptied_at IS NOT NULL');
     void this.ctx.storage.setAlarm(nextCheckAt);
+  }
+
+  /** The next check moved, as when a token was renewed. */
+  recheckAt(at: number): void {
+    void this.ctx.storage.setAlarm(at);
   }
 
   /** Everyone has gone. The retention period is counted from here. */

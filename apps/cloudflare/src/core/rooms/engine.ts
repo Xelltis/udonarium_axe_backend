@@ -614,14 +614,15 @@ export class RoomEngine<C extends object> {
 
   /**
    * Takes a new access token while the connection stays open. When it is the same person's, the
-   * seat's expiry is pushed back; otherwise the seat is removed. A guest's seat has no expiry, so
-   * taking one does nothing.
+   * seat's expiry is pushed back, and so is the check that would have come for the old one; otherwise
+   * the seat is removed. A guest's seat has no expiry, so taking one does nothing.
    */
   private renew(conn: C, seat: Seat, accessToken: string): void {
     if (!seat.account) return;
     const claims = readToken(accessToken, 'access', this.host.sessionSecret() ?? '');
     if (!claims || claims.uid !== seat.userId) return this.refuse(conn, 'unauthorized');
     this.host.setSeat(conn, { ...seat, expiresAt: claims.exp * 1000 });
+    this.host.recheckAt(this.nextCheckAt());
   }
 
   /** Seats a connection. True when it is seated, false when it is refused. */

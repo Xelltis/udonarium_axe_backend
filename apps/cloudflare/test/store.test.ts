@@ -28,6 +28,18 @@ describe('the room store', () => {
     });
   });
 
+  it('writes two rows to put an object there, and one to change it', async () => {
+    const rows = await withStore('store-rows', (store) => {
+      store.put(contextOf('piece', 1, 0.5), null);
+      const put = store.flush();
+      store.put(contextOf('piece', 2, 0.5), null);
+      return [put, store.flush()];
+    });
+
+    // The row, and the row of its primary key's index; then the row alone, changed in place.
+    expect(rows).toEqual([2, 1]);
+  });
+
   it('follows children and reactions, and does not loop on parents that point at each other', async () => {
     const found = await withStore('store-relations', (store) => {
       store.put(contextOf('a', 1, 0.5, { parentIdentifier: 'b' }), null);
