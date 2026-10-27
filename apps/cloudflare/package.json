@@ -9,6 +9,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "vitest --run --coverage",
+    "rows": "vitest --run --config vitest.rows.config.ts --silent=false --maxWorkers=2",
+    "latency": "vitest --run --config vitest.latency.config.ts --silent=false",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
