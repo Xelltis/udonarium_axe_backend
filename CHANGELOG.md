@@ -1,3 +1,11 @@
+## [1.3.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.3.0...v1.3.1) (2026-10-27)
+
+
+### Performance Improvements
+
+* **cloudflare:** pack the room's objects into pages ([fa59a02](https://github.com/Xelltis/udonarium_axe_backend/commit/fa59a02e539f372ad033d3e666519f48fcbe26a4))
+* **cloudflare:** write fewer rows for the same room ([ef9c38d](https://github.com/Xelltis/udonarium_axe_backend/commit/ef9c38df24860f386ca8565ff1cf61f5f90eede7))
+
 # [1.3.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.2.0...v1.3.0) (2026-10-24)
 
 
