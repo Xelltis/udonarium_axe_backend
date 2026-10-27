@@ -35,13 +35,13 @@ SkyWay版の配信で使うトークン発行と、SkyWayを使わずに遊ぶ�
 - **カバレッジ100%**: Vercel版とCloudflare版は、行・分岐・関数・文のすべてで100%を求める。下回ると`npm test`が落ちる
 - **共有のコードとVercel版の相対`import`は拡張子まで書く**（`./foo.js`）。JSONの`import`には`with { type: 'json' }`を付ける。
   Vercel版はNodeがバンドルせずに読むので、抜けると本番で`ERR_MODULE_NOT_FOUND`になる
-- **`wrangler`は固定**: `@cloudflare/vitest-pool-workers`が使う版に合わせる（CIがworkerdが1つかを確かめる）
+- **`wrangler`は固定**: `@cloudflare/vitest-plugin`が使う版に合わせる（CIがworkerdが1つかを確かめる）
 - **PHP版**: PHP 8.3で動く書きかた、`declare(strict_types=1);`、`@PER-CS`、PHPStanレベル9、PHPUnit 12と13の両対応
 - **秘密の値**は、例でも本物を書かない
 
 ## 技術スタック
 
-- **Cloudflare版** — Workers・Durable Objects・R2、Hono、valibot。テストは`@cloudflare/vitest-pool-workers`（workerdの中）
+- **Cloudflare版** — Workers・Durable Objects・R2、Hono、valibot。テストは`@cloudflare/vitest-plugin`（workerdの中）
 - **Vercel版** — Vercel Functions（Node）・Redis・Vercel Blob。テストは本物のRedisを使う（`docker compose up -d redis`）
 - **部屋のサーバーの共通** — `@msgpack/msgpack`、`bcdice`（サーバーで振るダイス）
 - **PHP版** — PHP 8.3〜8.5、PHPUnit、PHPStan、PHP-CS-Fixer（Dockerで動かす）

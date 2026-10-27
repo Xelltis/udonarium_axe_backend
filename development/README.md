@@ -159,9 +159,9 @@ npm run typecheck
 npm test                 # Workersのランタイム（workerd）の中で。カバレッジ100%を要求
 ```
 
-テストは`@cloudflare/vitest-pool-workers`が持つwranglerとworkerdで動きます。
+テストは`@cloudflare/vitest-plugin`が持つwranglerとworkerdで動きます。
 `npm run dev`と`npm run deploy`も同じランタイムで動くよう、`wrangler`はその版に固定しています。
-上げるときは、`@cloudflare/vitest-pool-workers`が使う版に合わせてください（CIで確かめます）。
+上げるときは、`@cloudflare/vitest-plugin`が使う版に合わせてください（CIで確かめます）。
 
 ## コミットとPull Request
 

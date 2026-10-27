@@ -102,13 +102,28 @@ export class LobbyDurableObject extends DurableObject<Env> {
     }
   }
 
+  /** Writes nothing when the count is the same, as on most of the room's patrols. */
   setMembers(roomKey: string, members: number): void {
-    this.ctx.storage.sql.exec('UPDATE rooms SET members = ? WHERE room_key = ?', members, roomKey);
+    this.ctx.storage.sql.exec(
+      'UPDATE rooms SET members = ? WHERE room_key = ? AND members <> ?',
+      members,
+      roomKey,
+      members
+    );
   }
 
-  /** Replaces a room's GMs. Nothing is kept for a room not in the list (news that came after it was gone). */
+  /**
+   * Replaces a room's GMs. Nothing is kept for a room not in the list (news that came after it was gone),
+   * and nothing is written when they are the same GMs.
+   */
   setGameMasters(roomKey: string, userIds: string[]): void {
     const sql = this.ctx.storage.sql;
+    const held = sql
+      .exec<{ user_id: string }>('SELECT user_id FROM game_masters WHERE room_key = ?', roomKey)
+      .toArray()
+      .map((row) => row.user_id);
+    const wanted = new Set(userIds);
+    if (held.length === wanted.size && held.every((userId) => wanted.has(userId))) return;
     sql.exec('DELETE FROM game_masters WHERE room_key = ?', roomKey);
     for (const userId of userIds) {
       sql.exec(

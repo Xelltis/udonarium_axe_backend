@@ -41,6 +41,23 @@ Pull Requestでは走らないので、Pull Requestのチェックにはこれ�
 - Codecovでは、アプリごとにフラグ（`php`、`vercel`、`cloudflare`）を分けています。1つのアプリだけを変えたPull Requestでも、ほかのアプリの値を引き継ぎます。
 - Pull Requestで変えた行（パッチ）には、100%のカバレッジを求めます。
 
+## 部屋のサーバーの行と待ち時間を測る
+
+Cloudflare版の部屋の置き場所や同期を変えるときは、変える前とあとで、SQLiteが読み書きした行の数と、部屋にいる人の待ち時間を比べます。
+どちらも`apps/cloudflare`で手で走らせるもので、CIでは走らせません。
+時間はマシンによって変わるので、変える前とあとは同じマシンで走らせます。
+
+| コマンド          | 測るもの                                                                                                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run rows`    | 部屋の置き場所（`RoomStore`）が、読み込み・1時間の遊び・入室・起き直し・見回りで読み書きする行と、かかる時間。4時間の卓での量と、無料のプランで1日に遊べる卓の数も出す |
+| `npm run latency` | `wrangler dev`を立ち上げ、WebSocketで部屋に入った人が待つ時間を測る（読み込み、移動のp50とp99、15秒あけたあとの移動、ダイス、入室）                                    |
+
+部屋は`test/rows/room-model.ts`が、Udonariumで保存したzipを読み込んだときと同じように、キャラクター・カード・チャット・メモなどを親から順に並べて作ります。
+大きさは`small`（約2,000オブジェクト）・`session`（約1.4万。2026年10月26日に本番で測った卓に近い）・`max`（約20万）の3つです。
+
+- `npm run rows`は、`ROWS_SCALES`（既定は`small,session`）、`ROWS_REPEAT`（時間を測る回数。既定は3）、`ROWS_ALARMS_PER_HOUR`（見回りのアラームの1時間あたりの回数。既定は本番で測った12）、`ROWS_PAGE_KIB`（試すページの大きさ）で変えられます。
+- `npm run latency`は、`LATENCY_SCALES`（既定は`small,session`）と`LATENCY_RUNS`（既定は5）で変えられます。ポート8799と`.wrangler/latency-state`を使うので、`npm run dev`を止めずに走らせられます。
+
 ## リリース
 
 `main`にpushされ、CIが通ると、`release.yml`の`Release`のジョブがリリースを作ります。
@@ -74,4 +91,4 @@ Vercel版とCloudflare版は1つの設定にまとめています。
 片方だけ上がると、CIの写しの確認で落ちるためです。
 ほかのパッケージは、アプリごとに別のPull Requestになります。
 
-Cloudflare版の`wrangler`は、`@cloudflare/vitest-pool-workers`が使う版に合わせて手で上げるので、Dependabotの対象から外しています。
+Cloudflare版の`wrangler`は、`@cloudflare/vitest-plugin`が使う版に合わせて手で上げるので、Dependabotの対象から外しています。

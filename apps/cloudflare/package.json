@@ -9,6 +9,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "vitest --run --coverage",
+    "rows": "vitest --run --config vitest.rows.config.ts --silent=false --maxWorkers=2",
+    "latency": "vitest --run --config vitest.latency.config.ts --silent=false",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -22,21 +24,19 @@
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.23.0",
-    "@cloudflare/workers-types": "5.20261015.1",
+    "@cloudflare/vitest-plugin": "1.4.8",
+    "@cloudflare/workers-types": "5.20261023.1",
     "@eslint/js": "^10.0.1",
-    "@vitest/coverage-istanbul": "4.1.12",
-    "@vitest/runner": "4.1.12",
-    "@vitest/snapshot": "4.1.12",
-    "eslint": "^10.9.0",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
     "jiti": "^2.7.0",
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.67.0",
-    "vitest": "4.1.12",
-    "wrangler": "4.124.0"
+    "typescript-eslint": "^8.72.0",
+    "vitest": "5.0.5",
+    "wrangler": "4.153.0"
   },
   "overrides": {
     "undici": "7.30.1",

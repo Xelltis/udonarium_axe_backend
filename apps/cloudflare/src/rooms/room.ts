@@ -9,10 +9,10 @@ import { RoomEngine } from '../core/rooms/engine';
 import type { RoomInit } from '../core/http/backend';
 import { banCache, seatBarredBy } from '../core/moderation/bans';
 import type { Ban, BanList } from '../core/moderation/bans';
-import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../core/rooms/host';
+import type { RoleBook, RoomEvent, RoomFacts, RoomHost, RoomStore, Seat } from '../core/rooms/host';
 import { MODERATION_NAME } from '../moderation/store';
 import { LOBBY_NAME } from './lobby';
-import { RoomStore, migrate } from './store';
+import { migrate, openStore } from './store';
 
 /** How long to wait before deleting a room again when it could not be deleted all the way (milliseconds). */
 export const WIPE_RETRY_MS = 60_000;
@@ -361,7 +361,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   store(): RoomStore {
-    this.storeCache ??= new RoomStore(this.ctx.storage);
+    this.storeCache ??= openStore(this.ctx.storage);
     return this.storeCache;
   }
 
@@ -394,10 +394,18 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return null;
   }
 
-  /** While people are in the room, it is checked on, not deleted. */
+  /**
+   * While people are in the room, it is checked on, not deleted. The row is written only when the
+   * room was empty, not each time someone more comes in.
+   */
   occupied(nextCheckAt: number): void {
-    this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL');
+    this.ctx.storage.sql.exec('UPDATE room SET emptied_at = NULL WHERE emptied_at IS NOT NULL');
     void this.ctx.storage.setAlarm(nextCheckAt);
+  }
+
+  /** The next check moved, as when a token was renewed. */
+  recheckAt(at: number): void {
+    void this.ctx.storage.setAlarm(at);
   }
 
   /** Everyone has gone. The retention period is counted from here. */
