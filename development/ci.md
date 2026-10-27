@@ -55,7 +55,7 @@ Cloudflare版の部屋の置き場所や同期を変えるときは、変える�
 部屋は`test/rows/room-model.ts`が、Udonariumで保存したzipを読み込んだときと同じように、キャラクター・カード・チャット・メモなどを親から順に並べて作ります。
 大きさは`small`（約2,000オブジェクト）・`session`（約1.4万。2026年10月26日に本番で測った卓に近い）・`max`（約20万）の3つです。
 
-- `npm run rows`は、`ROWS_SCALES`（既定は`small,session`）、`ROWS_REPEAT`（時間を測る回数。既定は3）、`ROWS_ALARMS_PER_HOUR`（見回りのアラームの1時間あたりの回数。既定は本番で測った12）で変えられます。
+- `npm run rows`は、`ROWS_SCALES`（既定は`small,session`）、`ROWS_REPEAT`（時間を測る回数。既定は3）、`ROWS_ALARMS_PER_HOUR`（見回りのアラームの1時間あたりの回数。既定は本番で測った12）、`ROWS_PAGE_KIB`（試すページの大きさ）で変えられます。
 - `npm run latency`は、`LATENCY_SCALES`（既定は`small,session`）と`LATENCY_RUNS`（既定は5）で変えられます。ポート8799と`.wrangler/latency-state`を使うので、`npm run dev`を止めずに走らせられます。
 
 ## リリース
