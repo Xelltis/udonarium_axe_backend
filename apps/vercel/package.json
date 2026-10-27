@@ -35,7 +35,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.13.3",
     "@types/ws": "^8.18.2",
-    "@vitest/coverage-istanbul": "^5.0.4",
+    "@vitest/coverage-istanbul": "^5.0.5",
     "@vitest/coverage-v8": "^5.0.4",
     "eslint": "^10.9.0",
     "eslint-config-prettier": "^10.1.8",
