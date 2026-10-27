@@ -1,4 +1,4 @@
-import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
+import { cloudflareTest } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 
 // `npm run rows`: the report of the rows a room reads and writes (test/rows/rows.report.ts). It is slow

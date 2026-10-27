@@ -24,12 +24,10 @@
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.23.0",
-    "@cloudflare/workers-types": "5.20261021.1",
+    "@cloudflare/vitest-plugin": "1.4.8",
+    "@cloudflare/workers-types": "5.20261023.1",
     "@eslint/js": "^10.0.1",
-    "@vitest/coverage-istanbul": "4.1.12",
-    "@vitest/runner": "4.1.12",
-    "@vitest/snapshot": "4.1.12",
+    "@vitest/coverage-istanbul": "5.0.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
@@ -37,8 +35,8 @@
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.0",
-    "vitest": "4.1.12",
-    "wrangler": "4.124.0"
+    "vitest": "5.0.5",
+    "wrangler": "4.153.0"
   },
   "overrides": {
     "undici": "7.30.1",
