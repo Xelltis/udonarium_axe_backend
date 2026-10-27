@@ -100,6 +100,8 @@ class Person {
     for (;;) {
       const index = this.replies.findIndex((reply) => reply.type === type);
       if (index >= 0) return this.replies.splice(index, 1)[0];
+      const refused = this.replies.find((reply) => reply.type === 'error');
+      if (refused) throw new Error(`refused while waiting for ${type}: ${JSON.stringify(refused.message)}`);
       if (performance.now() > deadline) throw new Error(`no ${type} came`);
       await new Promise<void>((resolve) => {
         this.waiters.push(resolve);
