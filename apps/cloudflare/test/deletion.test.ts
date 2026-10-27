@@ -68,7 +68,7 @@ const tablesOf = (roomKey: string) =>
   runInDurableObject(stubOf(roomKey), (_instance, state) =>
     state.storage.sql
       .exec<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'seats', 'objects')"
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('room', 'seats', 'pages')"
       )
       .toArray()
       .map((row) => row.name)

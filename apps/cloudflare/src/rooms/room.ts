@@ -9,10 +9,10 @@ import { RoomEngine } from '../core/rooms/engine';
 import type { RoomInit } from '../core/http/backend';
 import { banCache, seatBarredBy } from '../core/moderation/bans';
 import type { Ban, BanList } from '../core/moderation/bans';
-import type { RoleBook, RoomEvent, RoomFacts, RoomHost, Seat } from '../core/rooms/host';
+import type { RoleBook, RoomEvent, RoomFacts, RoomHost, RoomStore, Seat } from '../core/rooms/host';
 import { MODERATION_NAME } from '../moderation/store';
 import { LOBBY_NAME } from './lobby';
-import { RoomStore, migrate } from './store';
+import { migrate, openStore } from './store';
 
 /** How long to wait before deleting a room again when it could not be deleted all the way (milliseconds). */
 export const WIPE_RETRY_MS = 60_000;
@@ -361,7 +361,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
   }
 
   store(): RoomStore {
-    this.storeCache ??= new RoomStore(this.ctx.storage);
+    this.storeCache ??= openStore(this.ctx.storage);
     return this.storeCache;
   }
 

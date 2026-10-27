@@ -69,10 +69,10 @@ describe('room metrics', () => {
         ['flush', ''],
       ])
     );
-    // Four things were written (a piece, the tab list, a tab, a roll's result). Each writes its row and
-    // a row in its primary key's index.
+    // Four things were written (a piece, the tab list, a tab, a roll's result), all into the room's first
+    // page: a row each time it was written, once or twice as the roll came before the write or after.
     const flush = points.find((point) => point.blobs?.[1] === 'flush');
-    expect(flush?.doubles?.[0]).toBe(8);
+    expect([1, 2]).toContain(flush?.doubles?.[0]);
   });
 
   it('writes the number of changes once a minute while people play', async () => {
@@ -89,8 +89,8 @@ describe('room metrics', () => {
     alice.client.emit([{ eventName: SyncEvent.UPDATE, data: contextOf('piece', 1, 0.5) }]);
     await eventually(async () => summary(points).some(([event]) => event === 'flush'), Boolean);
 
-    // The 3 rows from before, plus one object's row and its index row.
-    expect(points.find((point) => point.blobs?.[1] === 'flush')?.doubles).toEqual([5]);
+    // The 3 rows from before, plus the page the object went in.
+    expect(points.find((point) => point.blobs?.[1] === 'flush')?.doubles).toEqual([4]);
   });
 
   it('writes nothing once the room is gone', async () => {
