@@ -38,7 +38,7 @@ updates:
           - valibot
           - prettier
     ignore:
-      # Upgraded by hand, to the version @cloudflare/vitest-pool-workers carries. Upgraded alone,
+      # Upgraded by hand, to the version @cloudflare/vitest-plugin carries. Upgraded alone,
       # the tests and dev and deploy would run different workerd, failing CI's "one workerd" check.
       - dependency-name: wrangler
 

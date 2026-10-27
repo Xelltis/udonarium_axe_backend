@@ -143,7 +143,7 @@ jobs:
 
       - run: npm ci
 
-      # The tests run on the wrangler and workerd that vitest-pool-workers carries. The wrangler for dev
+      # The tests run on the wrangler and workerd that @cloudflare/vitest-plugin carries. The wrangler for dev
       # and deploy is kept at the same version, so that nothing runs on a runtime other than the tests'
       # (upgrading wrangler alone fails here).
       - name: Check that the tests and wrangler share one workerd
