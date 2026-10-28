@@ -66,7 +66,7 @@ describe('refusalFrame', () => {
     expect(decodeFrame(refusalFrame('room-not-found'))).toEqual({
       type: 'error',
       code: 'room-not-found',
-      protocolVersion: 3,
+      protocolVersion: 4,
     });
   });
 });

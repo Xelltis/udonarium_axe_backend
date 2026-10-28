@@ -5,7 +5,7 @@
 
 型と定数は`apps/cloudflare/contracts/protocol.ts`に、例は`apps/cloudflare/contracts/fixtures/`にあります。
 このページの内容と食い違うときは、そちらが正しいものです。
-いまの版は**3**です。
+いまの版は**4**です。
 
 部屋に入るには、`GET /v1/rooms/:roomKey/ws`でWebSocketにつなぎ替えます（→ [部屋のサーバーのAPI](https://xelltis.github.io/udonarium_axe_backend/reference/server-api#get-v1-rooms-roomkey-ws)）。
 
@@ -25,7 +25,7 @@
 ```json
 {
   "type": "hello",
-  "protocolVersion": 3,
+  "protocolVersion": 4,
   "peerId": "a1B2c3XyZq9W8e7r6-",
   "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
   "password": "secret",
@@ -111,16 +111,16 @@ Cloudflare版の見回りは、席が3時間を過ぎて1秒たったときに�
 
 ## サーバーから送るもの
 
-| `type`        | 中身                                                                                                                                              | 送るとき                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `welcome`     | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime`、`assetToken`、`assetTokenExpiresAt`、`assetUpload`（省略できる） | `hello`が通ったとき                                   |
-| `join`        | `member`（`peerId`、`userId`、`role`）                                                                                                            | 誰かが入ったとき                                      |
-| `leave`       | `peerId`                                                                                                                                          | 誰かが抜けたとき                                      |
-| `data`        | `from`（送り主のピアID）、`events`                                                                                                                | イベントを届けるとき                                  |
-| `time`        | `serverTime`（Unixミリ秒）                                                                                                                        | `time`を受けたとき                                    |
-| `invite`      | `role`、`invite`、`expiresAt`。GMでないときと、部屋のサーバーにログインが置かれていないときは`invite`と`expiresAt`が`null`                        | `invite`を受けたとき                                  |
-| `asset-token` | `assetToken`、`expiresAt`（Unixミリ秒）、`role`（その席のいまの役割）                                                                             | `asset-token`を受けたときと、自分の役割が変わったとき |
-| `error`       | `code`、`protocolVersion`                                                                                                                         | 接続を閉じる前                                        |
+| `type`        | 中身                                                                                                                                                                                | 送るとき                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `welcome`     | `protocolVersion`、`peerId`、`authorityPeerId`、`role`、`members`、`serverTime`、`assetToken`、`assetTokenExpiresAt`、`assetUpload`（省略できる）、`keptRole`（ログインした人だけ） | `hello`が通ったとき                                   |
+| `join`        | `member`（`peerId`、`userId`、`role`）                                                                                                                                              | 誰かが入ったとき                                      |
+| `leave`       | `peerId`                                                                                                                                                                            | 誰かが抜けたとき                                      |
+| `data`        | `from`（送り主のピアID）、`events`                                                                                                                                                  | イベントを届けるとき                                  |
+| `time`        | `serverTime`（Unixミリ秒）                                                                                                                                                          | `time`を受けたとき                                    |
+| `invite`      | `role`、`invite`、`expiresAt`。GMでないときと、部屋のサーバーにログインが置かれていないときは`invite`と`expiresAt`が`null`                                                          | `invite`を受けたとき                                  |
+| `asset-token` | `assetToken`、`expiresAt`（Unixミリ秒）、`role`（その席のいまの役割）、`keptRole`（ログインした人だけ）                                                                             | `asset-token`を受けたときと、自分の役割が変わったとき |
+| `error`       | `code`、`protocolVersion`                                                                                                                                                           | 接続を閉じる前                                        |
 
 - `welcome`の`role`は、サーバーが決めた自分の役割（`gm`・`pl`・`guest`）です。自分の`PeerCursor`の`role`はこれにします。
 - `welcome`の`members`には、つないだ本人とサーバーは入りません。
@@ -394,5 +394,5 @@ npmには出していません。
 | `fixtures/http.json`       | HTTPの要求と返事の例。サーバーのテストが、実際の返事と形を比べる   |
 | `fixtures/limits.json`     | 両側で揃える上限と期間                                             |
 
-封筒の形を変えたときは、`PROTOCOL_VERSION`を上げます。
+封筒の形を変えたときは、`PROTOCOL_VERSION`を上げます。省略できる欄を足すときも上げます。
 版の違うAxeは`protocol-mismatch`で断られ、読み込み直すよう案内されます。

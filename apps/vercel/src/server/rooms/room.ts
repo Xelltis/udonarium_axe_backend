@@ -114,7 +114,8 @@ export class VercelRoom implements RoomHost<Conn> {
     private meta: RoomMeta | null,
     private readonly lease: string,
     private readonly roleMap: Map<string, PeerRole>,
-    private readonly objects: RedisRoomStore | null
+    private readonly objects: RedisRoomStore | null,
+    private readonly watchers = new Set<string>()
   ) {}
 
   /**
@@ -145,8 +146,9 @@ export class VercelRoom implements RoomHost<Conn> {
     const write = async (ops: Op[]) => {
       if (!(await fencedWrite(deps.redis, keys, lease, ops))) room.stepDown();
     };
-    const [roles, objects] = await Promise.all([
+    const [roles, watching, objects] = await Promise.all([
       deps.redis.hGetAll(keys.roles),
+      deps.redis.sMembers(keys.watching),
       RedisRoomStore.load(binaryOf(deps.redis), keys, write, deps.tombstoneLimits),
     ]);
     const room: VercelRoom = new VercelRoom(
@@ -156,7 +158,8 @@ export class VercelRoom implements RoomHost<Conn> {
       meta,
       lease,
       new Map(Object.entries(roles) as [string, PeerRole][]),
-      objects
+      objects,
+      new Set(watching)
     );
     // The seats an owner that went away left behind are nobody's now: everybody gets back in here.
     room.persist([{ command: 'DEL', key: keys.seats, args: [] }]);
@@ -407,13 +410,25 @@ export class VercelRoom implements RoomHost<Conn> {
   readonly roles: RoleBook = {
     roleOf: (userId) => this.roleMap.get(userId) ?? null,
     add: (userId, role) => this.setRole(userId, role),
-    set: (userId, role) => this.setRole(userId, role),
+    set: (userId, role) => this.setRole(userId, role, true),
     gameMasterCount: () => [...this.roleMap.values()].filter((role) => role === 'gm').length,
+    isWatching: (userId) => this.watchers.has(userId),
+    setWatching: (userId, watching) => {
+      if (watching === this.watchers.has(userId)) return;
+      if (watching) this.watchers.add(userId);
+      else this.watchers.delete(userId);
+      this.persist([{ command: watching ? 'SADD' : 'SREM', key: this.keys.watching, args: [userId] }]);
+    },
   };
 
-  private setRole(userId: string, role: PeerRole): void {
+  /** Writes a role, and where the GM changed it, ends any watching in the same write. */
+  private setRole(userId: string, role: PeerRole, endWatching = false): void {
     this.roleMap.set(userId, role);
-    this.persist([{ command: 'HSET', key: this.keys.roles, args: [userId, role] }]);
+    const ending = endWatching && this.watchers.delete(userId);
+    this.persist([
+      { command: 'HSET', key: this.keys.roles, args: [userId, role] },
+      ...(ending ? [{ command: 'SREM' as const, key: this.keys.watching, args: [userId] }] : []),
+    ]);
   }
 
   sessionSecret(): string | null {
@@ -513,6 +528,7 @@ export const wipeRoom = async (redis: Redis, key: KeyOf, roomKey: string): Promi
     .del([
       keys.meta,
       keys.roles,
+      keys.watching,
       keys.seats,
       keys.objects,
       keys.tombstones,

@@ -46,6 +46,8 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
    * enough.
    */
   private deleting = false;
+  /** Whether the table of those watching is made in this room's storage. */
+  private watchingReady = false;
   private readonly engine = new RoomEngine<WebSocket>(this);
   /** The operator's bans, read afresh for each hello. */
   private readonly banned = banCache(() => this.env.MODERATION.getByName(MODERATION_NAME).state());
@@ -294,6 +296,7 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
       }
       this.engine.stopFlushing();
       this.storeCache = null;
+      this.watchingReady = false;
       await this.ctx.storage.deleteAll();
       await this.ctx.storage.deleteAlarm();
     } catch (err) {
@@ -375,10 +378,30 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     },
     set: (userId, role) => {
       this.ctx.storage.sql.exec('UPDATE seats SET role = ? WHERE user_id = ?', role, userId);
+      this.watchingTable().exec('DELETE FROM watching WHERE user_id = ?', userId);
     },
     gameMasterCount: () =>
       this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM seats WHERE role = 'gm'").one().count,
+    isWatching: (userId) =>
+      this.watchingTable().exec('SELECT 1 FROM watching WHERE user_id = ?', userId).toArray().length > 0,
+    setWatching: (userId, watching) => {
+      if (watching) this.watchingTable().exec('INSERT OR IGNORE INTO watching (user_id) VALUES (?)', userId);
+      else this.watchingTable().exec('DELETE FROM watching WHERE user_id = ?', userId);
+    },
   };
+
+  /**
+   * The SQL of the room, with the table of those watching as a guest made. A room made before there
+   * was watching has none, so it is made the first time it is asked for.
+   */
+  private watchingTable(): SqlStorage {
+    const sql = this.ctx.storage.sql;
+    if (!this.watchingReady) {
+      sql.exec('CREATE TABLE IF NOT EXISTS watching (user_id TEXT PRIMARY KEY)');
+      this.watchingReady = true;
+    }
+    return sql;
+  }
 
   /**
    * The key that checks tokens. Rooms can be made only on a Worker with login set up, but when login

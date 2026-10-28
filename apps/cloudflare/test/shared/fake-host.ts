@@ -143,9 +143,16 @@ export class FakeHost implements RoomHost<FakeConn> {
   readonly roles: RoleBook = {
     roleOf: (userId) => this.roleMap.get(userId) ?? null,
     add: (userId, role) => void this.roleMap.set(userId, role),
-    set: (userId, role) => void this.roleMap.set(userId, role),
+    set: (userId, role) => {
+      this.roleMap.set(userId, role);
+      this.watchers.delete(userId);
+    },
     gameMasterCount: () => [...this.roleMap.values()].filter((role) => role === 'gm').length,
+    isWatching: (userId) => this.watchers.has(userId),
+    setWatching: (userId, watching) => void (watching ? this.watchers.add(userId) : this.watchers.delete(userId)),
   };
+  /** Those watching as a guest. */
+  readonly watchers = new Set<string>();
 
   sessionSecret(): string | null {
     return SECRET;

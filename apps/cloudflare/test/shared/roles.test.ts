@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ACCOUNT_USER_ID_PREFIX, AUTHORITY_PEER_ID, AuthorityEvent, SyncEvent } from '../../contracts/protocol.js';
 import { readToken, signToken } from '../../src/core/auth/tokens.js';
+import { MAX_OWN_ROLE_CHANGES_PER_WINDOW } from '../../src/core/rooms/limits.js';
 import { harness } from '../harness.js';
 import { ORIGIN, SESSION_SECRET, accessTokenFor } from './helpers.js';
 import { connect, contextOf, createRoom, join, postRoom } from './room-helpers.js';
@@ -511,5 +512,151 @@ describe('changing a role', () => {
       },
     ]);
     await gm.expectQuiet();
+  });
+});
+
+describe('watching', () => {
+  const ask = (peerId: string, role: string) => [{ eventName: AuthorityEvent.ROLE_REQUEST, data: { peerId, role } }];
+
+  it('lets a player step out to watch as a guest and come back as the player', async () => {
+    const { gm, pl, guest } = await table();
+    pl.emit([{ eventName: SyncEvent.UPDATE, data: cursorOf('pl', 'pl', 3) }]);
+    await gm.events();
+    await guest.events();
+
+    pl.emit(ask('pl', 'guest'));
+
+    const watching = (await pl.events())[0];
+    expect(watching.data).toEqual({ ...cursorOf('pl', 'guest', 4), minorVersion: expect.any(Number) });
+    for (const other of [gm, guest]) expect((await other.events())[0]).toEqual(watching);
+    expect(await pl.next('asset-token')).toMatchObject({ role: 'guest', keptRole: 'pl' });
+
+    pl.emit(ask('pl', 'pl'));
+
+    expect((await pl.events())[0].data).toEqual({ ...cursorOf('pl', 'pl', 5), minorVersion: expect.any(Number) });
+    expect(await pl.next('asset-token')).toMatchObject({ role: 'pl', keptRole: 'pl' });
+  });
+
+  it('tells a seat logged in the role the room keeps for it, and a guest nothing', async () => {
+    const { welcomes, pl } = await table();
+
+    expect(welcomes.map(({ welcome }) => welcome.keptRole)).toEqual(['gm', 'pl', undefined]);
+    pl.send({ type: 'asset-token' });
+    expect((await pl.next('asset-token')).keptRole).toBe('pl');
+  });
+
+  it('seats one who was watching as a guest again on coming in, keeping the role to come back to', async () => {
+    const { roomKey, pl } = await table();
+    pl.emit(ask('pl', 'guest'));
+    await pl.next('asset-token');
+    pl.close();
+
+    const again = await join(roomKey, 'pl');
+
+    expect(again.welcome).toMatchObject({ role: 'guest', keptRole: 'pl' });
+    again.client.emit(ask('pl', 'pl'));
+    expect(await again.client.next('asset-token')).toMatchObject({ role: 'pl', keptRole: 'pl' });
+  });
+
+  it('stops one watching once the GM changes their role', async () => {
+    const { roomKey, gm, pl } = await table();
+    pl.emit(ask('pl', 'guest'));
+    await pl.next('asset-token');
+
+    gm.emit(ask('pl', 'gm'));
+    expect(await pl.next('asset-token')).toMatchObject({ role: 'gm', keptRole: 'gm' });
+    pl.close();
+
+    expect((await join(roomKey, 'pl')).welcome).toMatchObject({ role: 'gm', keptRole: 'gm' });
+  });
+
+  it('takes a request naming another seat of the same person as watching too', async () => {
+    const { roomKey, gm } = await table();
+    const other = await join(roomKey, 'gm-2', { userId: 'user-gm', accessToken: accessTokenFor('user-gm') });
+    await gm.next('join');
+
+    gm.emit(ask('gm-2', 'guest'));
+
+    for (const seat of [gm, other.client]) {
+      expect(await seat.next('asset-token')).toMatchObject({ role: 'guest', keptRole: 'gm' });
+    }
+    gm.emit(ask('gm', 'gm'));
+    expect(await gm.next('asset-token')).toMatchObject({ role: 'gm', keptRole: 'gm' });
+  });
+
+  it('passes over switches past the limit, and keeps the role and the watching in step within a frame', async () => {
+    const { roomKey, pl } = await table();
+    const roles = ['guest', 'pl', 'guest', 'pl', 'guest', 'pl', 'guest'];
+
+    pl.emit(roles.map((role) => ask('pl', role)[0]));
+
+    for (const role of roles.slice(0, MAX_OWN_ROLE_CHANGES_PER_WINDOW)) {
+      expect((await pl.next('asset-token')).role).toBe(role);
+    }
+    await pl.expectQuiet();
+    pl.close();
+    expect((await join(roomKey, 'pl')).welcome).toMatchObject({ role: 'pl', keptRole: 'pl' });
+  });
+
+  it('switches every seat of the same person, each told the role to come back to', async () => {
+    const { roomKey, pl } = await table();
+    const other = await join(roomKey, 'pl-2', { userId: 'user-pl', accessToken: accessTokenFor('user-pl') });
+    await pl.next('join');
+
+    pl.emit(ask('pl', 'guest'));
+
+    for (const seat of [pl, other.client]) {
+      expect(await seat.next('asset-token')).toMatchObject({ role: 'guest', keptRole: 'pl' });
+    }
+  });
+
+  it('lets the GM watch, giving nobody a role meanwhile, and come back as the GM', async () => {
+    const { gm, pl } = await table();
+
+    gm.emit(ask('gm', 'guest'));
+    expect((await gm.next('asset-token')).role).toBe('guest');
+    gm.emit(ask('pl', 'gm'));
+    expect((await gm.events())[0].data).toEqual({ peerId: 'pl', role: 'gm', reason: 'not-game-master' });
+
+    gm.emit(ask('gm', 'gm'));
+    expect((await gm.next('asset-token')).role).toBe('gm');
+    gm.emit(ask('pl', 'gm'));
+    expect((await pl.next('asset-token')).role).toBe('gm');
+  });
+
+  it('does nothing for a player asking for the role it has', async () => {
+    const { gm, pl } = await table();
+
+    pl.emit(ask('pl', 'pl'));
+
+    await pl.expectQuiet();
+    await gm.expectQuiet();
+  });
+
+  it.each([
+    ['a player asking to be the GM', 'pl', { peerId: 'pl', role: 'gm' }],
+    ['a guest who has not logged in asking to be a player', 'guest', { peerId: 'guest', role: 'pl' }],
+  ] as const)('refuses %s', async (_name, asker, request) => {
+    const clients = await table();
+
+    clients[asker].emit([{ eventName: AuthorityEvent.ROLE_REQUEST, data: request }]);
+
+    expect(await clients[asker].events()).toEqual([
+      {
+        eventName: AuthorityEvent.ROLE_REJECTED,
+        data: { ...request, reason: 'not-game-master' },
+        sendFrom: AUTHORITY_PEER_ID,
+      },
+    ]);
+  });
+
+  it('refuses a player the GM made a guest, who has no other role to come back to', async () => {
+    const { gm, pl } = await table();
+    gm.emit(ask('pl', 'guest'));
+    await pl.next('asset-token');
+
+    pl.emit(ask('pl', 'pl'));
+
+    expect((await pl.events())[0].data).toEqual({ peerId: 'pl', role: 'pl', reason: 'not-game-master' });
   });
 });

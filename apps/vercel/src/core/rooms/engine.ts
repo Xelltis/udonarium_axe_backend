@@ -56,6 +56,7 @@ import {
   MAX_EVENTS_PER_WINDOW,
   MAX_FRAMES_PER_WINDOW,
   MAX_OBJECTS,
+  MAX_OWN_ROLE_CHANGES_PER_WINDOW,
   MAX_PENDING_ROLLS,
   MAX_SOCKETS,
   MAX_WAITING_FRAMES,
@@ -131,7 +132,10 @@ export class RoomEngine<C extends object> {
   /** Rolls go in the order they were asked for. It waits only when a system is loaded the first time. */
   private rollQueue: Promise<void> = Promise.resolve();
   /** The frames, events and dice each connection has sent: when the window began, and the counts since. */
-  private readonly rates = new WeakMap<C, { start: number; count: number; events: number; rolls: number }>();
+  private readonly rates = new WeakMap<
+    C,
+    { start: number; count: number; events: number; rolls: number; ownRoles: number }
+  >();
   /** The connections reported as dropped. */
   private readonly gone = new WeakSet<C>();
   /** The connections refused and closed. One refused before its hello has no seat, so it is remembered here. */
@@ -405,6 +409,7 @@ export class RoomEngine<C extends object> {
         type: 'asset-token',
         ...this.assetTokenFor(seat, 'expiresAt'),
         role: seat.role,
+        ...this.keptRoleOf(seat),
       });
     } else if (received.type === 'active') {
       this.host.setSeat(conn, { ...seat, activeAt: Date.now() });
@@ -515,7 +520,9 @@ export class RoomEngine<C extends object> {
       if (!secret || !claims || claims.uid !== hello.userId) return this.refuse(conn, 'unauthorized');
       if (bans.accountBan(claims.sub)) return this.refuse(conn, 'banned');
       const { role, known } = this.roleOf(hello.userId, hello.invite ?? null, room.roomKey, secret);
-      seat.role = role;
+      // Someone who stepped out to watch comes in watching, keeping their role to come back to.
+      seat.role = known && this.host.roles.isWatching(hello.userId) ? 'guest' : role;
+      seat.keptRole = role;
       seat.account = true;
       seat.accountKey = claims.sub;
       seat.expiresAt = claims.exp * 1000;
@@ -676,6 +683,7 @@ export class RoomEngine<C extends object> {
       peerId: seat.peerId,
       authorityPeerId: AUTHORITY_PEER_ID,
       role: seat.role,
+      ...this.keptRoleOf(seat),
       members: others.filter((other) => other !== previous).map((other) => memberOf(other.seat)),
       serverTime: Date.now(),
       ...this.assetTokenFor(seat, 'assetTokenExpiresAt'),
@@ -763,11 +771,11 @@ export class RoomEngine<C extends object> {
     });
   }
 
-  private rateOf(conn: C): { start: number; count: number; events: number; rolls: number } {
+  private rateOf(conn: C): { start: number; count: number; events: number; rolls: number; ownRoles: number } {
     const now = Date.now();
     let rate = this.rates.get(conn);
     if (!rate || now - rate.start >= RATE_WINDOW_MS) {
-      rate = { start: now, count: 0, events: 0, rolls: 0 };
+      rate = { start: now, count: 0, events: 0, rolls: 0, ownRoles: 0 };
       this.rates.set(conn, rate);
     }
     return rate;
@@ -784,6 +792,13 @@ export class RoomEngine<C extends object> {
     const rate = this.rateOf(conn);
     rate.events += count;
     return rate.events <= MAX_EVENTS_PER_WINDOW;
+  }
+
+  /** Whether a seat switching its own role is within the number of switches that may be made. */
+  private withinOwnRoleChanges(conn: C): boolean {
+    const rate = this.rateOf(conn);
+    rate.ownRoles += 1;
+    return rate.ownRoles <= MAX_OWN_ROLE_CHANGES_PER_WINDOW;
   }
 
   /** Whether the dice asked for are within the number that may be asked for. */
@@ -848,7 +863,7 @@ export class RoomEngine<C extends object> {
           if (this.forget(data, seat)) for (const other of others) push(other.conn, event);
           break;
         case AuthorityEvent.ROLE_REQUEST:
-          if (forAuthority) this.changeRole(data, seat, reply);
+          if (forAuthority) this.changeRole(data, sender, reply);
           else toAddressee();
           break;
         case AuthorityEvent.ROLL_REQUEST:
@@ -1484,31 +1499,67 @@ export class RoomEngine<C extends object> {
   }
 
   /**
-   * Changes the role of someone in the room when a GM asks. It updates the table of seats, rewrites
-   * the role on that person's cursor, raises its version and sends it out to everyone. What changes
-   * view with the role (the faces of face-down cards, secrets, a tab's messages and so on) is handed
-   * to that person or taken back. When it refuses, it sends the reason back to the one who asked.
+   * Changes the role of someone in the room when a GM asks: it updates the table of seats, then the
+   * person's seats (reseat). When it refuses, it sends the reason back to the one who asked.
+   *
+   * Anybody logged in may also step out to watch as a guest, and come back to the role the room keeps
+   * for them (watchesOrComesBack). Watching is kept beside the table, which keeps the role as it was
+   * for them to come back to: a seat of theirs that comes in again comes in watching, until they come
+   * back or a GM changes their role.
    */
-  private changeRole(data: unknown, seat: Seat, reply: Reply): void {
+  private changeRole(data: unknown, conn: C, reply: Reply): void {
     const parsed = safeParse(roleRequestSchema, data);
     if (!parsed.success) return;
     const { peerId, role } = parsed.output;
     const reject = (reason: RoleRejectReason) => reply(AuthorityEvent.ROLE_REJECTED, { peerId, role, reason });
-    if (seat.role !== 'gm') return reject('not-game-master');
+    // Read afresh, as a request earlier in the same frame may have changed the seat already.
+    const asker = this.host.seatOf(conn) as Seat;
     const target = this.seats().find((other) => other.seat.peerId === peerId)?.seat;
+    if (target?.userId === asker.userId && this.watchesOrComesBack(asker, role)) {
+      if (role === asker.role || !this.withinOwnRoleChanges(conn)) return;
+      this.host.roles.setWatching(asker.userId, role === 'guest');
+      this.reseat(asker.userId, role);
+      return;
+    }
+    if (asker.role !== 'gm') return reject('not-game-master');
     if (!target) return reject('unknown-peer');
     if (!target.account) return reject('not-logged-in');
     const gameMasters = this.host.roles.gameMasterCount();
     if (target.role === 'gm' && role !== 'gm' && gameMasters <= 1) return reject('last-game-master');
 
     this.host.roles.set(target.userId, role);
-    this.host.lobbyChanged(seat.roomKey);
+    this.host.lobbyChanged(asker.roomKey);
+    this.reseat(target.userId, role, role);
+  }
+
+  /** The role the room keeps for a seat logged in, which differs from its own while it watches. */
+  private keptRoleOf(seat: Seat): { keptRole?: PeerRole } {
+    return seat.keptRole ? { keptRole: seat.keptRole } : {};
+  }
+
+  /**
+   * Whether someone asking for a role of their own only steps out to watch, as a guest, or back in
+   * from watching to the role the room keeps for them. Only someone logged in whom the room keeps
+   * above a guest may.
+   */
+  private watchesOrComesBack(seat: Seat, role: PeerRole): boolean {
+    if (!seat.account) return false;
+    const kept = this.host.roles.roleOf(seat.userId);
+    return kept !== 'guest' && (role === 'guest' || role === kept);
+  }
+
+  /**
+   * Seats every seat of a user in a role. It rewrites the role on their cursors, raises their versions
+   * and sends them out to everyone. What changes view with the role (the faces of face-down cards,
+   * secrets, a tab's messages and so on) is handed to them or taken back.
+   */
+  private reseat(userId: string, role: PeerRole, keptRole?: PeerRole): void {
     const outbox = new Map<C, EventContext[]>();
     const push: Push<C> = (conn, event) => outbox.set(conn, [...(outbox.get(conn) ?? []), event]);
     const updates: EventContext[] = [];
     for (const { conn, seat: other } of this.seats()) {
-      if (other.userId !== target.userId) continue;
-      this.host.setSeat(conn, { ...other, role });
+      if (other.userId !== userId) continue;
+      this.host.setSeat(conn, { ...other, role, ...(keptRole ? { keptRole } : {}) });
       // Every object is compared between the old role and the new one.
       for (const identifier of this.store.identifiers()) {
         this.resend(
@@ -1536,8 +1587,13 @@ export class RoomEngine<C extends object> {
     // Whether assets may be put depends on the role, so the token is swapped for one with the new
     // role.
     for (const { conn, seat: other } of this.seats()) {
-      if (other.userId !== target.userId) continue;
-      this.post(conn, { type: 'asset-token', ...this.assetTokenFor(other, 'expiresAt'), role });
+      if (other.userId !== userId) continue;
+      this.post(conn, {
+        type: 'asset-token',
+        ...this.assetTokenFor(other, 'expiresAt'),
+        role: other.role,
+        ...this.keptRoleOf(other),
+      });
     }
   }
 
