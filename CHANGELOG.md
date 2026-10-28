@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.3.1...v1.4.0) (2026-10-28)
+
+
+### Features
+
+* **rooms:** let a logged-in seat step out to watch and come back to its role ([fbd4fcc](https://github.com/Xelltis/udonarium_axe_backend/commit/fbd4fcc534b07e71490dd62dc8cd60a45706fa5c))
+
 ## [1.3.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.3.0...v1.3.1) (2026-10-27)
 
 
