@@ -26,7 +26,7 @@
     "@vercel/blob": "^2.8.2",
     "@vercel/functions": "^3.10.3",
     "bcdice": "4.10.0",
-    "hono": "^4.13.11",
+    "hono": "^4.13.14",
     "redis": "^5.12.1",
     "valibot": "^1.5.0",
     "ws": "^8.22.0"
