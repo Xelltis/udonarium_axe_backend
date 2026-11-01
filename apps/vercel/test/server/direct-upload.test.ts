@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AssetStoredResponse, UploadTicketResponse } from '../../contracts/protocol.js';
 import { MAX_PUT_BYTES } from '../../src/server/assets/backend.js';
-import { bucket, harness } from '../harness.js';
+import { harness, harnessBucket } from '../harness.js';
 import { OGG_HEAD, ROOM_KEY, assetTokenFor, call, fileOf, jsonOf, put, sha256Hex } from '../shared/helpers.js';
 import { prepareAssetRooms } from '../shared/room-helpers.js';
 
@@ -17,6 +17,7 @@ const asPlayer = {
 describe('a sound too big for one request', () => {
   it('is turned away as a PUT, and kept once put up straight to the store', async () => {
     await prepareAssetRooms();
+    const bucket = await harnessBucket();
     const sound = fileOf(OGG_HEAD, MAX_PUT_BYTES + 1);
     const id = await sha256Hex(sound);
 

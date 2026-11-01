@@ -1,19 +1,18 @@
 import { Hono } from 'hono';
 
-let rawEnv: Record<string, unknown> = {};
-
-vi.mock('hono/adapter', () => ({
-  env: () => rawEnv,
-}));
-
 import { onError } from '../../../src/http/errors/handler.js';
 import { configLoader } from '../../../src/http/middlewares/config-loader.js';
 import type { AppEnv } from '../../../src/http/context.js';
 
+let rawEnv: Record<string, string | undefined> = {};
+
 const buildApp = () => {
   const app = new Hono<AppEnv>();
   app.onError(onError);
-  app.use('*', configLoader());
+  app.use(
+    '*',
+    configLoader(() => rawEnv)
+  );
   app.get('/', (c) => c.json(c.var.config));
   return app;
 };

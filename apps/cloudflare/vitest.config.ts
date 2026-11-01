@@ -24,6 +24,11 @@ export default defineConfig({
     }),
   ],
   test: {
+    // The test files of a worker share their modules and their storage, which Vitest's performance
+    // guide gives as the faster set-up for tests that do not rely on a clean state. The tests keep
+    // to keys of their own, and spies are put back before each test.
+    isolate: false,
+    restoreMocks: true,
     include: ['test/**/*.test.ts'],
     coverage: {
       // V8 coverage cannot be taken inside workerd, so istanbul is used.

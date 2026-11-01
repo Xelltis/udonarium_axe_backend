@@ -1,20 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-let rawEnv: Record<string, unknown> = {};
-
-vi.mock('hono/adapter', () => ({
-  env: () => rawEnv,
-}));
-
 import { serverApp } from '../../src/http/server.js';
 import type { ServerAppOptions } from '../../src/http/server.js';
 import { storelessBackend } from '../../src/server/backend.js';
+
+let rawEnv: Record<string, string | undefined> = {};
+const env = () => rawEnv;
 
 describe('serverApp', () => {
   it('reads the settings from the environment once, after they are right', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const backendFor = vi.fn(async () => storelessBackend(new WeakMap()));
-    const app = serverApp({ backendFor, sweep: async () => ({ rooms: 0, assets: 0, storage: null }) });
+    const app = serverApp({ env, backendFor, sweep: async () => ({ rooms: 0, assets: 0, storage: null }) });
     const list = () =>
       app.fetch(
         new Request('https://backend.example/v1/rooms', {
@@ -39,7 +36,7 @@ describe('serverApp', () => {
 
   it('sweeps for Vercel Cron, only with its secret when one is set', async () => {
     const sweep = vi.fn<ServerAppOptions['sweep']>(async () => ({ rooms: 3, assets: 1, storage: null }));
-    const app = serverApp({ backendFor: async () => storelessBackend(new WeakMap()), sweep });
+    const app = serverApp({ env, backendFor: async () => storelessBackend(new WeakMap()), sweep });
     const call = (headers: Record<string, string> = {}) =>
       app.fetch(new Request('https://backend.example/internal/sweep', { headers }));
     rawEnv = { ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example', CRON_SECRET: 'cron-secret' };
@@ -56,7 +53,7 @@ describe('serverApp', () => {
   it('sweeps for anyone when no secret is set, and says so when it swept a little while ago', async () => {
     const sweep = vi.fn<ServerAppOptions['sweep']>().mockResolvedValueOnce({ rooms: 0, assets: 0, storage: null });
     sweep.mockResolvedValueOnce(null);
-    const app = serverApp({ backendFor: async () => storelessBackend(new WeakMap()), sweep });
+    const app = serverApp({ env, backendFor: async () => storelessBackend(new WeakMap()), sweep });
     rawEnv = { ACCESS_CONTROL_ALLOW_ORIGIN: 'https://app.example' };
 
     const first = await app.fetch(new Request('https://backend.example/internal/sweep'));

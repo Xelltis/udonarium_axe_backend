@@ -27,13 +27,13 @@
     "@vercel/functions": "^3.10.4",
     "bcdice": "4.10.0",
     "hono": "^4.13.14",
-    "redis": "^5.12.1",
+    "redis": "^6.3.0",
     "valibot": "^1.5.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "@vitest/coverage-istanbul": "^5.0.5",
     "@vitest/coverage-v8": "^5.0.4",

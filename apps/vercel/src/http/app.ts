@@ -15,6 +15,8 @@ const SKYWAY_PATHS = ['/v1/status', '/v1/skyway/*', '/v1/skyway2023/*'];
 export interface AppOptions {
   /** The room server's routes. Without them, only SkyWay tokens are issued. */
   server?: ServerAppOptions;
+  /** The environment variables the SkyWay routes read, or process.env when not given. */
+  env?: () => Record<string, string | undefined>;
 }
 
 export const createApp = (options: AppOptions = {}): Hono<AppEnv> => {
@@ -22,7 +24,7 @@ export const createApp = (options: AppOptions = {}): Hono<AppEnv> => {
   app.onError(onError);
   app.route('/', rootRoute);
   if (options.server) app.route('/', serverApp(options.server));
-  for (const path of SKYWAY_PATHS) app.use(path, configLoader(), createCorsMiddleware());
+  for (const path of SKYWAY_PATHS) app.use(path, configLoader(options.env), createCorsMiddleware());
   app.route('/v1', v1Routes);
   return app;
 };

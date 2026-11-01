@@ -384,27 +384,35 @@ describe('joining a room', () => {
     const noisy = await join(roomKey, 'noisy');
     await steady.client.next('join');
 
-    // The hello and the last time count too.
-    for (let i = 0; i < MAX_FRAMES_PER_WINDOW - 2; i++) steady.client.emit([]);
-    await steady.client.expectQuiet();
-    /** Moves the start of that person's window. */
-    const moveWindow = (peerId: string, to: (start: number) => number) =>
+    /** Changes the window that person's frames are counted in. */
+    const changeWindow = (peerId: string, change: (rate: { start: number; count: number }) => void) =>
       harness.inside(roomKey, ({ engine, host }) => {
-        const { rates } = engine as unknown as { rates: WeakMap<object, { start: number }> };
+        const { rates } = engine as unknown as { rates: WeakMap<object, { start: number; count: number }> };
         const conn = host.connections().find((other) => host.seatOf(other)?.peerId === peerId);
-        const rate = rates.get(conn as object) as { start: number };
-        rate.start = to(rate.start);
+        change(rates.get(conn as object) as { start: number; count: number });
       });
-    await moveWindow('steady', (start) => start - RATE_WINDOW_MS);
+    // All but the last frames of a window are counted as sent, rather than sent one by one, which
+    // took seconds. The frames that are sent take the count to the limit, and past it.
+    await changeWindow('steady', (rate) => {
+      rate.count = MAX_FRAMES_PER_WINDOW - 3;
+    });
+    steady.client.emit([]);
+    steady.client.emit([]);
+    // The time it asks for is the last frame the window takes.
     await steady.client.expectQuiet();
-    // The window's start is put ahead, so that the window does not start afresh even when a busy machine
-    // takes longer than the window to send them all.
-    await moveWindow('noisy', () => Date.now() + RATE_WINDOW_MS);
-    for (let i = 0; i < MAX_FRAMES_PER_WINDOW; i++) noisy.client.emit([]);
+    await changeWindow('steady', (rate) => {
+      rate.start -= RATE_WINDOW_MS;
+    });
+    await steady.client.expectQuiet();
+    await changeWindow('noisy', (rate) => {
+      rate.count = MAX_FRAMES_PER_WINDOW - 1;
+    });
+    noisy.client.emit([]);
+    noisy.client.emit([]);
 
     expect((await noisy.client.next('error')).code).toBe('too-many-messages');
     expect(await steady.client.next('leave')).toEqual({ type: 'leave', peerId: 'noisy' });
-  }, 90_000);
+  });
 });
 
 describe('relaying', () => {

@@ -15,6 +15,17 @@ describe('the Redis connection', () => {
     expect(typeof (await connection.redis.get(key))).toBe('string');
   });
 
+  it('speaks RESP2, as node-redis 5 did by default, and so does the duplicate a subscriber is made from', async () => {
+    expect((await connection.redis.clientInfo()).resp).toBe(2);
+    const duplicate = connection.redis.duplicate();
+    await duplicate.connect();
+    try {
+      expect((await duplicate.clientInfo()).resp).toBe(2);
+    } finally {
+      duplicate.destroy();
+    }
+  });
+
   it('logs what goes wrong on the connection', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     connection.redis.emit('error', new Error('down'));
