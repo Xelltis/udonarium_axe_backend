@@ -38,7 +38,9 @@ export type View =
   /** A data element (a card's face, a note's text and so on). Its name tells where it belongs. */
   | { kind: 'data'; name: string }
   /** A reaction to a message. It is not shown to those who cannot see the message. */
-  | { kind: 'reaction'; message: string };
+  | { kind: 'reaction'; message: string }
+  /** Something only the GM sees: the GM's scenario texts, written to be said in the chat later. */
+  | { kind: 'gmOnly' };
 
 /** The part of an index row that the view needs. */
 export interface ViewEntry {
@@ -117,6 +119,8 @@ export const describe = (context: ObjectContext): ViewEntry => {
       return { parent, view: { kind: 'data', name: text(attributes.name) } };
     case 'chat-reaction':
       return { parent, view: { kind: 'reaction', message: text(syncData.messageIdentifier) } };
+    case 'scenario-text':
+      return { parent, view: { kind: 'gmOnly' } };
     default:
       return { parent, view: null };
   }
@@ -166,6 +170,7 @@ const ownKind = (view: View | null, viewer: Viewer): ViewKind => {
   if (view?.kind === 'die') {
     return view.owner !== '' && view.owner !== viewer.userId && !isGameMaster(viewer) ? 'masked' : 'full';
   }
+  if (view?.kind === 'gmOnly') return isGameMaster(viewer) ? 'full' : 'hidden';
   return 'full';
 };
 
