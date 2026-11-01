@@ -41,6 +41,28 @@ Pull Requestでは走らないので、Pull Requestのチェックにはこれ�
 - Codecovでは、アプリごとにフラグ（`php`、`vercel`、`cloudflare`）を分けています。1つのアプリだけを変えたPull Requestでも、ほかのアプリの値を引き継ぎます。
 - Pull Requestで変えた行（パッチ）には、100%のカバレッジを求めます。
 
+## テストの書きかた
+
+Vercel版とCloudflare版のテストは、テストのファイルごとに環境を分けずに流します（`isolate: false`）。
+Vitestの手引きで速いとされるやりかたで、同じworkerで走るファイルは、読み込んだモジュールを共有します。
+Vercel版は、手引きでいちばん速いとされるスレッドで流します（`pool: 'threads'`）。
+Cloudflare版は`@cloudflare/vitest-plugin`の仕組みで流れ、同じworkerのファイルは、Durable ObjectsやR2のストレージも共有します。
+そのため、テストは次のことを守ります。
+
+- ほかのファイルが残した状態に頼りません。Cloudflare版では、部屋やアカウントもファイルをまたいで残ります。
+- テストで開いたもの（サーバー、Redisの接続など）は、そのファイルの終わりに閉じます。Vercel版では、`test/cleanup.ts`の`closeWhenDone`に閉じる関数を渡すと、`test/setup.ts`がファイルの終わりに呼びます。共有のテストのハーネス（`test/harness.ts`）も、こうして部屋のサーバーをファイルごとに立て直します。
+- モジュールを`vi.mock`で差し替えません。ほかのファイルが先に読み込んだモジュールは、差し替えても効かないためです。差し替えたいもの（環境変数、外のサービスのSDKなど）は、引数で渡せるようにします。
+- spy（`vi.spyOn`）は、テストのたびに元に戻ります（`restoreMocks: true`）。Vercel版では、`vi.stubEnv`で置いた環境変数も戻ります（`unstubEnvs: true`）。
+- フェイクタイマーを使ったファイルは、`afterEach`で`vi.useRealTimers()`に戻します。
+
+ファイルの順番に頼るテストがないかは、順番を混ぜて流すと分かります。
+workerを1つにすると、すべてのファイルが同じ状態を共有するので、いちばん厳しく確かめられます。
+
+```sh
+npx vitest run --sequence.shuffle.files --sequence.seed=<数>
+npx vitest run --sequence.shuffle.files --sequence.seed=<数> --maxWorkers=1
+```
+
 ## 部屋のサーバーの行と待ち時間を測る
 
 Cloudflare版の部屋の置き場所や同期を変えるときは、変える前とあとで、SQLiteが読み書きした行の数と、部屋にいる人の待ち時間を比べます。
