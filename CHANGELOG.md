@@ -1,3 +1,11 @@
+# [1.5.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.4.2...v1.5.0) (2026-11-01)
+
+
+### Features
+
+* **rooms:** keep the game master's scenario texts from everyone else ([80f1878](https://github.com/Xelltis/udonarium_axe_backend/commit/80f18782d906b1897f583cae4072202148d05fc0))
+* **rooms:** let only the game master write scenes and scenario texts ([aaf48ec](https://github.com/Xelltis/udonarium_axe_backend/commit/aaf48ec8b5b32f857658730847bd562cb9510e92))
+
 ## [1.4.2](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.4.1...v1.4.2) (2026-11-01)
 
 
