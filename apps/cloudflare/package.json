@@ -24,7 +24,7 @@
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "1.4.9",
+    "@cloudflare/vitest-plugin": "1.4.10",
     "@cloudflare/workers-types": "5.20261028.1",
     "@eslint/js": "^10.0.1",
     "@vitest/coverage-istanbul": "5.0.5",
@@ -36,7 +36,7 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "5.0.5",
-    "wrangler": "4.154.0"
+    "wrangler": "4.155.0"
   },
   "overrides": {
     "undici": "7.30.1",
