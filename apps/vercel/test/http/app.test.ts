@@ -1,10 +1,7 @@
-let rawEnv: Record<string, unknown> = {};
-
-vi.mock('hono/adapter', () => ({
-  env: () => rawEnv,
-}));
-
 import { createApp } from '../../src/http/app.js';
+
+let rawEnv: Record<string, string | undefined> = {};
+const appOf = () => createApp({ env: () => rawEnv });
 
 const baseEnv = {
   SKYWAY_APP_ID: 'app',
@@ -18,14 +15,13 @@ describe('createApp', () => {
   });
 
   it('serves GET / without CORS or config requirements', async () => {
-    rawEnv = {};
     const res = await createApp().fetch(new Request('http://localhost/'));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: 'Hello udonarium-backend-vercel!' });
   });
 
   it('serves GET /v1/status with a valid origin', async () => {
-    const res = await createApp().fetch(
+    const res = await appOf().fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://example.com' },
       })
@@ -35,7 +31,7 @@ describe('createApp', () => {
   });
 
   it('returns 400 ORIGIN_REQUIRED when no Origin header is sent to /v1/*', async () => {
-    const res = await createApp().fetch(new Request('http://localhost/v1/status'));
+    const res = await appOf().fetch(new Request('http://localhost/v1/status'));
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: { code: 'ORIGIN_REQUIRED', message: 'Origin header is required.' },
@@ -43,7 +39,7 @@ describe('createApp', () => {
   });
 
   it('returns 403 ORIGIN_FORBIDDEN when Origin is not allow-listed', async () => {
-    const res = await createApp().fetch(
+    const res = await appOf().fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://evil.example' },
       })
@@ -53,7 +49,7 @@ describe('createApp', () => {
 
   it('returns 500 CONFIG_INVALID when env is missing', async () => {
     rawEnv = {};
-    const res = await createApp().fetch(
+    const res = await appOf().fetch(
       new Request('http://localhost/v1/status', {
         headers: { Origin: 'https://example.com' },
       })
@@ -65,7 +61,7 @@ describe('createApp', () => {
   });
 
   it('issues a JWT for POST /v1/skyway/tokens', async () => {
-    const res = await createApp().fetch(
+    const res = await appOf().fetch(
       new Request('http://localhost/v1/skyway/tokens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },
@@ -78,7 +74,7 @@ describe('createApp', () => {
   });
 
   it('also issues a JWT for legacy POST /v1/skyway2023/token with Deprecation header', async () => {
-    const res = await createApp().fetch(
+    const res = await appOf().fetch(
       new Request('http://localhost/v1/skyway2023/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://example.com' },

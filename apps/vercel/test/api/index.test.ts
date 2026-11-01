@@ -1,16 +1,17 @@
-vi.mock('hono/adapter', () => ({
-  env: () => ({
-    ENVIRONMENT: 'test',
-    SKYWAY_APP_ID: 'appId',
-    SKYWAY_SECRET: 'secret',
-    SKYWAY_UDONARIUM_LOBBY_SIZE: '3',
-    ACCESS_CONTROL_ALLOW_ORIGIN: 'https://example.com',
-  }),
-}));
-
 import type { AddressInfo } from 'node:net';
 
 import server, { app } from '../../api/index.js';
+
+// The entry reads process.env, as it does on Vercel. Without REDIS_URL (which CI sets for the
+// other tests) the room server keeps no rooms. unstubEnvs puts process.env back before each test.
+beforeEach(() => {
+  vi.stubEnv('ENVIRONMENT', 'test');
+  vi.stubEnv('SKYWAY_APP_ID', 'appId');
+  vi.stubEnv('SKYWAY_SECRET', 'secret');
+  vi.stubEnv('SKYWAY_UDONARIUM_LOBBY_SIZE', '3');
+  vi.stubEnv('ACCESS_CONTROL_ALLOW_ORIGIN', 'https://example.com');
+  vi.stubEnv('REDIS_URL', undefined);
+});
 
 describe('api entry', () => {
   // The Vercel Node.js runtime hands requests to the HTTP server that is the default export.
