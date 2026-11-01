@@ -152,6 +152,13 @@ export const movesTab = (existing: StoredEntry, context: ObjectContext): boolean
 export const RESERVED_USER_IDS: ReadonlySet<string> = new Set([DICE_BOT_SENDER, 'System']);
 
 /**
+ * The kinds of object only the GM writes: the GM's scenes and scenario texts, prepared before the
+ * session. Anyone else's write of one, a delete included, is refused, even of a scene everyone is
+ * handed for a switch to put on.
+ */
+export const GAME_MASTER_KINDS: ReadonlySet<string> = new Set(['board-scene', 'scenario-text']);
+
+/**
  * The attributes that may not be rewritten in a message with a result the server rolled (besides
  * these, the value in syncData, the parent tab and the place in the order, ROLLED_PLACE). The
  * addressees, the time and the place in the order are guarded too. Otherwise someone could roll

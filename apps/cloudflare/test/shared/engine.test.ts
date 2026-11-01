@@ -267,6 +267,68 @@ describe('pings passed on from a socket on another instance', () => {
   });
 });
 
+describe('the GM’s scenes and scenario texts', () => {
+  const sceneOf = (identifier: string, majorVersion = 1, name = '夜の村') =>
+    contextOf(identifier, majorVersion, { name }, 'board-scene');
+  const textOf = (identifier: string, majorVersion = 1) =>
+    contextOf(identifier, majorVersion, { title: '真相', text: '犯人は執事' }, 'scenario-text');
+  const remove = (identifier: string, aliasName: string) => ({
+    eventName: SyncEvent.DELETE,
+    data: { aliasName, identifier },
+  });
+  const stored = (host: FakeHost, identifier: string) => {
+    host.engine.flushNow();
+    return host.objects.rows.get(identifier)?.entry.majorVersion ?? null;
+  };
+  const table = () => {
+    const host = new FakeHost();
+    const gm = host.join('gm', 'gm');
+    const pl = host.join('pl');
+    for (const conn of [gm, pl]) conn.received.splice(0);
+    return { host, gm, pl };
+  };
+
+  it('are made by the GM alone', () => {
+    const { host, gm, pl } = table();
+
+    host.emit(pl, [update(sceneOf('scene-pl')), update(textOf('text-pl'))]);
+    expect([stored(host, 'scene-pl'), stored(host, 'text-pl')]).toEqual([null, null]);
+
+    host.emit(gm, [update(sceneOf('scene-gm')), update(textOf('text-gm'))]);
+    expect([stored(host, 'scene-gm'), stored(host, 'text-gm')]).toEqual([1, 1]);
+  });
+
+  it('are changed by the GM alone, a player’s change of a scene handed back', () => {
+    const { host, gm, pl } = table();
+    host.emit(gm, [update(sceneOf('scene-gm'))]);
+    pl.received.splice(0);
+
+    host.emit(pl, [update(sceneOf('scene-gm', 2, '燃える村'))]);
+    expect(stored(host, 'scene-gm')).toBe(1);
+    expect(
+      pl
+        .of('data')
+        .flatMap((message) => message.events)
+        .map((event) => event.eventName)
+        .at(-1)
+    ).toBe(AuthorityEvent.AUTHORITATIVE);
+
+    host.emit(gm, [update(sceneOf('scene-gm', 2, '燃える村'))]);
+    expect(stored(host, 'scene-gm')).toBe(2);
+  });
+
+  it('are deleted by the GM alone', () => {
+    const { host, gm, pl } = table();
+    host.emit(gm, [update(sceneOf('scene-gm')), update(textOf('text-gm'))]);
+
+    host.emit(pl, [remove('scene-gm', 'board-scene'), remove('text-gm', 'scenario-text')]);
+    expect([stored(host, 'scene-gm'), stored(host, 'text-gm')]).toEqual([1, 1]);
+
+    host.emit(gm, [remove('scene-gm', 'board-scene'), remove('text-gm', 'scenario-text')]);
+    expect([stored(host, 'scene-gm'), stored(host, 'text-gm')]).toEqual([null, null]);
+  });
+});
+
 describe('the records of the room’s pictures and sounds', () => {
   const SHA = 'a'.repeat(64);
   const OTHER = 'b'.repeat(64);
