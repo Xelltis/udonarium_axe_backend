@@ -1,3 +1,11 @@
+## [1.4.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.4.0...v1.4.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **deps:** bump @vercel/functions from 3.10.3 to 3.10.4 in /apps/vercel ([cc8b64f](https://github.com/Xelltis/udonarium_axe_backend/commit/cc8b64fac8cd8236c750e5563765d3beb2453358))
+* **deps:** bump hono from 4.13.13 to 4.13.14 in /apps/cloudflare and /apps/vercel ([1bd1cbf](https://github.com/Xelltis/udonarium_axe_backend/commit/1bd1cbf71dd02bdf84f91520d66fdb1bed7d62e4))
+
 # [1.4.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.3.1...v1.4.0) (2026-10-28)
 
 
