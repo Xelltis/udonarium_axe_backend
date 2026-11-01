@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.4.1...v1.4.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* **deps:** bump redis from 5.12.1 to 6.3.0 in /apps/vercel ([22cf735](https://github.com/Xelltis/udonarium_axe_backend/commit/22cf7359242fee06c36e0f497e93e154c44ef3cf))
+
 ## [1.4.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.4.0...v1.4.1) (2026-11-01)
 
 
