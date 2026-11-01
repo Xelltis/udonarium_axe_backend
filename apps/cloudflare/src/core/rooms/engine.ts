@@ -79,6 +79,7 @@ import type { StoredEntry } from './object-index.js';
 import { attributesOf, withAttributes } from './objects.js';
 import { verifyPassword } from './password.js';
 import {
+  GAME_MASTER_KINDS,
   RESERVED_USER_IDS,
   ROLLED_ATTRIBUTES,
   ROLLED_GM_ATTRIBUTES,
@@ -917,7 +918,8 @@ export class RoomEngine<C extends object> {
    * The sender may not write what it cannot see (WITHDRAW comes back). When someone holding the
    * masked form writes it back, the masked parts are put back to the stored contents. A
    * PeerCursor's role is overwritten with the role of that person's seat. A guest can write only its
-   * own cursor and messages in tabs where guests may speak too.
+   * own cursor and messages in tabs where guests may speak too. The GM's scenes and scenario texts
+   * are written by the GM alone.
    */
   private update(data: unknown, seat: Seat, sender: C, push: Push<C>): void {
     const parsed = safeParse(objectContextSchema, data);
@@ -939,6 +941,8 @@ export class RoomEngine<C extends object> {
         !playerMayWriteRecord(context, this.store.get(identifier), seat.userId, (asset) => this.addedBy(asset)))
     )
       return this.refuseWrite(identifier, seat, reply);
+    // The GM's scenes and scenario texts are the GM's to make and change.
+    if (GAME_MASTER_KINDS.has(aliasName) && seat.role !== 'gm') return this.refuseWrite(identifier, seat, reply);
     // A view hint that is too big fits neither in the index nor in one row of the store. New objects
     // are limited in number too. A version may not jump far at once.
     if (
@@ -1395,7 +1399,7 @@ export class RoomEngine<C extends object> {
 
   /**
    * Applies a DELETE to the state. A guest can delete only its own cursor. Nothing may be deleted by
-   * someone who cannot see it.
+   * someone who cannot see it, and the GM's scenes and scenario texts by nobody but the GM.
    *
    * The descendants of what is deleted are deleted with it. Descendants the sender could not see
    * (such as the face of a face-down card) are not on the sender's side, so no delete for them comes
@@ -1414,6 +1418,9 @@ export class RoomEngine<C extends object> {
     // The records of the room's pictures and sounds are the GM's to delete, and so are their
     // identifiers before they are there.
     if (deletesRecord(identifier, aliasName, entry?.alias) && seat.role !== 'gm')
+      return this.refuseWrite(identifier, seat, reply);
+    // So are the GM's scenes and scenario texts.
+    if (GAME_MASTER_KINDS.has(entry?.alias ?? aliasName ?? '') && seat.role !== 'gm')
       return this.refuseWrite(identifier, seat, reply);
     const owner = entry?.owner ?? null;
     // What is kept only while its person is there (a cursor) can be deleted only by that person.
