@@ -12,7 +12,7 @@
  */
 
 /** Raised when an envelope changes shape. The server refuses a hello of another version with protocol-mismatch. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * The room server's own peer id. It has a shape that cannot clash with a client's id.

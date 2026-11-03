@@ -25,7 +25,7 @@
 ```json
 {
   "type": "hello",
-  "protocolVersion": 4,
+  "protocolVersion": 5,
   "peerId": "a1B2c3XyZq9W8e7r6-",
   "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
   "password": "secret",
