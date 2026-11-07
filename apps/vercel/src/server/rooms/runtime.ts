@@ -272,7 +272,10 @@ export class RoomRuntime {
       // Answers PING without passing it to the room (the Cloudflare version answers without waking
       // the room). A relayed one goes on to the owner, so a socket whose owner went silent hears no
       // answer and gets back in elsewhere rather than seeming connected.
-      if (message === PING && !link.relayed) return conn.socket.send(PONG);
+      if (message === PING && !link.relayed) {
+        conn.pingedAt = Date.now();
+        return conn.socket.send(PONG);
+      }
       if (message === PING) {
         if (Date.now() - link.pingedAt < RELAYED_PING_GAP_MS) return;
         link.pingedAt = Date.now();

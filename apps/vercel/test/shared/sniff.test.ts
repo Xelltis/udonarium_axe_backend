@@ -30,6 +30,7 @@ describe('sniff', () => {
     ['mp3 frame (MPEG-2)', bytes(0xff, 0xf3, 0x90, 0x64), 'audio', 'audio/mpeg'],
     ['mp3 frame (MPEG-2.5)', bytes(0xff, 0xe3, 0x90, 0x64), 'audio', 'audio/mpeg'],
     ['aac adts', bytes(0xff, 0xf1, 0x50, 0x80), 'audio', 'audio/aac'],
+    ['binary glTF', bytes('glTF', 2, 0, 0, 0, 0x10, 0, 0, 0), 'model', 'model/gltf-binary'],
   ])('reads %s', (_name, head, kind, type) => {
     expect(sniff(head)).toEqual({ kind, type });
   });
@@ -76,6 +77,8 @@ describe('sniff', () => {
     ['mpeg frame with a bad bitrate', bytes(0xff, 0xfb, 0xf0, 0x64)],
     ['mpeg frame with a reserved sample rate', bytes(0xff, 0xfb, 0x9c, 0x64)],
     ['adts with a reserved sample rate', bytes(0xff, 0xf1, 0x74, 0x80)],
+    ['binary glTF of version 1', bytes('glTF', 1, 0, 0, 0)],
+    ['text starting with glTF', bytes('glTF is a format')],
     ['too short', bytes(0x89, 'P')],
     ['empty', bytes()],
   ])('turns away %s', (_name, head) => {

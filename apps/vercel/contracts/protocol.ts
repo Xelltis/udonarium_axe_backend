@@ -12,7 +12,7 @@
  */
 
 /** Raised when an envelope changes shape. The server refuses a hello of another version with protocol-mismatch. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 6;
 
 /**
  * The room server's own peer id. It has a shape that cannot clash with a client's id.
@@ -186,8 +186,23 @@ export interface ActiveMessage {
   type: 'active';
 }
 
+/**
+ * Asks when the server last heard from each of the others in the room. The answer comes as seen.
+ * Axe asks only while someone is looking at how the connections are doing, as each ask wakes the room.
+ */
+export interface SeenRequest {
+  type: 'seen';
+}
+
 export type ClientMessage =
-  HelloMessage | SendMessage | TimeRequest | InviteRequest | AuthMessage | AssetTokenRequest | ActiveMessage;
+  | HelloMessage
+  | SendMessage
+  | TimeRequest
+  | InviteRequest
+  | AuthMessage
+  | AssetTokenRequest
+  | ActiveMessage
+  | SeenRequest;
 
 // ---- server to client ----
 
@@ -304,6 +319,27 @@ export interface AssetTokenMessage {
   keptRole?: PeerRole;
 }
 
+/** When the server last heard from someone in the room. */
+export interface MemberSeen {
+  peerId: string;
+  /**
+   * When anything last came from them, a ping included (Unix milliseconds, by the server's clock).
+   * Each seat pings at least every 25 seconds, so a time older than that tells of a link in trouble.
+   */
+  heardAt: number;
+}
+
+/**
+ * The answer to seen: when the server last heard from each of the others in the room, the one who
+ * asked and the server left out, as in welcome.
+ */
+export interface SeenMessage {
+  type: 'seen';
+  /** The server's time as it answered (Unix milliseconds), so that each heardAt can be told as a while ago. */
+  serverTime: number;
+  members: MemberSeen[];
+}
+
 /**
  * Why a connection is closed. The server sends this, then closes with the same code as the reason.
  * When each one happens is in fixtures/errors.json.
@@ -362,6 +398,7 @@ export type ServerMessage =
   | TimeMessage
   | InviteMessage
   | AssetTokenMessage
+  | SeenMessage
   | ErrorMessage;
 
 /** The WebSocket close code the server closes with. */

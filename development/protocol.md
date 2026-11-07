@@ -5,7 +5,7 @@
 
 型と定数は`apps/cloudflare/contracts/protocol.ts`に、例は`apps/cloudflare/contracts/fixtures/`にあります。
 このページの内容と食い違うときは、そちらが正しいものです。
-いまの版は**4**です。
+いまの版は**6**です。
 
 部屋に入るには、`GET /v1/rooms/:roomKey/ws`でWebSocketにつなぎ替えます（→ [部屋のサーバーのAPI](https://xelltis.github.io/udonarium_axe_backend/reference/server-api#get-v1-rooms-roomkey-ws)）。
 
@@ -25,7 +25,7 @@
 ```json
 {
   "type": "hello",
-  "protocolVersion": 4,
+  "protocolVersion": 6,
   "peerId": "a1B2c3XyZq9W8e7r6-",
   "userId": "acct_8c5b7f0e-2c1d-4e3f-9a8b-7c6d5e4f3a2b",
   "password": "secret",
@@ -109,6 +109,13 @@ Axeは、前に送ってから操作（ポインタ、キー、ホイール、�
 Cloudflare版の見回りは、席が3時間を過ぎて1秒たったときにも置きます。
 トークンが切れた席が放っておかれてもいたときは、`unauthorized`ではなく`idle`で閉じます。
 
+### `seen`
+
+`{"type":"seen"}`を送ると、ほかの人それぞれから最後に何かが届いた時刻を`seen`で返します。
+届いたものには`ping`も数えます。どの席も25秒に1回は`ping`を送るので、それより古い時刻なら、その人の接続に何か起きています。
+送った本人とサーバーは入りません。
+問い合わせのたびに部屋が起きるので、Axeは接続のようすを見る画面を開いているあいだだけ、10秒に1回送ります。
+
 ## サーバーから送るもの
 
 | `type`        | 中身                                                                                                                                                                                | 送るとき                                              |
@@ -120,6 +127,7 @@ Cloudflare版の見回りは、席が3時間を過ぎて1秒たったときに�
 | `time`        | `serverTime`（Unixミリ秒）                                                                                                                                                          | `time`を受けたとき                                    |
 | `invite`      | `role`、`invite`、`expiresAt`。GMでないときと、部屋のサーバーにログインが置かれていないときは`invite`と`expiresAt`が`null`                                                          | `invite`を受けたとき                                  |
 | `asset-token` | `assetToken`、`expiresAt`（Unixミリ秒）、`role`（その席のいまの役割）、`keptRole`（ログインした人だけ）                                                                             | `asset-token`を受けたときと、自分の役割が変わったとき |
+| `seen`        | `serverTime`（Unixミリ秒）、`members`（それぞれの`peerId`と、最後に届いた時刻の`heardAt`）                                                                                          | `seen`を受けたとき                                    |
 | `error`       | `code`、`protocolVersion`                                                                                                                                                           | 接続を閉じる前                                        |
 
 - `welcome`の`role`は、サーバーが決めた自分の役割（`gm`・`pl`・`guest`）です。自分の`PeerCursor`の`role`はこれにします。
