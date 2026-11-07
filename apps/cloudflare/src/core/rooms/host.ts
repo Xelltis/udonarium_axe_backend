@@ -98,6 +98,12 @@ export interface RoomHost<C extends object> {
    * the room sleeping before the hello comes.
    */
   addressOf(conn: C): string | undefined;
+  /**
+   * When a ping on the connection was last answered without the room hearing of it (Unix
+   * milliseconds), or null when none has been. The Cloudflare version answers pings without waking
+   * the room, and the Vercel version answers the pings of a socket held where the room is.
+   */
+  pingedAt(conn: C): number | null;
   /** Sends a frame. Does nothing when the connection is closing and cannot send. */
   send(conn: C, frame: Uint8Array): void;
   /** Closes the connection. Does nothing when it is already closed. */

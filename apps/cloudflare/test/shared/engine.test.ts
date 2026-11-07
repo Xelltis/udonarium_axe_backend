@@ -1,3 +1,4 @@
+import { encode } from '@msgpack/msgpack';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -14,8 +15,7 @@ import {
 } from '../../contracts/protocol.js';
 import { ACCESS_TOKEN_SECONDS } from '../../src/core/auth/tokens.js';
 import { FLUSH_DELAY_MS, MAX_FRAMES_PER_WINDOW, TOKEN_GRACE_MS } from '../../src/core/rooms/limits.js';
-import { FakeHost } from './fake-host.js';
-import type { FakeConn } from './fake-host.js';
+import { FakeConn, FakeHost } from './fake-host.js';
 
 // Checks, with the room in memory, what is hard to bring about from the room server.
 
@@ -264,6 +264,58 @@ describe('pings passed on from a socket on another instance', () => {
     expect(answered.at(-1)).toBe(false);
     expect(conn.closed?.reason).toBe('too-many-messages');
     expect(host.engine.takeRelayedPing(conn)).toBe(false);
+  });
+});
+
+describe('telling when the others in the room were last heard from', () => {
+  it('answers with each of the others, by the last frame, ping or hello that came from them', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-07T00:00:00Z') });
+    const host = new FakeHost();
+    const alice = host.join('alice');
+    const bob = host.join('bob');
+    vi.advanceTimersByTime(1000);
+    const carol = host.join('carol');
+    vi.advanceTimersByTime(4000);
+    host.emit(bob, [{ eventName: 'CHAT', data: 'here' }]);
+    const bobSpoke = Date.now();
+    vi.advanceTimersByTime(5000);
+    host.pings.set(carol, Date.now());
+    const carolPinged = Date.now();
+    vi.advanceTimersByTime(3000);
+
+    host.engine.receive(alice, encode({ type: 'seen' }));
+
+    expect(alice.of('seen')).toEqual([
+      {
+        type: 'seen',
+        serverTime: Date.now(),
+        members: [
+          { peerId: 'bob', heardAt: bobSpoke },
+          { peerId: 'carol', heardAt: carolPinged },
+        ],
+      },
+    ]);
+  });
+
+  it('counts a ping passed on from another instance, and goes by the hello of a seat taken in before the room slept', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-07T00:00:00Z') });
+    const host = new FakeHost();
+    const alice = host.join('alice');
+    const erin = host.join('erin');
+    const slept = new FakeConn();
+    slept.seat = { ...(alice.seat as NonNullable<FakeConn['seat']>), peerId: 'dave', userId: 'user-dave' };
+    host.conns.push(slept);
+    vi.advanceTimersByTime(7000);
+    host.engine.takeRelayedPing(erin);
+    const erinPinged = Date.now();
+    vi.advanceTimersByTime(2000);
+
+    host.engine.receive(alice, encode({ type: 'seen' }));
+
+    expect(alice.of('seen')[0]?.members).toEqual([
+      { peerId: 'erin', heardAt: erinPinged },
+      { peerId: 'dave', heardAt: (alice.seat as NonNullable<FakeConn['seat']>).joinedAt },
+    ]);
   });
 });
 

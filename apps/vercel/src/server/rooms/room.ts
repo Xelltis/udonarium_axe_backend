@@ -54,6 +54,8 @@ export interface Conn {
   readonly instance?: string;
   /** The sender's IP address, for the operator's bans. */
   readonly address?: string;
+  /** When a ping on a WebSocket on this instance was last answered here, without the room hearing of it. */
+  pingedAt?: number;
 }
 
 /** What came of trying to open a room. When another instance is the owner, that instance. */
@@ -374,6 +376,10 @@ export class VercelRoom implements RoomHost<Conn> {
 
   addressOf(conn: Conn): string | undefined {
     return conn.address;
+  }
+
+  pingedAt(conn: Conn): number | null {
+    return conn.pingedAt ?? null;
   }
 
   setSeat(conn: Conn, seat: Seat): void {

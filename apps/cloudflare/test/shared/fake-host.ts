@@ -120,6 +120,13 @@ export class FakeHost implements RoomHost<FakeConn> {
     return this.addresses.get(conn);
   }
 
+  /** When each connection's last ping was answered without the room, as a test sets it. */
+  readonly pings = new WeakMap<FakeConn, number>();
+
+  pingedAt(conn: FakeConn): number | null {
+    return this.pings.get(conn) ?? null;
+  }
+
   send(conn: FakeConn, frame: Uint8Array): void {
     conn.received.push(decodeFrame(frame) as ServerMessage);
   }

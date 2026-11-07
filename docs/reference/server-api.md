@@ -271,10 +271,11 @@ X-Asset-Name: dragon.png
 
 #### 受け付ける形式と上限
 
-| 種類 | 形式                                       | 上限  |
-| ---- | ------------------------------------------ | ----- |
-| 画像 | PNG・JPEG・GIF・BMP・WebP・AVIF・HEIC・SVG | 2MiB  |
-| 音声 | MP3・WAV・Ogg・FLAC・M4A・AAC              | 10MiB |
+| 種類     | 形式                                       | 上限  |
+| -------- | ------------------------------------------ | ----- |
+| 画像     | PNG・JPEG・GIF・BMP・WebP・AVIF・HEIC・SVG | 2MiB  |
+| 音声     | MP3・WAV・Ogg・FLAC・M4A・AAC              | 10MiB |
+| 3Dモデル | glTFのバイナリー（.glb、版2）              | 10MiB |
 
 SVGは、BOM・XML宣言・コメント・DOCTYPEを読み飛ばしたあと、ルート要素が`<svg`で始まるものです。
 これらの前置きは、先頭から4KiBに収まっている必要があります。
