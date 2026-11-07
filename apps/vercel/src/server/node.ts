@@ -77,6 +77,11 @@ export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
   });
 
   server.on('upgrade', (incoming: IncomingMessage, socket: Duplex, head: Buffer) => {
+    // Node hands the socket over with no error listener. A client that resets it while the app is
+    // still deciding would raise an unhandled error and take the whole process, with every room on
+    // it, down. ws listens itself once the socket is handed to it.
+    const drop = (): void => void socket.destroy();
+    socket.on('error', drop);
     const headers = headersOf(incoming);
     let request: Request;
     try {
@@ -91,6 +96,7 @@ export const createServer = (fetch: Fetch, upgrades: Upgrades): Server => {
     let upgraded = false;
     upgrades.set(request, (onSocket) => {
       upgraded = true;
+      socket.off('error', drop);
       wss.handleUpgrade(incoming, socket, head, onSocket);
     });
     Promise.resolve()

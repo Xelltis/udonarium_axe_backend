@@ -144,6 +144,11 @@ export class RoomEngine<C extends object> {
   /** When a connection before its hello was taken in. One with no time here counts as having waited too long. */
   private readonly connectedAt = new WeakMap<C, number>();
   /**
+   * When a frame, or a ping passed on from another instance, last came on each connection. Lost when
+   * the room sleeps, as a seat's hello and the pings answered without the room still tell of it.
+   */
+  private readonly heardAt = new WeakMap<C, number>();
+  /**
    * The connections whose hello waits for the operator's bans to be read, and the frames that came
    * on each meanwhile. Those are taken in after the hello, in the order they came.
    */
@@ -360,6 +365,7 @@ export class RoomEngine<C extends object> {
    */
   takeRelayedPing(conn: C): boolean {
     if (this.refused.has(conn)) return false;
+    this.heardAt.set(conn, Date.now());
     if (this.withinRate(conn)) return true;
     this.refuse(conn, 'too-many-messages');
     return false;
@@ -370,6 +376,7 @@ export class RoomEngine<C extends object> {
     // The room server answers PING itself, so text that reaches here is of no use. Dropped silently,
     // it could keep waking the room without being counted, so it is refused and closed.
     if (typeof message === 'string') return this.refuse(conn, 'bad-message');
+    this.heardAt.set(conn, Date.now());
     this.expireSeats();
     const seat = this.host.seatOf(conn);
     if (seat?.closed || this.refused.has(conn)) return;
@@ -414,6 +421,12 @@ export class RoomEngine<C extends object> {
       });
     } else if (received.type === 'active') {
       this.host.setSeat(conn, { ...seat, activeAt: Date.now() });
+    } else if (received.type === 'seen') {
+      this.post(conn, {
+        type: 'seen',
+        serverTime: Date.now(),
+        members: this.seats(conn).map((other) => ({ peerId: other.seat.peerId, heardAt: this.lastHeard(other) })),
+      });
     }
     // A hello after coming in does nothing.
   }
@@ -765,6 +778,11 @@ export class RoomEngine<C extends object> {
   }
 
   /** Those in the room, leaving out exclude. */
+  /** When anything last came from a seat: a frame, a ping, or its hello. */
+  private lastHeard({ conn, seat }: { conn: C; seat: Seat }): number {
+    return Math.max(seat.joinedAt, this.heardAt.get(conn) ?? 0, this.host.pingedAt(conn) ?? 0);
+  }
+
   seats(exclude?: C): { conn: C; seat: Seat }[] {
     return this.host.connections().flatMap((conn) => {
       const seat = this.host.seatOf(conn);

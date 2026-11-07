@@ -1,6 +1,11 @@
 import { cloudflareTest } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 
+// Keeps wrangler to its warnings and errors, so that the tests' output holds only the tests. At its
+// default level it says each time that it read .dev.vars, the secrets for npm run dev (the
+// bindings below stand in for them).
+process.env.WRANGLER_LOG ??= 'warn';
+
 export default defineConfig({
   plugins: [
     cloudflareTest({

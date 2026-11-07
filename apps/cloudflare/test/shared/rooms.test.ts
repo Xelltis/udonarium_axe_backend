@@ -340,6 +340,30 @@ describe('joining a room', () => {
     expect((await client.next('error')).code).toBe('bad-message');
   });
 
+  it('tells when it last heard from each of the others, by a ping or by coming in, leaving out the one who asks', async () => {
+    const roomKey = await createRoom();
+    const alice = await join(roomKey, 'alice');
+    const bob = await join(roomKey, 'bob');
+    await alice.client.next('join');
+    const carol = await join(roomKey, 'carol');
+    await alice.client.next('join');
+    await bob.client.next('join');
+    const before = Date.now();
+    bob.client.socket.send('ping');
+    expect((await bob.client.nextRaw()).message).toBe('pong');
+
+    alice.client.send({ type: 'seen' });
+
+    const seen = await alice.client.next('seen');
+    expect(keysOf(seen)).toEqual(keysOf(messages.server.seen));
+    const heard = new Map(seen.members.map((member) => [member.peerId, member.heardAt]));
+    expect([...heard.keys()].sort()).toEqual(['bob', 'carol']);
+    expect(heard.get('bob')).toBeGreaterThanOrEqual(before);
+    expect(heard.get('carol')).toBeLessThanOrEqual(seen.serverTime);
+    expect(heard.get('bob')).toBeLessThanOrEqual(seen.serverTime);
+    await carol.client.expectQuiet();
+  });
+
   it('tells the time, and ignores a second hello', async () => {
     const roomKey = await createRoom();
     const { client } = await join(roomKey, 'alice');
