@@ -35,8 +35,8 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
-    "@vitest/coverage-istanbul": "^5.0.5",
-    "@vitest/coverage-v8": "^5.0.4",
+    "@vitest/coverage-istanbul": "^5.1.0",
+    "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
@@ -47,7 +47,7 @@
     "typescript-eslint": "^8.72.1",
     "vercel": "^65.7.0",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^5.0.5",
+    "vitest": "^5.1.0",
     "zx": "^8.8.5"
   },
   "overrides": {
