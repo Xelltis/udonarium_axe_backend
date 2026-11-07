@@ -261,6 +261,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: '一覧', link: '/release-notes/' },
+          { text: 'v1.5.1', link: '/release-notes/v1.5.1' },
           { text: 'v1.5.0', link: '/release-notes/v1.5.0' },
           { text: 'v1.4.2', link: '/release-notes/v1.4.2' },
           { text: 'v1.4.1', link: '/release-notes/v1.4.1' },
