@@ -45,7 +45,7 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
-    "vercel": "^65.7.0",
+    "vercel": "^65.12.1",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^5.1.0",
     "zx": "^8.8.5"
