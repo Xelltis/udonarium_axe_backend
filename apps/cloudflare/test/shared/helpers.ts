@@ -86,12 +86,14 @@ export const withinOneWindow = async <T>(run: (ip: string) => Promise<T>): Promi
  * Calls an asset of the ROOM_KEY room. Unless told otherwise, it calls each time from a new IP, as a
  * page of an allowed Origin, with a guest's token.
  */
-export const call = (path: string, init: RequestInit = {}) => {
+export const call = (path: string, init: RequestInit = {}) => harness.fetch(assetRequest(path, init));
+
+const assetRequest = (path: string, init: RequestInit) => {
   const headers = new Headers(init.headers);
   if (!headers.has('CF-Connecting-IP')) headers.set('CF-Connecting-IP', freshIp());
   if (!headers.has('Origin')) headers.set('Origin', ORIGIN);
   if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${assetTokenFor('guest')}`);
-  return harness.fetch(new Request(`${BASE}/${path}`, { ...init, headers }));
+  return new Request(`${BASE}/${path}`, { ...init, headers });
 };
 
 export const put = (id: string, body: Bytes, headers: Record<string, string> = {}) =>
@@ -105,6 +107,12 @@ export const put = (id: string, body: Bytes, headers: Record<string, string> = {
       ...headers,
     },
   });
+
+/**
+ * Calls as call does, but hands the request to the app itself, for a body the Worker turns away
+ * before reading all of it: sent over the runtime's HTTP, the part left unsent is written to the log.
+ */
+export const callUnread = (path: string, init: RequestInit = {}) => harness.fetchWith(assetRequest(path, init), {});
 
 /**
  * The shape of a value: its keys with the types of their values. An array has the shape of its first
