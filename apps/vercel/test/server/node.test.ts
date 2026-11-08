@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { connect } from 'node:net';
+import type { Duplex } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
@@ -152,6 +153,59 @@ describe('the Node server', () => {
       expect(await answer.first).toBe('welcome');
       answer.ws.close();
     }
+  });
+
+  describe('when the client resets a socket while the app is still deciding', () => {
+    /** Starts a server whose app waits until let go, and resets a socket that asked to switch. */
+    const resetWhileDeciding = async (decide: (request: Request, upgrades: Upgrades) => Response) => {
+      const upgrades: Upgrades = new WeakMap();
+      let letGo!: () => void;
+      const deciding = new Promise<void>((resolve) => (letGo = resolve));
+      let asked!: () => void;
+      const reached = new Promise<void>((resolve) => (asked = resolve));
+      const server = createServer(async (request) => {
+        if (new URL(request.url).pathname === '/') return new Response('hello');
+        asked();
+        await deciding;
+        return decide(request, upgrades);
+      }, upgrades);
+      servers.push({ close: () => server.close() });
+      // Only sees the server's end of the socket close, so that the app decides after the reset.
+      const closedOnServer = new Promise((resolve) =>
+        server.on('upgrade', (_incoming: IncomingMessage, socket: Duplex) => socket.once('close', resolve))
+      );
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+      const client = connect((server.address() as AddressInfo).port, '127.0.0.1', () =>
+        client.write(
+          'GET /v1/rooms/r/ws HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n' +
+            'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n'
+        )
+      );
+      client.on('error', () => undefined);
+      await reached;
+      client.resetAndDestroy();
+      await closedOnServer;
+      letGo();
+      return (server.address() as AddressInfo).port;
+    };
+
+    it('keeps serving when the app then answers over HTTP', async () => {
+      const port = await resetWhileDeciding(() => new Response(null, { status: 403 }));
+
+      expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('hello');
+    });
+
+    it('keeps serving and gives the room no socket when the app then hands it over', async () => {
+      const onSocket = vi.fn();
+      const port = await resetWhileDeciding((request, upgrades) => {
+        upgrades.get(request)?.(onSocket);
+        return new Response(null);
+      });
+
+      expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('hello');
+      expect(onSocket).not.toHaveBeenCalled();
+    });
   });
 
   it('drops a socket whose request the app could not answer', async () => {

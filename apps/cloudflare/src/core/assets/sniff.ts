@@ -1,4 +1,4 @@
-export type AssetKind = 'image' | 'audio';
+export type AssetKind = 'image' | 'audio' | 'model';
 
 export interface SniffedType {
   kind: AssetKind;
@@ -48,8 +48,10 @@ const FTYP_BRANDS: ReadonlyMap<string, SniffedType> = new Map([
 const BMP_INFO_HEADER_SIZES: ReadonlySet<number> = new Set([12, 40, 52, 56, 64, 108, 124]);
 
 /**
- * Decides from the start of the bytes whether they are a picture or a sound that is accepted. Null
- * when they are neither.
+ * Decides from the start of the bytes whether they are a picture, a sound or a 3D model that is
+ * accepted. Null when they are none of these.
+ *
+ * A 3D model is a binary glTF file of version 2, which begins with `glTF` and the version.
  *
  * It does not trust the declared Content-Type and looks only at the marks a format itself carries
  * at its start.
@@ -82,6 +84,7 @@ export const sniff = (head: Uint8Array): SniffedType | null => {
   if (ascii(4, 4) === 'ftyp') return FTYP_BRANDS.get(ascii(8, 4)) ?? null;
   if (ascii(0, 4) === 'OggS') return { kind: 'audio', type: 'audio/ogg' };
   if (ascii(0, 4) === 'fLaC') return { kind: 'audio', type: 'audio/flac' };
+  if (ascii(0, 4) === 'glTF' && uint32le(4) === 2) return { kind: 'model', type: 'model/gltf-binary' };
   // An ID3v2 tag. The byte after it is the version (2 to 4).
   if (ascii(0, 3) === 'ID3' && head[3] >= 2 && head[3] <= 4) {
     return { kind: 'audio', type: 'audio/mpeg' };

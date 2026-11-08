@@ -6,6 +6,7 @@ const MEGA_BYTE = 1024 * 1024;
 export const MAX_BYTES: Readonly<Record<AssetKind, number>> = {
   image: 2 * MEGA_BYTE,
   audio: 10 * MEGA_BYTE,
+  model: 10 * MEGA_BYTE,
 };
 
 export const MAX_ANY_BYTES = Math.max(...Object.values(MAX_BYTES));

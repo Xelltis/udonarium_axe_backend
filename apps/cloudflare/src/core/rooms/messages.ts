@@ -66,6 +66,7 @@ export const clientMessageSchema = variant('type', [
   object({ type: literal('auth'), accessToken: string() }),
   object({ type: literal('asset-token') }),
   object({ type: literal('active') }),
+  object({ type: literal('seen') }),
 ]);
 
 export const roleRequestSchema = object({ peerId: string(), role: picklist(PEER_ROLES) });

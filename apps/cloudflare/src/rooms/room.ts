@@ -336,6 +336,10 @@ export class RoomDurableObject extends DurableObject<Env> implements RoomHost<We
     return this.ctx.getTags(ws)[0];
   }
 
+  pingedAt(ws: WebSocket): number | null {
+    return this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null;
+  }
+
   send(ws: WebSocket, frame: Uint8Array): void {
     try {
       ws.send(frame);

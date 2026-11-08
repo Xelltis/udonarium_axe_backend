@@ -121,7 +121,7 @@ describe('GET /v1/login/discord/callback', () => {
     const [tokenCall, userCall] = discord.mock.calls;
     const tokenRequest = new Request(tokenCall[0] as string, tokenCall[1]);
     expect(tokenRequest.headers.get('Authorization')).toBe(`Basic ${btoa('test-client:test-client-secret')}`);
-    expect(Object.fromEntries(new URLSearchParams(await tokenRequest.text()))).toEqual({
+    expect(Object.fromEntries(await tokenRequest.formData())).toEqual({
       grant_type: 'authorization_code',
       code: 'discord-code',
       redirect_uri: `${BACKEND}/v1/login/discord/callback`,

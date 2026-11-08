@@ -89,16 +89,38 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
   it.each([
     ['ends before', '100'],
     ['runs past', '40'],
-  ])('fails without storing when the body %s its declared length', async (_name, length) => {
+  ])('answers 500 when the body %s its declared length, breaking off what goes to R2', async (_name, length) => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // R2's put reads the stream here, and the request goes to the Worker directly. A stream that
+    // breaks off on the runtime's HTTP or on its way to the local R2 leaves the runtime logging what
+    // it could not finish.
+    const toR2 = vi.spyOn(env.ASSETS, 'put').mockImplementation(async (_key, value) => {
+      await new Response(value as ReadableStream).arrayBuffer();
+      return {} as R2Object;
+    });
     const { file, id } = await freshFile(PNG_HEAD, 64);
+    const ctx = createExecutionContext();
 
-    const res = await put(id, file, { 'Content-Length': length });
+    const res = await app.fetch(
+      new Request(`${BASE}/${id}`, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          Origin: ORIGIN,
+          'Content-Length': length,
+          'CF-Connecting-IP': freshIp(),
+          Authorization: `Bearer ${assetTokenFor('pl')}`,
+        },
+      }),
+      env,
+      ctx
+    );
+    await waitOnExecutionContext(ctx);
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'internal-error' });
     expect(error).toHaveBeenCalledWith('Unhandled error:', expect.any(Error));
-    expect(await env.ASSETS.head(storedKeyOf(id))).toBeNull();
+    expect(toR2).toHaveBeenCalledOnce();
   });
 });
 

@@ -13,6 +13,7 @@ import {
   accessTokenFor,
   assetTokenFor,
   call,
+  callUnread,
   fileOf,
   freshFile,
   freshIp,
@@ -258,7 +259,7 @@ describe('PUT /v1/rooms/:roomKey/assets/:id', () => {
         controller.close();
       },
     });
-    const res = await call(id, { method: 'PUT', body: streamed });
+    const res = await callUnread(id, { method: 'PUT', body: streamed });
     expect(res.status).toBe(411);
     expect(await res.json()).toEqual({ error: 'length-required' });
   });
