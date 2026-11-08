@@ -1,3 +1,22 @@
+# [1.6.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.5.0...v1.6.0) (2026-11-08)
+
+
+### Bug Fixes
+
+* **deps:** bump @hono/node-server from 2.1.5 to 2.1.6 in /apps/vercel ([5eefa09](https://github.com/Xelltis/udonarium_axe_backend/commit/5eefa095cb1fcbaf0b6c98c5531805f5730b39cb))
+* **deps:** bump @hono/valibot-validator from 0.6.1 to 0.6.2 in /apps/vercel ([5ba2999](https://github.com/Xelltis/udonarium_axe_backend/commit/5ba2999eef69d638aa84da409834d3fddbe8e280))
+* **deps:** bump @vercel/functions from 3.10.4 to 3.11.0 in /apps/vercel ([064d015](https://github.com/Xelltis/udonarium_axe_backend/commit/064d0159e4ca3ba94b5f05f7d87b86e034ad3161))
+* **deps:** bump hono from 4.13.14 to 4.13.17 ([b8624f2](https://github.com/Xelltis/udonarium_axe_backend/commit/b8624f229148729267b52157e43d8020a20ad8ec))
+* **deps:** bump ws from 8.22.0 to 8.22.1 in /apps/vercel ([2e04bc2](https://github.com/Xelltis/udonarium_axe_backend/commit/2e04bc2c46db3398357a05152bd330c1fb30903d))
+* **vercel:** keep a reset during a WebSocket upgrade from taking the server down ([7c4d414](https://github.com/Xelltis/udonarium_axe_backend/commit/7c4d4144dcf9ed3ee9cbc1a49c8a9f3f7b7b3a28))
+
+
+### Features
+
+* **assets:** keep binary glTF models in a room's assets ([195ac4f](https://github.com/Xelltis/udonarium_axe_backend/commit/195ac4f7a4cd618e44ee257c0dc10cbc7892584d))
+* **protocol:** raise the protocol version to 5 ([e401ea7](https://github.com/Xelltis/udonarium_axe_backend/commit/e401ea7ebd949badddb6103f41fde60827592b82))
+* **rooms:** tell a seat when the room last heard from each of the others ([61ff885](https://github.com/Xelltis/udonarium_axe_backend/commit/61ff8854c7a49ea9ec3f8fa1af07add7f6c05d8c))
+
 # [1.5.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.4.2...v1.5.0) (2026-11-01)
 
 
