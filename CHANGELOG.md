@@ -1,3 +1,15 @@
+## [1.6.1](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.6.0...v1.6.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **deps:** bump @hono/node-server from 2.1.6 to 2.1.7 in /apps/vercel ([0431798](https://github.com/Xelltis/udonarium_axe_backend/commit/0431798a61d8ebaf5ff38bf613c8e5a2bbcf47c9))
+* **deps:** bump @vercel/blob from 2.8.2 to 2.9.0 in /apps/vercel ([044c97a](https://github.com/Xelltis/udonarium_axe_backend/commit/044c97aad6c30b55debd660ece90e3cac3ee0a22))
+* **deps:** bump @vercel/functions from 3.11.0 to 3.11.1 in /apps/vercel ([ded7d6c](https://github.com/Xelltis/udonarium_axe_backend/commit/ded7d6c618a02f3bd95a9a3aedfafd87ad4aab7b))
+* **deps:** bump hono from 4.13.17 to 4.13.18 ([f99f649](https://github.com/Xelltis/udonarium_axe_backend/commit/f99f649bad8f7290db5ce3d3ce49a0a6924993aa))
+* **deps:** bump ws from 8.22.1 to 8.22.2 in /apps/vercel ([ec25577](https://github.com/Xelltis/udonarium_axe_backend/commit/ec255772fe3c248a6428110349ef6a6af558e79b))
+* **deps:** override undici to 7.30.2 in /apps/vercel ([f3a77fb](https://github.com/Xelltis/udonarium_axe_backend/commit/f3a77fb7f37f6080118708d397e8b729a6f49a96))
+
 # [1.6.0](https://github.com/Xelltis/udonarium_axe_backend/compare/v1.5.0...v1.6.0) (2026-11-08)
 
 
